@@ -76,6 +76,7 @@ pin:
 	else echo -e "[\e[31mFAIL\e[m] \e[33mCompile pin tools\e[m \e[36m->\e[m \e[32;1m$(PIN_LIB)\e[m"; exit -1; fi;
 	@echo -e "#!/bin/bash\n${PIN_BIN} -t ${PIN_PATH}/obj-intel64/${PIN_LIB} -- \\"  > ${PIN_SCRIPT}
 	@echo '$$*' >> ${PIN_SCRIPT}
+	@echo 'rm -rf pin.log' >> ${PIN_SCRIPT}
 	@chmod a+x ${PIN_SCRIPT}
 
 sinclude $(DEP)
