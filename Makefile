@@ -66,13 +66,13 @@ vpath %.c $(SRC_DIR)
 all: lines disasm pin $(RELEASE_OBJ) ${DEBUG_OBJ}
 	@mkdir -p ${BIN_DIR}/${RELEASE_DIR} ${BIN_DIR}/${DEBUG_DIR};
 	@if \
-	$(CXX) $(RELEASE_OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o ${BIN_DIR}/${RELEASE_DIR}/$(BIN) $(LIBS);\
-	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(RELEASE_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${RELEASE_DIR}/$(BIN)\e[m"; \
-	else echo -e "[\e[31mFAIL\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(RELEASE_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${RELEASE_DIR}/$(BIN)\e[m"; exit -1; fi;
+	$(CXX) $(RELEASE_OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o ${BIN_DIR}/${RELEASE_DIR}/$(BIN)-release $(LIBS);\
+	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(RELEASE_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${RELEASE_DIR}/$(BIN)-release\e[m"; \
+	else echo -e "[\e[31mFAIL\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(RELEASE_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${RELEASE_DIR}/$(BIN)-release\e[m"; exit -1; fi;
 	@if \
-	$(CXX) $(DEBUG_OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o ${BIN_DIR}/${DEBUG_DIR}/$(BIN) $(LIBS);\
-	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)\e[m"; \
-	else echo -e "[\e[31mFAIL\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)\e[m"; exit -1; fi;
+	$(CXX) $(DEBUG_OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o ${BIN_DIR}/${DEBUG_DIR}/$(BIN)-debug $(LIBS);\
+	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)-debug\e[m"; \
+	else echo -e "[\e[31mFAIL\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)-debug\e[m"; exit -1; fi;
 
 
 disasm:
