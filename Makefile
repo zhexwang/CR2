@@ -6,6 +6,13 @@ SRC_DIR := include main elf-parser disassembler module function basic-block inst
 DISASM_DIR := distorm3
 DISASM_AR := distorm3.a
 
+# pin tools
+PIN_DIR := pin-tools
+PIN_SCRIPT := ppin
+PIN_LIB := indirect.so
+PIN_BIN := ${HOME}/pin-2.14/pin 
+PIN_PATH := ${HOME}/pin-2.14/source/tools/profile_indirect
+
 INCLUDE := -I./include -I./${DISASM_DIR}/include
 
 # compiler and flags
@@ -30,15 +37,18 @@ OBJ += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.c,
 DEP := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.cpp,%.d,$(wildcard ${d}/*.cpp)))))
 DEP += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.c,%.d,$(wildcard ${d}/*.c)))))
 
+PIN_SRC := $(foreach d,${PIN_DIR},$(wildcard ${d}/*.cpp))
+#add include and pin-tools
 EDIT_FILES := $(foreach d,${SRC_DIR},$(wildcard ${d}/*.h))
 EDIT_FILES += ${SRC}
+EDIT_FILES += ${PIN_SRC}
 
 .PHONY: all clean 
 
 vpath %.cpp $(SRC_DIR)
 vpath %.c $(SRC_DIR)
 
-all: lines disasm $(OBJ)
+all: lines disasm pin $(OBJ)
 	@if \
 	$(CXX) $(OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o $(BIN) $(LIBS);\
 	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(OBJ)\e[m \e[36m->\e[m \e[32;1m$(BIN)\e[m"; \
@@ -51,8 +61,23 @@ clean:
 	@echo -e "[\e[34;1mCLEAN\e[m] \e[33m$(BIN) $(BUILD_DIR)/\e[m"
 	@rm -rf $(BIN) build  
 	@make clean -s -C $(DISASM_DIR)
-lines:
+	@echo -e "[\e[34;1mCLEAN\e[m] \e[33m${PIN_SCRIPT} pin.log $(PIN_LIB) $(PIN_PATH)/obj-intel64/ \e[m"
+	@make clean -s -C ${PIN_PATH} 
+	@rm -rf pin.log ${PIN_SCRIPT}
+
+lines: 
 	@echo -e "[\e[34;1mECHO\e[m] \e[32;1mUntil\e[m \e[37;1m`date`\e[m\e[32;1m, you had already edited\e[m \e[37;1m`cat ${EDIT_FILES} | wc -l`\e[m \e[32;1mlines!\e[m"
+
+pin:
+	@cp -r ${PIN_SRC} ${PIN_PATH}
+	@if \
+	make -s -C ${PIN_PATH};\
+	then echo -e "[\e[34;1mMPIN\e[m] \e[33mCompile pin tools\e[m \e[36m->\e[m \e[32;1m$(PIN_LIB)\e[m"; \
+	else echo -e "[\e[31mFAIL\e[m] \e[33mCompile pin tools\e[m \e[36m->\e[m \e[32;1m$(PIN_LIB)\e[m"; exit -1; fi;
+	@echo -e "#!/bin/bash\n${PIN_BIN} -t ${PIN_PATH}/obj-intel64/${PIN_LIB} -- \\"  > ${PIN_SCRIPT}
+	@echo '$$*' >> ${PIN_SCRIPT}
+	@chmod a+x ${PIN_SCRIPT}
+
 sinclude $(DEP)
 
 $(BUILD_DIR)/%.d: %.cpp Makefile
