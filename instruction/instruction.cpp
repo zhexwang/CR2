@@ -22,7 +22,7 @@ Instruction::Instruction(const _DInst &dInst, const Module *module)
     //copy instruction's encode
     _encode = new UINT8[_dInst.size]();
     void *ret = memcpy(_encode, module->get_code_offset_ptr(_dInst.addr), _dInst.size);
-    ASSERTM(ret, "memcpy failed!\n");
+    FATAL(ret, "memcpy failed!\n");
 }
 
 Instruction::~Instruction()

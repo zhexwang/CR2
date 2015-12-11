@@ -45,8 +45,12 @@ RELEASE_OBJ += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${RELEASE_DIR}/,$
 DEBUG_OBJ := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${DEBUG_DIR}/,$(notdir $(patsubst %.cpp,%.o,$(wildcard ${d}/*.cpp)))))
 DEBUG_OBJ += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${DEBUG_DIR}/,$(notdir $(patsubst %.c,%.o,$(wildcard ${d}/*.c)))))
 
-DEP := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.cpp,%.d,$(wildcard ${d}/*.cpp)))))
-DEP += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.c,%.d,$(wildcard ${d}/*.c)))))
+RELEASE_DEP := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${RELEASE_DIR}/,$(notdir $(patsubst %.cpp,%.d,$(wildcard ${d}/*.cpp)))))
+RELEASE_DEP += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${RELEASE_DIR}/,$(notdir $(patsubst %.c,%.d,$(wildcard ${d}/*.c)))))
+
+DEBUG_DEP := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${DEBUG_DIR}/,$(notdir $(patsubst %.cpp,%.d,$(wildcard ${d}/*.cpp)))))
+DEBUG_DEP += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${DEBUG_DIR}/,$(notdir $(patsubst %.c,%.d,$(wildcard ${d}/*.c)))))
+
 
 PIN_SRC := $(foreach d,${PIN_DIR},$(wildcard ${d}/*.cpp))
 #add include and pin-tools
@@ -96,15 +100,24 @@ pin:
 	@echo 'rm -rf pin.log' >> ${BIN_DIR}/${SCRIPT_DIR}/${PIN_SCRIPT}
 	@chmod a+x ${BIN_DIR}/${SCRIPT_DIR}/${PIN_SCRIPT}
 
-sinclude $(DEP)
+sinclude $(RELEASE_DEP)
+sinclude $(DEBUG_DEP)
 
-$(BUILD_DIR)/%.d: %.cpp Makefile
+$(BUILD_DIR)/${RELEASE_DIR}/%.d: %.cpp Makefile
 	@mkdir -p $(BUILD_DIR) ${BUILD_DIR}/${RELEASE_DIR} ${BUILD_DIR}/${DEBUG_DIR};
-	@$(CXX) ${FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\//g' $@;
+	@$(CXX) ${RELEASE_FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\/${RELEASE_DIR}\//g' $@;
 
-$(BUILD_DIR)/%.d: %.c Makefile
+$(BUILD_DIR)/${DEBUG_DIR}/%.d: %.cpp Makefile
 	@mkdir -p $(BUILD_DIR) ${BUILD_DIR}/${RELEASE_DIR} ${BUILD_DIR}/${DEBUG_DIR};
-	@$(CC) ${FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\//g' $@;
+	@$(CXX) ${DEBUG_FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\/${DEBUG_DIR}\//g' $@;
+
+$(BUILD_DIR)/${RELEASE_DIR}/%.d: %.c Makefile
+	@mkdir -p $(BUILD_DIR) ${BUILD_DIR}/${RELEASE_DIR} ${BUILD_DIR}/${DEBUG_DIR};
+	@$(CC) ${RELEASE_FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\/${RELEASE_DIR}\//g' $@;
+
+$(BUILD_DIR)/${DEBUG_DIR}/%.d: %.c Makefile
+	@mkdir -p $(BUILD_DIR) ${BUILD_DIR}/${RELEASE_DIR} ${BUILD_DIR}/${DEBUG_DIR};
+	@$(CC) ${DEBUG_FLAGS} ${INCLUDE} -MM $< > $@ && sed -i '1s/^/$(BUILD_DIR)\/${DEBUG_DIR}\//g' $@;
 
 
 $(BUILD_DIR)/${RELEASE_DIR}/%.o: %.cpp Makefile

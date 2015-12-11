@@ -157,12 +157,12 @@ void ElfParser::check_relocation() const
     // 1.check .rela.plt
     for(INT32 idx = 0; idx<_rela_plt_num; idx++){
         F_SIZE off = _rela_plt[idx].r_offset;
-        ASSERT(!is_in_x_section_file(off));
+        FATAL(!is_in_x_section_file(off), ".rela.plt is in x setions!\n");
     }
     // 2.check .rela.dyn
     for(INT32 idx = 0; idx<_rela_dyn_num; idx++){
         F_SIZE off = _rela_dyn[idx].r_offset;
-        ASSERT(!is_in_x_section_file(off));
+        FATAL(!is_in_x_section_file(off), ".rela.dyn is in x sections!\n");
     }
 }
 

@@ -4,7 +4,7 @@ BUILD_DIR := build
 TARGET := distorm3.a
 
 CC := gcc
-CFLAGS	= -fPIC -O2 -DSUPPORT_64BIT_OFFSET -DDISTORM_STATIC
+CFLAGS	= -fPIC -O3 -DSUPPORT_64BIT_OFFSET -DDISTORM_STATIC
 
 SRC := $(foreach d,${SRC_DIR},$(wildcard ${d}/*.c))
 OBJ := $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.c,%.o,$(wildcard ${d}/*.c)))))
