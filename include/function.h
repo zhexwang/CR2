@@ -10,8 +10,8 @@ class BasicBlock;
 class Function
 {
 protected:
-	F_SIZE _start;
-	SIZE _size;
+	const F_SIZE _start;
+	const SIZE _size;
 	std::vector<const BasicBlock*> _bbl_vec;
 	std::vector<const BasicBlock*> _entry_bbl_vec;
 	std::vector<const Instruction*> _instr_vec;

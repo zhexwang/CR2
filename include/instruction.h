@@ -19,10 +19,8 @@ public:
 	Instruction(const _DInst &dInst, const Module *module);
 	virtual ~Instruction();
 	// get functions
-	SIZE get_inst_size() const
-	{
-		return _dInst.size;
-	}
+	const Module *get_module() const {return _module;}
+	SIZE get_inst_size() const { return _dInst.size; }
 	/*  @Introduction: get protected process's addr functions
 					if load_base=0, return value represents the offset in elf.
 	*/
@@ -39,14 +37,8 @@ public:
 	/*  @Introduction: get offset functions
 					return value represents the offset of elf
 	*/
-	F_SIZE get_inst_offset() const
-	{
-		return _dInst.addr;
-	}
-	F_SIZE get_next_offset() const
-	{
-		return _dInst.addr + _dInst.size;
-	}
+	F_SIZE get_inst_offset() const { return _dInst.addr; }
+	F_SIZE get_next_offset() const { return _dInst.addr + _dInst.size;}
 	virtual F_SIZE get_fallthrough_offset() const =0;
 	virtual F_SIZE get_target_offset() const =0;
 	// judge functions

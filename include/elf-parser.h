@@ -106,11 +106,11 @@ public:
 		return false;
 	}
 	//get functions
-	std::string get_elf_path() const
+	const std::string get_elf_path() const
 	{
 		return _elf_path;
 	}
-	std::string get_elf_name() const
+	const std::string get_elf_name() const
 	{
 		return get_name(_elf_path);
 	}

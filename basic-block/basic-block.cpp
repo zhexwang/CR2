@@ -1,7 +1,8 @@
 #include "basic-block.h"
 
-BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, const std::vector<const Instruction*> &instr_vec)
-    : _start(start), _size(size), _instr_vec(instr_vec)
+BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+		const std::vector<const Instruction*> &instr_vec)
+    : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _instr_vec(instr_vec)
 {
     ;
 }

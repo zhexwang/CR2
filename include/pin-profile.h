@@ -6,4 +6,7 @@
 class PinProfile
 {
 
-}
+public:
+	PinProfile();
+	~PinProfile();
+};
