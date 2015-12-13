@@ -55,6 +55,11 @@ public:
 	BasicBlock *get_bbl_by_va(const P_ADDRX addr) const;
 	Function *get_func_by_off(const F_SIZE off) const;
 	Function *get_func_by_va(const P_ADDRX addr) const; 
+	//judge functions
+	BOOL is_bbl_entry_in_off(const F_SIZE target_offset) const;
+	BOOL is_func_entry_in_off(const F_SIZE target_offset) const;
+	BOOL is_bbl_entry_in_va(const P_ADDRX addr) const;
+	BOOL is_func_entry_in_va(const P_ADDRX addr) const;
 	//insert functions
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);

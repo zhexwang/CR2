@@ -12,6 +12,18 @@
 class Module;
 class PinProfile
 {
+public:
+	enum INST_TYPE{
+		INDIRECT_CALL = 0,
+		INDIRECT_JUMP,
+		RET,
+		TYPE_SUM,
+	};
+	static const std::string type_name[TYPE_SUM];
+    typedef struct inst_pos{
+        F_SIZE instr_offset;
+        INT32 image_index;
+    }INST_POS;
 private:
     //record path
     const std::string _path;
@@ -23,19 +35,24 @@ private:
     //record image branch targets
     std::set<F_SIZE> *_img_branch_targets;
     //record indirect branch instructions
-    typedef struct{
-        F_SIZE inst_offset;
-        INT32 image_index;
-    }INST_POS;
     std::multimap<INST_POS, INST_POS> _indirect_call_maps;
     std::multimap<INST_POS, INST_POS> _indirect_jump_maps;
     std::multimap<INST_POS, INST_POS> _ret_maps;
 protected:
     void read_image_info(std::ifstream &ifs);
-    void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps);
+    void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps, INST_TYPE type);
 public:
     PinProfile(const char *profile_path);
     ~PinProfile();
+	//judge functions
+	/*  Arguments: none
+		Return : none;
+		Introduction: bbl is safe only if all indirect branchs' targets are all bbl(splitted in modules) entry.
+	*/
+	void check_bbl_safe() const;
+	void check_func_safe() const;
+	//get functions
+	INT32 get_img_index_by_name(std::string) const;
     void map_modules();
     void dump_profile_image_info() const;
 };

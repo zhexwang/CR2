@@ -1,8 +1,8 @@
 #include "basic-block.h"
 
 BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::vector<const Instruction*> &instr_vec)
-    : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _instr_vec(instr_vec)
+		const std::map<const F_SIZE, const Instruction *> &instr_maps)
+    : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _instr_maps(instr_maps)
 {
     ;
 }
@@ -15,4 +15,64 @@ BasicBlock::~BasicBlock()
 void BasicBlock::dump() const
 {
     NOT_IMPLEMENTED(wangzhe);
+}
+
+SequenceBBL::SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	const std::map<const F_SIZE, const Instruction *> &instr_maps): \
+	BasicBlock(start, size, is_call_proceeded, instr_maps)
+{
+    ;
+}
+
+SequenceBBL::~SequenceBBL()
+{
+    ;
+}
+
+RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	const std::map<const F_SIZE, const Instruction *> &instr_maps):\
+	BasicBlock(start, size, is_call_proceeded, instr_maps)
+{
+    ;
+}
+
+RetBBL::~RetBBL()
+{
+    ;
+}
+
+CallBBL::CallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	const std::map<const F_SIZE, const Instruction *> &instr_maps):
+	BasicBlock(start, size, is_call_proceeded, instr_maps)
+{
+    ;
+}
+    
+CallBBL::~CallBBL()
+{
+    ;
+}
+
+JumpBBL::JumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	const std::map<const F_SIZE, const Instruction *> &instr_maps):\
+	BasicBlock(start, size, is_call_proceeded, instr_maps)
+{
+    ;
+}
+
+JumpBBL::~JumpBBL()
+{
+    ;
+}
+
+ConditionBrBBL::ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	const std::map<const F_SIZE, const Instruction *> &instr_maps):\
+	BasicBlock(start, size, is_call_proceeded, instr_maps)
+{
+    ;
+}
+
+ConditionBrBBL::~ConditionBrBBL()
+{
+    ;
 }

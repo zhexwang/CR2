@@ -25,7 +25,7 @@
 #define ERR(format, ...)
 #endif
 
-#define FATAL(cond, message) do{if(cond) {ERR("FATAL: %s:%-4d "message, __FILE__, __LINE__); abort();}}while(0)
+#define FATAL(cond, format, ...) do{if(cond) {ERR("FATAL: %s:%-4d "format, __FILE__, __LINE__, ## __VA_ARGS__); abort();}}while(0)
 #define PERROR(cond, format) do{if(!(cond)){perror(format); abort();}}while(0)
 
 #ifdef _DEBUG

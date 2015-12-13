@@ -334,7 +334,7 @@ VOID Fini(INT32 code, VOID *v)
 			OutFile<<setw(2)<<idx<<" "<<item.image_name<<" "<<endl;
 	}
     for(UINT32 idx=0; idx != INDIRECT_BRANCH_SUM; idx++){
-    	OutFile<<"The number of "<<indirect_branch_type_to_name[idx]<<" is "<<indirect_inst_set[idx].size()<<endl;
+    	OutFile<<indirect_branch_type_to_name[idx]<<"_NUM= "<<indirect_inst_set[idx].size()<<endl;
     	for(set<UINT64>::iterator iter = indirect_inst_set[idx].begin(); iter!=indirect_inst_set[idx].end(); iter++){
     		ADDRINT src_addr = 0;
     		ADDRINT target_addr = 0;

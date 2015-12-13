@@ -7,6 +7,7 @@
 #include "utility.h"
 
 class Module;
+//TODO: lock prefix
 class Instruction
 {
 	friend class Disassembler;

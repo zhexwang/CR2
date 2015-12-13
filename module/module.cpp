@@ -60,6 +60,34 @@ Function *Module::get_func_by_va(const P_ADDRX addr) const
     return get_func_by_off(addr - _real_load_base);
 }
 
+BOOL Module::is_bbl_entry_in_off(const F_SIZE target_offset) const
+{
+    BBL_MAP_ITERATOR ret = _bbl_maps.find(target_offset);
+    if(ret!=_bbl_maps.end())
+        return true;
+    else
+        return false;    
+}
+
+BOOL Module::is_func_entry_in_off(const F_SIZE target_offset) const
+{
+    FUNC_MAP_ITERATOR it = _func_maps.find(target_offset);
+    if(it!=_func_maps.end())
+        return true;
+    else
+        return false;
+}
+
+BOOL Module::is_bbl_entry_in_va(const P_ADDRX addr) const
+{
+    return is_bbl_entry_in_off(addr - _real_load_base);
+}
+
+BOOL Module::is_func_entry_in_va(const P_ADDRX addr) const
+{
+    return is_func_entry_in_off(addr - _real_load_base);
+}
+
 void Module::insert_instr(Instruction *instr)
 {
     _instr_maps.insert(std::make_pair(instr->get_inst_offset(), instr));
@@ -75,10 +103,35 @@ void Module::insert_func(Function *func)
     _func_maps.insert(std::make_pair(func->get_func_offset(), func));
 }
 
-void Module::split_bbl()
+static BasicBlock *construct_bbl(std::map<const F_SIZE, const Instruction*> &instr_maps, BOOL is_call_proceeded)
 {
+    const Instruction *first_instr = instr_maps.begin()->second;
+    F_SIZE bbl_start = first_instr->get_inst_offset();
+    const Instruction *last_instr = instr_maps.rbegin()->second;
+    F_SIZE bbl_end = last_instr->get_next_offset();
+    SIZE bbl_size = bbl_end - bbl_start;
+    
+    if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
+        return new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+    else if(last_instr->is_direct_call() || last_instr->is_indirect_call())
+        return new CallBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+    else if(last_instr->is_direct_jump() || last_instr->is_indirect_jump())
+        return new JumpBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+    else if(last_instr->is_condition_branch())
+        return new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+    else if(last_instr->is_ret())
+        return new RetBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+	else
+        return NULL;
+}
+
+
+void Module::split_bbl()
+{//TODO: data in code 
     INFO("Split %s\n", get_name().c_str());
 }
+
+
 
 void Module::split_all_modules_into_bbls()
 {
