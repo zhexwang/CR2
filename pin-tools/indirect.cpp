@@ -329,9 +329,9 @@ VOID Fini(INT32 code, VOID *v)
 			cerr<<"readlink error!"<<endl;
 		
 		if(process_real_path[0]!='\0')
-			OutFile<<setw(2)<<(idx+1)<<" "<<process_real_path<<" "<<endl;
+			OutFile<<setw(2)<<idx<<" "<<process_real_path<<" "<<endl;
 		else
-			OutFile<<setw(2)<<(idx+1)<<" "<<item.image_name<<" "<<endl;
+			OutFile<<setw(2)<<idx<<" "<<item.image_name<<" "<<endl;
 	}
     for(UINT32 idx=0; idx != INDIRECT_BRANCH_SUM; idx++){
     	OutFile<<"The number of "<<indirect_branch_type_to_name[idx]<<" is "<<indirect_inst_set[idx].size()<<endl;
@@ -341,7 +341,7 @@ VOID Fini(INT32 code, VOID *v)
     		UINT32 src_id = 0;
     		UINT32 target_id = 0;
     		parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
-    		OutFile<<src_addr<<" ( "<<src_id<<" )--> "<<target_addr<<" ( "<<target_id<<" )"<<endl;
+    		OutFile<<src_addr<<" ( "<<(src_id-1)<<" )--> "<<target_addr<<" ( "<<(target_id-1)<<" )"<<endl;
     	}
     }
 	OutFile.close();

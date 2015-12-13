@@ -11,6 +11,7 @@ class BasicBlock;
 class Function;
 
 class Module{
+    friend class PinProfile;
 public:
 	//typedef mapping file_offset to Instruction*/BasicBlock*/Function*'s entry point
 	typedef std::map<F_SIZE, Instruction*> INSTR_MAP;
