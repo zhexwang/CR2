@@ -14,6 +14,11 @@ void Disassembler::init()
     _ci.features = DF_NONE;
 }
 
+static BOOL is_0h_align(F_SIZE offset)
+{
+    return (offset&(0xfull))==0;
+}
+
 void Disassembler::disassemble_module(Module *module)
 {
     /*Use objdump tools to split the code and data*/
@@ -29,6 +34,8 @@ void Disassembler::disassemble_module(Module *module)
     SIZE len = 50;
     char *line_buf = new char[len];
     Instruction *instr = NULL;
+    // objdump error : there are zero after ret and jmp instructions, used for align! 
+    std::set<Instruction *> align_start_instrs;
     while(getline(&line_buf, &len, p_stream)!=-1) {
         // 4.1 get instruction offset
         P_ADDRX instr_addr;
@@ -43,13 +50,116 @@ void Disassembler::disassemble_module(Module *module)
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module);
         // 4.4 record instruction
-        if(instr)
+        if(instr){
             module->insert_instr(instr);
+            // record branch targets
+            if(instr->is_direct_call() || instr->is_condition_branch() || instr->is_direct_jump())
+                module->insert_br_target(instr->get_target_offset());
+
+            if(instr->is_ret() || instr->is_jump()){
+                F_SIZE next_offset = instr->get_next_offset();
+                if(module->is_in_x_section_in_off(next_offset) && module->read_x_byte_in_off(next_offset)==0)//align 0h
+                    align_start_instrs.insert(instr);
+            }
+        }
     }
     free(line_buf);
     // 5.close stream
     pclose(p_stream);
-
+    // 6. fix objdump errors
+    // 6.1 fix align 0h 
+    std::set<Instruction *>::iterator pick_one;
+    std::vector<Instruction *> new_generated_instrs;
+    while((pick_one = align_start_instrs.begin())!=align_start_instrs.end()){
+        // padding 0h calculate!
+        Instruction *instr = *pick_one;
+        F_SIZE erase_start = instr->get_next_offset();
+        ASSERT(instr);
+        // calculate padding range    
+        F_SIZE padding_begin = erase_start;
+        F_SIZE padding_end = padding_begin;
+        while(module->read_x_byte_in_off(padding_end)==0){
+            padding_end++;
+        };
+        if(!is_0h_align(padding_end)){//aligned instruction is found
+            align_start_instrs.erase(pick_one);
+            continue;
+        }
+        F_SIZE erase_end = padding_end;
+        //generated new instructions    
+        while(!module->is_instr_entry_in_off(erase_end)){
+            Instruction *new_instr = disassemble_instruction(erase_end, module);
+            ASSERT(new_instr);
+            new_generated_instrs.push_back(new_instr);
+            erase_end = new_instr->get_next_offset();
+        };
+        //erase instructions
+        std::vector<Instruction*> erased_instrs;
+        module->erase_instr_range(erase_start, erase_end, erased_instrs);
+        //if erased instructions are in align_start_instrs, erase them!
+        align_start_instrs.erase(pick_one);
+        for(std::vector<Instruction*>::iterator it = erased_instrs.begin(); it!=erased_instrs.end(); it++)
+            align_start_instrs.erase(*it);
+    }
+    //record instructions
+    for(std::vector<Instruction*>::iterator it = new_generated_instrs.begin();\
+        it!=new_generated_instrs.end(); it++){
+        Instruction *inst = *it;
+        module->insert_instr(inst);
+        // record branch targets
+        if(inst->is_direct_call() || inst->is_condition_branch() || inst->is_direct_jump())
+            module->insert_br_target(inst->get_target_offset());
+    }
+    // 6.2 fix br instructions' target is not aligned!
+#if 0 // check br targets are true now    
+fix_again: 
+    F_SIZE br_target = 0;
+    for(Module::BR_TARGETS_ITERATOR it = module->_br_targets.begin(); it!=module->_br_targets.end(); it++){
+        if((*it)!=br_target)//multiset handling
+            br_target = *it;
+        else
+            continue;
+            
+        F_SIZE target_offset = *it;
+        if(!module->is_instr_entry_in_off(target_offset)){
+            //judge is prefix. instruction or not 
+            target_offset -= 1;
+            Instruction *instr = module->get_instr_by_off(target_offset);
+            
+            if(!(instr && instr->has_prefix())){
+                target_offset ++;
+                // fix objdump error!
+                std::vector<Instruction *> new_generated_instr;
+                Instruction *target_instr = NULL;
+                F_SIZE next_offset_of_target_instr = target_offset;
+                do{
+                    target_instr = disassemble_instruction(next_offset_of_target_instr, module);
+                    ASSERT(target_instr);
+                    target_instr->dump_file_inst();
+                    new_generated_instr.push_back(target_instr);
+                    next_offset_of_target_instr = target_instr->get_next_offset();
+                }while(!module->is_instr_entry_in_off(next_offset_of_target_instr));
+                //erase
+                std::vector<Instruction*> erased_instrs;
+                module->erase_instr_range(target_offset, next_offset_of_target_instr, erased_instrs);
+                //record instructions    
+                BOOL br_target_is_changed = false;
+                for(std::vector<Instruction*>::iterator it = new_generated_instr.begin();\
+                    it!=new_generated_instr.end(); it++){
+                    Instruction *instruction = *it;
+                    module->insert_instr(instruction);
+                    // record branch targets
+                    if(instruction->is_direct_call() || instruction->is_condition_branch() || instruction->is_direct_jump()){
+                        br_target_is_changed = true;
+                        module->insert_br_target(instruction->get_target_offset());
+                    }
+                }
+                if(br_target_is_changed)
+                    goto fix_again;
+            }
+        }
+    }
+#endif    
 }
 
 void Disassembler::disassemble_all_modules()
@@ -59,6 +169,7 @@ void Disassembler::disassemble_all_modules()
         ElfParser *elf = it->second;
         Module *module = new Module(elf);
         disassemble_module(module);
+        module->check_br_targets();
     }
 }
 

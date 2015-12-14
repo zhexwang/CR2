@@ -19,13 +19,26 @@ protected:
 public:
 	Instruction(const _DInst &dInst, const Module *module);
 	virtual ~Instruction();
+	// use for objdump tools
+	BOOL all_bytes_are_zero() const
+	{
+		for(INT32 idx = 0; idx<_dInst.size; idx++){
+			if(_encode[idx]!=0)
+				return false;
+		}
+		return true;
+	}
+	BOOL only_first_byte_is_zero() const
+	{
+		return _encode[0]==0 && _encode[1]!=0;
+	}
 	// get functions
 	const Module *get_module() const {return _module;}
-	SIZE get_inst_size() const { return _dInst.size; }
+	SIZE get_instr_size() const { return _dInst.size; }
 	/*  @Introduction: get protected process's addr functions
 					if load_base=0, return value represents the offset in elf.
 	*/
-	P_ADDRX get_inst_paddr(const P_ADDRX base_addr) const
+	P_ADDRX get_instr_paddr(const P_ADDRX base_addr) const
 	{
 		return _dInst.addr + base_addr;
 	}
@@ -38,10 +51,10 @@ public:
 	/*  @Introduction: get offset functions
 					return value represents the offset of elf
 	*/
-	F_SIZE get_inst_offset() const { return _dInst.addr; }
+	F_SIZE get_instr_offset() const { return _dInst.addr; }
 	F_SIZE get_next_offset() const { return _dInst.addr + _dInst.size;}
 	virtual F_SIZE get_fallthrough_offset() const =0;
-	virtual F_SIZE get_target_offset() const =0;
+	virtual F_SIZE get_target_offset() const =0;	
 	// judge functions
 	virtual BOOL is_sequence() const =0;
 	virtual BOOL is_direct_call() const =0;
@@ -53,12 +66,41 @@ public:
 	virtual BOOL is_int() const =0;
 	virtual BOOL is_sys() const =0;
 	virtual BOOL is_cmov() const =0;
+	BOOL is_br() const
+	{
+		return is_direct_call() || is_indirect_call() || is_direct_jump() || is_indirect_jump() \
+			|| is_condition_branch();
+	}
+	BOOL is_call() const
+	{
+		return is_direct_call() || is_indirect_call();
+	}
+	BOOL is_jump() const
+	{
+		return is_direct_jump() || is_indirect_jump();
+	}
 	BOOL is_rip_relative() const
 	{
 		return BITS_ARE_SET(_dInst.flags, FLAG_RIP_RELATIVE) ? true : false;
 	}
-	// bbl relatived function
-	virtual BOOL is_bbl_end() const =0;
+	//prefix judge functions
+	BOOL has_lock_prefix() const
+	{
+		return FLAG_GET_PREFIX(_dInst.flags)==FLAG_LOCK;
+	}
+	BOOL has_repnz_prefix() const
+	{		
+		return FLAG_GET_PREFIX(_dInst.flags)==FLAG_REPNZ;
+	}
+	BOOL has_rep_prefix() const
+	{
+		return FLAG_GET_PREFIX(_dInst.flags)==FLAG_REP;
+	}
+	BOOL has_prefix() const
+	{
+		return has_lock_prefix()||has_repnz_prefix()||has_rep_prefix();
+	}
+	
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;
@@ -74,22 +116,22 @@ public:
 	//get functions
  	virtual P_ADDRX get_fallthrough_paddr(const P_ADDRX load_base) const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual P_ADDRX get_target_paddr(const P_ADDRX load_base) const 
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_fallthrough_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_target_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	//judge function
@@ -103,7 +145,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return false;}
 };
 
 class DirectCallInstr: public Instruction
@@ -141,7 +182,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class IndirectCallInstr: public Instruction
@@ -158,7 +198,7 @@ public:
 	}
 	virtual P_ADDRX get_target_paddr(const P_ADDRX load_base) const 
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_fallthrough_offset() const
@@ -167,7 +207,7 @@ public:
 	}
 	virtual F_SIZE get_target_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	//judge function
@@ -181,7 +221,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class DirectJumpInstr: public Instruction
@@ -194,7 +233,7 @@ public:
 	//get functions
  	virtual P_ADDRX get_fallthrough_paddr(const P_ADDRX load_base) const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual P_ADDRX get_target_paddr(const P_ADDRX load_base) const 
@@ -203,7 +242,7 @@ public:
 	}
 	virtual F_SIZE get_fallthrough_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_target_offset() const
@@ -221,7 +260,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class IndirectJumpInstr: public Instruction
@@ -234,22 +272,22 @@ public:
 	//get functions
  	virtual P_ADDRX get_fallthrough_paddr(const P_ADDRX load_base) const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual P_ADDRX get_target_paddr(const P_ADDRX load_base) const 
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_fallthrough_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_target_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	//judge function
@@ -263,7 +301,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class ConditionBrInstr: public Instruction
@@ -301,7 +338,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class RetInstr: public Instruction
@@ -314,22 +350,22 @@ public:
 	//get functions
  	virtual P_ADDRX get_fallthrough_paddr(const P_ADDRX load_base) const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual P_ADDRX get_target_paddr(const P_ADDRX load_base) const 
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_paddr(load_base), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_paddr(load_base), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_fallthrough_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	virtual F_SIZE get_target_offset() const
 	{
-		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_inst_offset(), _type_name.c_str());
+		ASSERTM(0, "Addr 0x%lx is %s instruction!\n", get_instr_offset(), _type_name.c_str());
 		return 0;
 	}
 	//judge function
@@ -343,7 +379,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return true;}
 };
 
 class SysInstr: public Instruction
@@ -381,7 +416,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return true;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return false;}
 };
 
 class CmovInstr: public Instruction
@@ -419,7 +453,6 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return true;}
-	BOOL is_bbl_end() const {return false;}	
 };
 
 class IntInstr: public Instruction
@@ -457,6 +490,5 @@ public:
 	BOOL is_int() const {return true;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	BOOL is_bbl_end() const {return false;}
 };
 

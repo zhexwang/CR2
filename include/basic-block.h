@@ -13,10 +13,10 @@ protected:
 	const F_SIZE _start;
 	const SIZE _size;
 	const BOOL _is_call_proceeded;
-	std::map<const F_SIZE, const Instruction *> _instr_maps;
+	std::map<F_SIZE, Instruction *> _instr_maps;
 public:
 	BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	virtual ~BasicBlock();
 	//get functions
 	F_SIZE get_bbl_offset() const {return _start;}
@@ -30,7 +30,7 @@ class SequenceBBL : public BasicBlock
 {
 public:
 	SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	~SequenceBBL();
 };
 
@@ -38,7 +38,7 @@ class RetBBL : public BasicBlock
 {
 public:
 	RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	~RetBBL();
 };
 
@@ -46,7 +46,7 @@ class CallBBL : public BasicBlock
 {
 public:
 	CallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	~CallBBL();
 };
 
@@ -54,7 +54,7 @@ class JumpBBL : public BasicBlock
 {
 public:
 	JumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	~JumpBBL();
 };
 
@@ -62,7 +62,7 @@ class ConditionBrBBL : public BasicBlock
 {
 public:
 	ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-		const std::map<const F_SIZE, const Instruction *> &instr_maps);
+		const std::map<F_SIZE, Instruction *> &instr_maps);
 	~ConditionBrBBL();
 };
 

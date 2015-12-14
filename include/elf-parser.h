@@ -150,6 +150,12 @@ public:
 					We must handle this carefully! Now we do not handle it and only report the check result! 
 	 */
 	void check_relocation() const;
+	//read bytes
+	UINT8 read_x_byte_in_off(F_SIZE offset) const
+	{
+		ASSERT(is_in_x_section_file(offset));
+		return *(UINT8*)(offset+_map_start);
+	}
 	//dump functions
 	void dump_x_sections() const;
 	void dump_dependence() const;
