@@ -54,7 +54,7 @@ void Disassembler::disassemble_module(Module *module)
             module->insert_instr(instr);
             // record branch targets
             if(instr->is_direct_call() || instr->is_condition_branch() || instr->is_direct_jump())
-                module->insert_br_target(instr->get_target_offset());
+                module->insert_br_target(instr->get_target_offset(), instr->get_instr_offset());
 
             if(instr->is_ret() || instr->is_jump()){
                 F_SIZE next_offset = instr->get_next_offset();
@@ -108,7 +108,7 @@ void Disassembler::disassemble_module(Module *module)
         module->insert_instr(inst);
         // record branch targets
         if(inst->is_direct_call() || inst->is_condition_branch() || inst->is_direct_jump())
-            module->insert_br_target(inst->get_target_offset());
+            module->insert_br_target(inst->get_target_offset(), inst->get_instr_offset());
     }
     // 6.2 fix br instructions' target is not aligned!
 #if 0 // check br targets are true now    
@@ -151,7 +151,7 @@ fix_again:
                     // record branch targets
                     if(instruction->is_direct_call() || instruction->is_condition_branch() || instruction->is_direct_jump()){
                         br_target_is_changed = true;
-                        module->insert_br_target(instruction->get_target_offset());
+                        module->insert_br_target(instruction->get_target_offset(), instruction->get_instr_offset());
                     }
                 }
                 if(br_target_is_changed)

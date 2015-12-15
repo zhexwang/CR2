@@ -69,7 +69,7 @@ public:
 	BOOL is_br() const
 	{
 		return is_direct_call() || is_indirect_call() || is_direct_jump() || is_indirect_jump() \
-			|| is_condition_branch();
+			|| is_condition_branch() || is_ret();
 	}
 	BOOL is_call() const
 	{
@@ -109,7 +109,7 @@ public:
 class SequenceInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	SequenceInstr(const _DInst &dInst, const Module *module);
 	~SequenceInstr();
@@ -150,7 +150,7 @@ public:
 class DirectCallInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	DirectCallInstr(const _DInst &dInst, const Module *module);
 	~DirectCallInstr();
@@ -187,7 +187,7 @@ public:
 class IndirectCallInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	IndirectCallInstr(const _DInst &dInst, const Module *module);
 	~IndirectCallInstr();
@@ -226,7 +226,7 @@ public:
 class DirectJumpInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	DirectJumpInstr(const _DInst &dInst, const Module *module);
 	~DirectJumpInstr();
@@ -265,7 +265,7 @@ public:
 class IndirectJumpInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	IndirectJumpInstr(const _DInst &dInst, const Module *module);
 	~IndirectJumpInstr();
@@ -306,7 +306,7 @@ public:
 class ConditionBrInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	ConditionBrInstr(const _DInst &dInst, const Module *module);
 	~ConditionBrInstr();
@@ -343,7 +343,7 @@ public:
 class RetInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	RetInstr(const _DInst &dInst, const Module *module);
 	~RetInstr();
@@ -384,7 +384,7 @@ public:
 class SysInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	SysInstr(const _DInst &dInst, const Module *module);
 	~SysInstr();
@@ -421,7 +421,7 @@ public:
 class CmovInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	CmovInstr(const _DInst &dInst, const Module *module);
 	~CmovInstr();
@@ -458,7 +458,7 @@ public:
 class IntInstr: public Instruction
 {
 protected:
-	static std::string _type_name;
+	const static std::string _type_name;
 public:
 	IntInstr(const _DInst &dInst, const Module *module);
 	~IntInstr();

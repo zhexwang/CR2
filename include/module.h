@@ -23,8 +23,13 @@ public:
 	typedef std::map<F_SIZE, Function*> FUNC_MAP;
 	typedef FUNC_MAP::const_iterator FUNC_MAP_ITERATOR;
 	//typedef branch target list
-	typedef std::multiset<F_SIZE> BR_TARGETS;
-	typedef std::multiset<F_SIZE>::iterator BR_TARGETS_ITERATOR;
+	typedef std::set<F_SIZE> BR_TARGET_SRCS;
+	typedef const std::set<F_SIZE> CONST_BR_TARGET_SRCS;
+	typedef BR_TARGET_SRCS::iterator BR_TARGET_SRCS_ITERATOR;
+	typedef BR_TARGET_SRCS::const_iterator BR_TARGET_SRCS_CONST_ITER;
+	typedef std::map<F_SIZE, BR_TARGET_SRCS> BR_TARGETS;
+	typedef BR_TARGETS::iterator BR_TARGETS_ITERATOR;
+	typedef BR_TARGETS::const_iterator BR_TARGETS_CONST_ITER;
 	//typedef mapping module name to Module* 
 	typedef std::map<std::string, Module*> MODULE_MAP;
 	typedef MODULE_MAP::iterator MODULE_MAP_ITERATOR;
@@ -52,7 +57,7 @@ public:
 		@Return value: none
 		@Introduction: check if all br targets are exist in module instruction list! 
 	*/
-	void check_br_targets() const;
+	void check_br_targets();
 	//set functions
 	void set_real_load_base(P_ADDRX load_base) {_real_load_base = load_base;}
 	//get functions
@@ -67,6 +72,8 @@ public:
 	BasicBlock *get_bbl_by_va(const P_ADDRX addr) const;
 	Function *get_func_by_off(const F_SIZE off) const;
 	Function *get_func_by_va(const P_ADDRX addr) const; 
+	BasicBlock *find_bbl_by_instr(Instruction *instr) const;
+	Instruction *find_instr_by_off(F_SIZE offset) const;
 	//judge functions
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset) const;
 	BOOL is_bbl_entry_in_off(const F_SIZE target_offset) const;
@@ -76,7 +83,8 @@ public:
 	BOOL is_func_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_br_target(const F_SIZE target_offset) const;
 	//insert functions
-	void insert_br_target(const F_SIZE target_offset);
+	void insert_br_target(const F_SIZE target, const F_SIZE src);
+	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);
 	void insert_func(Function *func);
@@ -92,4 +100,10 @@ public:
 	{
 		return _elf->is_in_x_section_file(offset);
 	}
+	//dump functions
+	static void dump_all_bbls_in_va(P_ADDRX load_base);
+	static void dump_all_bbls_in_off();
+	void dump_bbl_in_va(P_ADDRX load_base) const;
+	void dump_bbl_in_off() const;
+	void dump_br_target(const F_SIZE target_offset) const;
 };

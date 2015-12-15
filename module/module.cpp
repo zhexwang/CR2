@@ -102,14 +102,19 @@ BOOL Module::is_func_entry_in_va(const P_ADDRX addr) const
     return is_func_entry_in_off(addr - _real_load_base);
 }
 
-void Module::insert_br_target(const F_SIZE target_offset)
-{
-    _br_targets.insert(target_offset);
-}
-
 BOOL Module::is_br_target(const F_SIZE target_offset) const
 {
-    return _br_targets.find(target_offset)==_br_targets.end();
+    return _br_targets.find(target_offset)!=_br_targets.end();
+}
+
+void Module::dump_br_target(const F_SIZE target_offset) const
+{
+    BR_TARGETS_CONST_ITER br_it = _br_targets.find(target_offset);
+    if(br_it!=_br_targets.end()){
+        CONST_BR_TARGET_SRCS &srcs = br_it->second;
+        for(BR_TARGET_SRCS_CONST_ITER it = srcs.begin(); it!=srcs.end(); it++)
+            PRINT("0x%lx, ", *it);
+    }
 }
 
 void Module::insert_instr(Instruction *instr)
@@ -122,6 +127,33 @@ void Module::erase_instr(Instruction *instr)
     SIZE erased_num = _instr_maps.erase(instr->get_instr_offset());
     FATAL(erased_num==0, "erase instruction error!\n");
     delete instr;
+}
+
+void Module::erase_br_target(const F_SIZE target, const F_SIZE src)
+{
+    BR_TARGETS_ITERATOR br_it = _br_targets.find(target);
+    ASSERT(br_it!=_br_targets.end());
+    BR_TARGET_SRCS &srcs = br_it->second;
+    BR_TARGET_SRCS_ITERATOR src_it = srcs.find(src);
+    ASSERT(src_it!=srcs.end());
+    srcs.erase(src_it);
+    
+    if(srcs.size()==0)
+        _br_targets.erase(br_it);
+}
+
+void Module::insert_br_target(const F_SIZE target, const F_SIZE src)
+{        
+    BR_TARGETS_ITERATOR br_it = _br_targets.find(target);   
+    if(br_it==_br_targets.end()){
+        BR_TARGET_SRCS srcs;
+        srcs.insert(src);
+        _br_targets.insert(make_pair(target, srcs));
+    }else{
+        BR_TARGET_SRCS &srcs = br_it->second;
+        ASSERT(srcs.size()!=0);
+        srcs.insert(src);
+    }
 }
 
 //[target_offset, next_offset_of_target_instr)
@@ -155,9 +187,9 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
         if(erased_instr->is_direct_call() || erased_instr->is_direct_jump() || \
             erased_instr->is_condition_branch()){
             //erase one br target
-            BR_TARGETS_ITERATOR br_it = _br_targets.find(erased_instr->get_target_offset());
-            ASSERT(br_it!=_br_targets.end());
-            _br_targets.erase(br_it);
+            F_SIZE target = erased_instr->get_target_offset();
+            F_SIZE src = erased_instr->get_instr_offset();
+            erase_br_target(target, src);
         }
             
         erase_instr(erased_instr);
@@ -167,7 +199,8 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
 
 void Module::insert_bbl(BasicBlock *bbl)
 {
-    _bbl_maps.insert(std::make_pair(bbl->get_bbl_offset(), bbl));
+    F_SIZE second_offset = 0;
+    _bbl_maps.insert(std::make_pair(bbl->get_bbl_offset(second_offset), bbl));
 }
 
 void Module::insert_func(Function *func)
@@ -175,46 +208,40 @@ void Module::insert_func(Function *func)
     _func_maps.insert(std::make_pair(func->get_func_offset(), func));
 }
 
-void Module::check_br_targets() const
+void Module::check_br_targets()
 {
-    F_SIZE checked_target = 0;
-    for(std::set<F_SIZE>::const_iterator it = _br_targets.begin(); it!=_br_targets.end(); it++){
-        F_SIZE target_offset = *it;
-        //multiset handling
-        if(target_offset==checked_target)
-            continue;
-        else
-            checked_target = target_offset;
+    for(BR_TARGETS_ITERATOR it = _br_targets.begin(); it!=_br_targets.end(); it++){
+        F_SIZE target_offset = it->first;
         
         if(!is_instr_entry_in_off(target_offset)){
             //judge is prefix. instruction or not 
             target_offset -= 1;
             Instruction *instr = get_instr_by_off(target_offset);
             FATAL(!(instr && instr->has_prefix()), \
-                "find one br target (offset:0x%lx) is not in module (%s) instruction list!\n", *it, get_path().c_str());
+                "find one br target (offset:0x%lx) is not in module (%s) instruction list!\n", target_offset, get_path().c_str());
         }
     }
 }
 
 static BasicBlock *construct_bbl(const std::map<F_SIZE, Instruction*> &instr_maps, BOOL is_call_proceeded)
 {
-    //PRINT("construct bbl!\n");
     const Instruction *first_instr = instr_maps.begin()->second;
     F_SIZE bbl_start = first_instr->get_instr_offset();
     const Instruction *last_instr = instr_maps.rbegin()->second;
     F_SIZE bbl_end = last_instr->get_next_offset();
     SIZE bbl_size = bbl_end - bbl_start;
+    BOOL has_prefix = first_instr->has_prefix();        
     
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
-        return new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+        return new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_call())
-        return new CallBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+        return new CallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_jump())
-        return new JumpBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+        return new JumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_condition_branch())
-        return new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+        return new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_ret())
-        return new RetBBL(bbl_start, bbl_size, is_call_proceeded, instr_maps);
+        return new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
 	else
         return NULL;
 }
@@ -311,3 +338,53 @@ void Module::analysis_all_modules_indirect_jump_targets()
    }
 }
 
+void Module::dump_all_bbls_in_va(const P_ADDRX load_base)
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+         it->second->dump_bbl_in_va(load_base);
+    }
+}
+
+void Module::dump_all_bbls_in_off()
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+         it->second->dump_bbl_in_off();
+    }
+}
+
+void Module::dump_bbl_in_va(const P_ADDRX load_base) const
+{
+    BBL_MAP_ITERATOR it = _bbl_maps.begin();
+    for(; it!=_bbl_maps.end(); it++){
+        it->second->dump_in_va(load_base);
+    }
+}
+
+void Module::dump_bbl_in_off() const
+{
+    BBL_MAP_ITERATOR it = _bbl_maps.begin();
+    for(; it!=_bbl_maps.end(); it++){
+        it->second->dump_in_off();
+    }
+}
+
+BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
+{
+    BBL_MAP_ITERATOR bbl_it;
+    INSTR_MAP_ITERATOR instr_it = _instr_maps.find(instr->get_instr_offset());
+    while((bbl_it = _bbl_maps.find(instr_it->first)) == _bbl_maps.end()){
+        instr_it--;
+    }
+    return bbl_it->second;
+}
+
+Instruction *Module::find_instr_by_off(F_SIZE offset) const
+{
+    INSTR_MAP_ITERATOR instr_it = _instr_maps.find(offset);
+    while(instr_it == _instr_maps.end()){
+        offset--;
+    }
+    return instr_it->second;
+}

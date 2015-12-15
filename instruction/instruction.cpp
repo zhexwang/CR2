@@ -6,15 +6,15 @@
 #include "disassembler.h"
 #include "module.h"
 
-std::string SequenceInstr::_type_name = "Sequence Instruction";
-std::string DirectCallInstr::_type_name = "Direct Call Instruction";
-std::string IndirectCallInstr::_type_name = "Indirect Call Instruction";
-std::string DirectJumpInstr::_type_name = "Direct Jump Instruction";
-std::string IndirectJumpInstr::_type_name = "Indirect Jump Instruction";
-std::string SysInstr::_type_name = "Sys Instruction";
-std::string IntInstr::_type_name = "Int Instruction";
-std::string CmovInstr::_type_name = "Cmovxx Instruction";
-std::string RetInstr::_type_name = "Ret Instruction";
+const std::string SequenceInstr::_type_name = "Sequence Instruction";
+const std::string DirectCallInstr::_type_name = "Direct Call Instruction";
+const std::string IndirectCallInstr::_type_name = "Indirect Call Instruction";
+const std::string DirectJumpInstr::_type_name = "Direct Jump Instruction";
+const std::string IndirectJumpInstr::_type_name = "Indirect Jump Instruction";
+const std::string SysInstr::_type_name = "Sys Instruction";
+const std::string IntInstr::_type_name = "Int Instruction";
+const std::string CmovInstr::_type_name = "Cmovxx Instruction";
+const std::string RetInstr::_type_name = "Ret Instruction";
 
 Instruction::Instruction(const _DInst &dInst, const Module *module)
     : _dInst(dInst), _module(module)

@@ -13,17 +13,10 @@
 
 #define PRINT(format, ...) do{ fprintf(stderr, format, ##__VA_ARGS__);}while(0)
 
-#ifdef _DEBUG
 #define INFO(format, ...) do{ fprintf(stderr,COLOR_GREEN format COLOR_END, ##__VA_ARGS__);}while(0)
 #define BLUE(format, ...) do{ fprintf(stderr,COLOR_BLUE format COLOR_END, ##__VA_ARGS__);}while(0)
 #define YELLOW(format, ...) do{ fprintf(stderr,COLOR_YELLOW format COLOR_END, ##__VA_ARGS__);}while(0)
 #define ERR(format, ...) do{ fprintf(stderr,COLOR_RED format COLOR_END, ##__VA_ARGS__);}while(0)
-#else
-#define INFO(format, ...)
-#define BLUE(format, ...)
-#define YELLOW(format, ...)
-#define ERR(format, ...)
-#endif
 
 #define FATAL(cond, format, ...) do{if(cond) {ERR("FATAL: %s:%-4d "format, __FILE__, __LINE__, ## __VA_ARGS__); abort();}}while(0)
 #define PERROR(cond, format) do{if(!(cond)){perror(format); abort();}}while(0)

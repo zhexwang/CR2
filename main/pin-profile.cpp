@@ -1,5 +1,6 @@
 #include "pin-profile.h"
 #include "module.h"
+#include "basic-block.h"
 using namespace std;
 
 const string PinProfile::type_name[PinProfile::TYPE_SUM] = {"IndirectCall", "IndirectJump", "Ret"};
@@ -120,9 +121,23 @@ void PinProfile::check_bbl_safe() const
     for(INT32 idx = 0; idx<_img_num; idx++){
         set<F_SIZE>::const_iterator it = _img_branch_targets[idx].begin();
         for(;it!=_img_branch_targets[idx].end(); it++){
-            BOOL is_bbl_entry = _module_maps[idx]->is_bbl_entry_in_off(*it);
-            FATAL(!is_bbl_entry, "check one indirect branch target (%s:0x%lx) is not bbl entry!\n", \
-                _module_maps[idx]->get_path().c_str(), *it);
+            Module *module = _module_maps[idx];
+            F_SIZE target_offset = *it;
+            BOOL is_bbl_entry = module->is_bbl_entry_in_off(target_offset);
+            if(!is_bbl_entry){
+                //test prefix
+                BasicBlock *bb = module->get_bbl_by_off(target_offset-1);
+                is_bbl_entry = bb&&bb->has_prefix() ? true : false;
+            }
+            if(!is_bbl_entry){
+                Instruction *instr = module->find_instr_by_off(target_offset);
+                BasicBlock *bbl = module->find_bbl_by_instr(instr);
+                bbl->dump_in_off();
+                FATAL(!is_bbl_entry, "check one indirect branch target (%s:0x%lx) is not bbl entry!\n", \
+                    _module_maps[idx]->get_path().c_str(), *it);
+            }else{
+                ERR("safe!\n");
+            }
         }
     }    
 }
