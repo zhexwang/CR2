@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <set>
+#include <list>
 
 #include "type.h"
 #include "elf-parser.h"
@@ -30,6 +31,27 @@ public:
 	typedef std::map<F_SIZE, BR_TARGET_SRCS> BR_TARGETS;
 	typedef BR_TARGETS::iterator BR_TARGETS_ITERATOR;
 	typedef BR_TARGETS::const_iterator BR_TARGETS_CONST_ITER;
+	//typedef aligned entry
+	typedef std::set<F_SIZE> ALIGN_ENTRY;
+	//typedef likely jump table pattern
+	typedef std::vector<F_SIZE> PATTERN_INSTRS;
+	typedef std::vector<F_SIZE>::iterator PATTERN_INSTRS_ITER;
+	typedef std::list<PATTERN_INSTRS> JUMP_TABLE_PATTERN;
+	typedef std::list<PATTERN_INSTRS>::iterator JUMP_TABLE_PATTERN_ITER;
+	//typedef indirect jump targets
+	enum JUMPIN_TYPE{
+		UNKNOW = 0,
+		SWITCH_CASE,
+		LONG_JMP,
+		TYPE_SUM,
+	};
+	typedef struct indirect_jump_info{
+		JUMPIN_TYPE type;
+		F_SIZE table_offset;//jump table offset
+		SIZE table_size;
+	}JUMPIN_INFO;
+	typedef std::map<F_SIZE, JUMPIN_INFO> JUMPIN_MAP;
+	typedef JUMPIN_MAP::iterator JUMPIN_MAP_ITER;
 	//typedef mapping module name to Module* 
 	typedef std::map<std::string, Module*> MODULE_MAP;
 	typedef MODULE_MAP::iterator MODULE_MAP_ITERATOR;
@@ -39,12 +61,19 @@ protected:
 	BBL_MAP _bbl_maps;//all basic blocks
 	FUNC_MAP _func_maps;//all functions, but ignore multi-entry
 	BBL_MAP _func_left_bbl_maps;//out-of function region
-	BR_TARGETS _br_targets;
+	BR_TARGETS _br_targets;// direct jump/call, conditional branch and recoginized jump table 
 	static MODULE_MAP _all_module_maps;
+	//aligned entry
+	ALIGN_ENTRY _align_entries;
+	//all indirect jump
+	JUMPIN_MAP _indirect_jump_maps;
+	//switch jump
+	JUMP_TABLE_PATTERN _jump_table_pattern;
 	//real load base
 	P_ADDRX _real_load_base;
 protected:
 	void split_bbl();
+	void analysis_jump_table();
 	void analysis_indirect_jump_targets();
 public:
 	Module(const ElfParser *elf);
@@ -82,23 +111,31 @@ public:
 	BOOL is_bbl_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_func_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_br_target(const F_SIZE target_offset) const;
+	BOOL is_align_entry(F_SIZE offset) const;
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);
 	void insert_func(Function *func);
+	void insert_align_entry(F_SIZE offset);
+	void insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern);
+	void insert_indirect_jump(F_SIZE offset);
 	//erase functions
 	void erase_instr(Instruction *instr);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
 	//read functions
-	UINT8 read_x_byte_in_off(const F_SIZE read_offset) const
+	UINT8 read_1byte_code_in_off(const F_SIZE read_offset) const
 	{
-		return _elf->read_x_byte_in_off(read_offset);
+		return _elf->read_1byte_code_in_off(read_offset);
 	}
 	BOOL is_in_x_section_in_off(const F_SIZE offset) const
 	{
 		return _elf->is_in_x_section_file(offset);
+	}
+	INT32 read_4byte_data_in_off(const F_SIZE read_offset) const
+	{
+		return _elf->read_4byte_data_in_off(read_offset);
 	}
 	//dump functions
 	static void dump_all_bbls_in_va(P_ADDRX load_base);

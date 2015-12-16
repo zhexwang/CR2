@@ -19,6 +19,61 @@ static BOOL is_0h_align(F_SIZE offset)
     return (offset&(0xfull))==0;
 }
 
+/*
+    @Introduction: only recoginze the following pattern: (compiled by gcc compiler)
+        lea    %jump_table_base, [%RIP+$offset]
+        ...
+        ...
+        movsxd %jump_table_entry, [%jump_table_base, %entry_num*4]
+        ...
+        add    %jump_table_entry, %jump_table_base //get real target
+    <Or lea    %jump_table_entry, [%jump_table_base+%jump_table_entry]>
+        ...
+        jmp    %jump_table_entry
+*/
+static void likely_switch_jump_pattern(Module *module, Instruction *instr)
+{
+    static UINT8 sib_base_reg = R_NONE;//jump table ptr 
+    static UINT8 dest_reg = R_NONE;//jump table entry (offset)
+    static BOOL matched_movsxb = false, matched_add_like = false;
+    static Module::PATTERN_INSTRS pattern_instrs;
+    
+    if(matched_movsxb){
+        if(instr->is_br()){//is br instruction
+            if(matched_add_like && instr->is_indirect_jump() && instr->is_dest_reg(dest_reg)){
+                //no br instructions, expect indirect jump instruction
+                pattern_instrs.push_back(instr->get_instr_offset());//jmp instruction
+                ASSERT(pattern_instrs.size()>=3);
+                module->insert_likely_jump_table_pattern(pattern_instrs);
+            }// wrong pattern
+        }else{//sequence
+            if(instr->is_dest_reg(dest_reg)){// is write dest reg instruction?
+                if(!matched_add_like && instr->is_add_two_regs(dest_reg, sib_base_reg)){
+                    //matched add like instruction
+                    matched_add_like = true;
+                    pattern_instrs.push_back(instr->get_instr_offset());//add instruction
+                    return ;
+                }// wrong pattern 
+            }else if(instr->is_dest_reg(sib_base_reg)){
+                if(matched_add_like)//sib_base_reg has been used for add like instruction
+                    pattern_instrs.push_back(instr->get_instr_offset());
+                //wrong pattern, sib_base_reg has not been used for add like instruction
+            } else{// instruction in pattern
+                pattern_instrs.push_back(instr->get_instr_offset());//other instruction
+                return ;
+            }
+        }
+    }else if(instr->is_movsxd_sib_to_reg(sib_base_reg, dest_reg)){
+        pattern_instrs.push_back(instr->get_instr_offset());//movsxd instruction
+        matched_movsxb = true;
+        return;
+    }
+
+    pattern_instrs.clear();
+    matched_movsxb = matched_add_like = false;
+    sib_base_reg = dest_reg = R_NONE;
+}
+
 void Disassembler::disassemble_module(Module *module)
 {
     /*Use objdump tools to split the code and data*/
@@ -34,8 +89,9 @@ void Disassembler::disassemble_module(Module *module)
     SIZE len = 50;
     char *line_buf = new char[len];
     Instruction *instr = NULL;
-    // objdump error : there are zero after ret and jmp instructions, used for align! 
-    std::set<Instruction *> align_start_instrs;
+    BOOL has_nop_instrs = false;
+    // objdump error : there are numbers of 0h after ret and jmp instructions, used for align! 
+    std::set<Instruction *> maybe_0h_align_start_instrs;
     while(getline(&line_buf, &len, p_stream)!=-1) {
         // 4.1 get instruction offset
         P_ADDRX instr_addr;
@@ -45,63 +101,96 @@ void Disassembler::disassemble_module(Module *module)
                   1642a2:       64 48 c7 45 00 00 00    movq   $0x0,%fs:0x0(%rbp)
                   1642a9:       00 00    
         */
+
         if(instr && (instr->get_next_offset() > instr_off))
             continue;
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module);
+        if(0x47351==instr_off)
+            INFO("%p\n", instr);
         // 4.4 record instruction
         if(instr){
-            module->insert_instr(instr);
-            // record branch targets
-            if(instr->is_direct_call() || instr->is_condition_branch() || instr->is_direct_jump())
-                module->insert_br_target(instr->get_target_offset(), instr->get_instr_offset());
 
-            if(instr->is_ret() || instr->is_jump()){
+            module->insert_instr(instr);
+            // 4.4.1 record branch targets
+            if(instr->is_direct_call() || instr->is_condition_branch() || instr->is_direct_jump())
+                module->insert_br_target(instr->get_target_offset(), instr_off);
+            // 4.4.2 record maybe 0h aligned entries
+            if(instr->is_ret() || instr->is_jump() || instr->is_ud2()){
                 F_SIZE next_offset = instr->get_next_offset();
-                if(module->is_in_x_section_in_off(next_offset) && module->read_x_byte_in_off(next_offset)==0)//align 0h
-                    align_start_instrs.insert(instr);
+                if(module->is_in_x_section_in_off(next_offset) && module->read_1byte_code_in_off(next_offset)==0)//align 0h
+                    maybe_0h_align_start_instrs.insert(instr);
             }
+            // 4.4.3 record nop aligned entries
+            if(instr->is_nop())
+                has_nop_instrs = true;
+            else{
+                if(has_nop_instrs)// && is_0h_align(instr_off))
+                    module->insert_align_entry(instr_off);
+                has_nop_instrs = false;
+            }
+            // 4.4.4 record likely switch jump pattern
+            likely_switch_jump_pattern(module, instr);
+            // 4.4.5 record indirect jump
+            if(instr->is_indirect_jump())
+                module->insert_indirect_jump(instr->get_instr_offset());
         }
     }
     free(line_buf);
     // 5.close stream
     pclose(p_stream);
-    // 6. fix objdump errors
-    // 6.1 fix align 0h 
+    // 6. fix objdump error1 : due to [10h 20h 30h ...] align. 
+    // Warnning: there is a likey bug (erase recognized switch jump)
     std::set<Instruction *>::iterator pick_one;
     std::vector<Instruction *> new_generated_instrs;
-    while((pick_one = align_start_instrs.begin())!=align_start_instrs.end()){
-        // padding 0h calculate!
+    std::vector<F_SIZE> new_generated_align_instrs;
+    // 6.1 search all likely 0h aligned entries
+    while((pick_one = maybe_0h_align_start_instrs.begin())!=maybe_0h_align_start_instrs.end()){
         Instruction *instr = *pick_one;
         F_SIZE erase_start = instr->get_next_offset();
-        ASSERT(instr);
-        // calculate padding range    
+        // 6.1.1 calculate 0h aligned padding range    
         F_SIZE padding_begin = erase_start;
         F_SIZE padding_end = padding_begin;
-        while(module->read_x_byte_in_off(padding_end)==0){
+        while(module->read_1byte_code_in_off(padding_end)==0){
             padding_end++;
         };
+        // 6.1.2 judge is aligned instruction or not
         if(!is_0h_align(padding_end)){//aligned instruction is found
-            align_start_instrs.erase(pick_one);
+            maybe_0h_align_start_instrs.erase(pick_one);
             continue;
         }
         F_SIZE erase_end = padding_end;
-        //generated new instructions    
+        // 6.1.3 record aligned entries
+        module->insert_align_entry(erase_end);
+        // 6.1.4 regenerated new instructions to subtitute the objdump results    
+        Instruction *new_instr = NULL;
         while(!module->is_instr_entry_in_off(erase_end)){
-            Instruction *new_instr = disassemble_instruction(erase_end, module);
+            new_instr = disassemble_instruction(erase_end, module);
             ASSERT(new_instr);
             new_generated_instrs.push_back(new_instr);
             erase_end = new_instr->get_next_offset();
+            // record nop aligned entries
+            if(new_instr->is_nop())
+                has_nop_instrs = true;
+            else{
+                if(has_nop_instrs)// && is_0h_align(instr_off))
+                    new_generated_align_instrs.push_back(new_instr->get_instr_offset());
+                has_nop_instrs = false;
+            }
         };
-        //erase instructions
+        if(has_nop_instrs){
+            new_generated_align_instrs.push_back(new_instr->get_next_offset());
+            has_nop_instrs = false;
+        }
+        // 6.1.5 erase instructions
         std::vector<Instruction*> erased_instrs;
         module->erase_instr_range(erase_start, erase_end, erased_instrs);
         //if erased instructions are in align_start_instrs, erase them!
-        align_start_instrs.erase(pick_one);
+        maybe_0h_align_start_instrs.erase(pick_one);
         for(std::vector<Instruction*>::iterator it = erased_instrs.begin(); it!=erased_instrs.end(); it++)
-            align_start_instrs.erase(*it);
+            maybe_0h_align_start_instrs.erase(*it);
     }
-    //record instructions
+    // 6.2 record new generated instructions
     for(std::vector<Instruction*>::iterator it = new_generated_instrs.begin();\
         it!=new_generated_instrs.end(); it++){
         Instruction *inst = *it;
@@ -110,8 +199,12 @@ void Disassembler::disassemble_module(Module *module)
         if(inst->is_direct_call() || inst->is_condition_branch() || inst->is_direct_jump())
             module->insert_br_target(inst->get_target_offset(), inst->get_instr_offset());
     }
-    // 6.2 fix br instructions' target is not aligned!
-#if 0 // check br targets are true now    
+    // 6.3 record new aligned instructions
+    for(std::vector<F_SIZE>::iterator it = new_generated_align_instrs.begin();\
+        it!=new_generated_align_instrs.end(); it++)
+        module->insert_align_entry(*it);
+    // 7. fix objdump error2 : due to br instructions' targets are not disassemble instruction aligned!
+#if 0 // check br targets are true now, if check_br_targets failed, you should open these codes    
 fix_again: 
     F_SIZE br_target = 0;
     for(Module::BR_TARGETS_ITERATOR it = module->_br_targets.begin(); it!=module->_br_targets.end(); it++){
@@ -181,14 +274,14 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
     _ci.codeOffset = instr_off;
     //decompose the instruction
     UINT32 dinstcount = 0;
-    if(code[0]==0xdf && code[1]==0xc0){//special handling
+    if(code[0]==0xdf && code[1]==0xc0){//FFREEP ST0
         _dInst.size = 2;
         _dInst.opcode = 0;
         _dInst.flags = 0;
         _dInst.meta &= (~0x7);//FC_NONE        
         _dInst.addr = instr_off;
         dinstcount = 1;
-    }else
+    }else//special handling vfmaddsd
         distorm_decompose(&_ci, &_dInst, 1, &dinstcount);
     ASSERT(_dInst.addr == instr_off);
     
@@ -241,7 +334,7 @@ void Disassembler::dump_pinst(const Instruction *instr, const P_ADDRX load_base)
         distorm_decode(_dInst.addr, inst_code, _dInst.size, Decode64Bits, &_decodedInst, _dInst.size, &decodedInstsCount);
         ASSERT(decodedInstsCount==1);
         PRINT("%12lx (%02d) %-24s  %s%s%s\n", _decodedInst.offset, _decodedInst.size, _decodedInst.instructionHex.p,\
-                (char*)_decodedInst.mnemonic.p, _decodedInst.operands.length != 0 ? " " : "", (char*)_decodedInst.operands.p);
+            (char*)_decodedInst.mnemonic.p, _decodedInst.operands.length != 0 ? " " : "", (char*)_decodedInst.operands.p);
     }
 }
 

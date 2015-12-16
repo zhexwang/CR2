@@ -124,9 +124,13 @@ void Module::insert_instr(Instruction *instr)
 
 void Module::erase_instr(Instruction *instr)
 {
-    SIZE erased_num = _instr_maps.erase(instr->get_instr_offset());
+    F_SIZE instr_offset = instr->get_instr_offset();
+    SIZE erased_num = _instr_maps.erase(instr_offset);
     FATAL(erased_num==0, "erase instruction error!\n");
+    //erase jmpin
+    _indirect_jump_maps.erase(instr_offset);
     delete instr;
+    //TODO:pattern should be maintance!
 }
 
 void Module::erase_br_target(const F_SIZE target, const F_SIZE src)
@@ -143,7 +147,7 @@ void Module::erase_br_target(const F_SIZE target, const F_SIZE src)
 }
 
 void Module::insert_br_target(const F_SIZE target, const F_SIZE src)
-{        
+{      
     BR_TARGETS_ITERATOR br_it = _br_targets.find(target);   
     if(br_it==_br_targets.end()){
         BR_TARGET_SRCS srcs;
@@ -208,6 +212,27 @@ void Module::insert_func(Function *func)
     _func_maps.insert(std::make_pair(func->get_func_offset(), func));
 }
 
+void Module::insert_align_entry(F_SIZE offset)
+{
+    _align_entries.insert(offset);
+}
+
+BOOL Module::is_align_entry(F_SIZE offset) const
+{
+    return _align_entries.find(offset)!=_align_entries.end();
+}
+
+void Module::insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern)
+{
+    _jump_table_pattern.push_back(pattern);
+}
+
+void Module::insert_indirect_jump(F_SIZE offset)
+{
+    JUMPIN_INFO info = {UNKNOW, 0, 0};
+    _indirect_jump_maps.insert(std::make_pair(offset, info));
+}
+
 void Module::check_br_targets()
 {
     for(BR_TARGETS_ITERATOR it = _br_targets.begin(); it!=_br_targets.end(); it++){
@@ -215,10 +240,11 @@ void Module::check_br_targets()
         
         if(!is_instr_entry_in_off(target_offset)){
             //judge is prefix. instruction or not 
-            target_offset -= 1;
-            Instruction *instr = get_instr_by_off(target_offset);
+            F_SIZE target_offset2 = target_offset - 1;
+            Instruction *instr = get_instr_by_off(target_offset2);
             FATAL(!(instr && instr->has_prefix()), \
-                "find one br target (offset:0x%lx) is not in module (%s) instruction list!\n", target_offset, get_path().c_str());
+                "find one br target (offset:0x%lx, src:0x%lx) is not in module (%s) instruction list!\n", \
+                target_offset, *(it->second.begin()), get_path().c_str());
         }
     }
 }
@@ -251,6 +277,7 @@ void Module::split_bbl()
 {
     // 1.check!
     check_br_targets();
+    analysis_jump_table();
     // 2. init bbl range
     INSTR_MAP_ITERATOR bbl_entry = _instr_maps.end();
     INSTR_MAP_ITERATOR bbl_exit = _instr_maps.end();
@@ -267,9 +294,9 @@ void Module::split_bbl()
         // 4.2 judge
         if(last_next_instr_offset==curr_instr_offset){
             /*these two instructions are sequence */
-            // 1. find bbl entry
-            if(is_br_target(curr_instr_offset) || \
-                (instr->has_prefix() && is_br_target(curr_instr_offset+1))){//consider prefix instruction
+            // 1. find bbl entry (consider prefix instruction and align entries)
+            if(is_br_target(curr_instr_offset) || is_align_entry(curr_instr_offset) || \
+                (instr->has_prefix() && (is_br_target(curr_instr_offset+1) || is_align_entry(curr_instr_offset+1)))){
                 /* curr instruction is bbl entry, so last instr is bbl exit */
                 // <bbl_entry, last_iterator> is a bbl
                 if(bbl_exit!=last_iterator){
@@ -328,6 +355,63 @@ void Module::split_all_modules_into_bbls()
 void Module::analysis_indirect_jump_targets()
 {
     NOT_IMPLEMENTED(wangzhe);
+}
+
+void Module::analysis_jump_table()
+{    
+    JUMP_TABLE_PATTERN_ITER pattern_it = _jump_table_pattern.begin();
+    while(pattern_it!=_jump_table_pattern.end()){
+        PATTERN_INSTRS &instrs = *pattern_it;
+        F_SIZE pattern_first_instr = instrs.front();
+        F_SIZE indirect_jump_offset = instrs.back();
+
+        //should be more precise: control flow analysis        
+        INSTR_MAP_ITERATOR pattern_start_instr_it = _instr_maps.find(pattern_first_instr);
+        UINT8 table_base_reg = pattern_start_instr_it->second->get_sib_base_reg();
+        pattern_start_instr_it--;
+        INT32 fault_count = 0;
+        INT32 fault_tolerant = 10;
+        while(pattern_start_instr_it!=_instr_maps.end()){
+            Instruction *instr = pattern_start_instr_it->second;
+            F_SIZE table_base_offset = 0;
+            if(instr->is_dest_reg(table_base_reg)){
+                if(instr->is_lea_rip(table_base_reg, table_base_offset)){/*
+                    BLUE("Switch Jump Table[0x%lx]: (%s)\n", table_base_offset, get_path().c_str());
+                    while(instrs_first_it!=instrs.end()){
+                        get_instr_by_off(*instrs_first_it)->dump_file_inst();
+                        instrs_first_it++;
+                    }*/
+                    //check jump table: there is 4byte data in one entry! Also check entry is instruction aligned
+                    F_SIZE entry_offset = table_base_offset;
+                    INT32 entry_data = read_4byte_data_in_off(entry_offset);
+                    F_SIZE first_entry_instr = entry_data + table_base_offset;
+                    if(!is_instr_entry_in_off(first_entry_instr))//makae sure that is real jump table!
+                        break;
+                    //calculate jump table size
+                    do{
+                        //record jump targets
+                        insert_br_target(table_base_offset+entry_data, indirect_jump_offset);
+                        entry_offset += 4;
+                        entry_data = read_4byte_data_in_off(entry_offset);
+                    }while(entry_data!=0);
+                    
+                    JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
+                    JUMPIN_INFO &info = iter->second;
+                    info.type = SWITCH_CASE;
+                    info.table_offset = table_base_offset;
+                    info.table_size = entry_offset - table_base_offset;
+                    
+                    break;
+                }else if(fault_count<fault_tolerant)
+                    fault_count++;
+                else
+                    break;
+            }
+            pattern_start_instr_it--;
+        }
+        
+        pattern_it++;    
+    }
 }
 
 void Module::analysis_all_modules_indirect_jump_targets()

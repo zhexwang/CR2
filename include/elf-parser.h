@@ -151,10 +151,15 @@ public:
 	 */
 	void check_relocation() const;
 	//read bytes
-	UINT8 read_x_byte_in_off(F_SIZE offset) const
+	UINT8 read_1byte_code_in_off(F_SIZE offset) const
 	{
 		ASSERT(is_in_x_section_file(offset));
 		return *(UINT8*)(offset+_map_start);
+	}
+	INT32 read_4byte_data_in_off(F_SIZE offset) const
+	{
+		ASSERT(offset<_elf_size);
+		return *(INT32*)(offset+_map_start);
 	}
 	//dump functions
 	void dump_x_sections() const;

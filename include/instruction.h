@@ -66,6 +66,10 @@ public:
 	virtual BOOL is_int() const =0;
 	virtual BOOL is_sys() const =0;
 	virtual BOOL is_cmov() const =0;
+	BOOL is_nop() const
+	{
+		return _dInst.opcode == I_NOP;
+	}
 	BOOL is_br() const
 	{
 		return is_direct_call() || is_indirect_call() || is_direct_jump() || is_indirect_jump() \
@@ -82,6 +86,10 @@ public:
 	BOOL is_rip_relative() const
 	{
 		return BITS_ARE_SET(_dInst.flags, FLAG_RIP_RELATIVE) ? true : false;
+	}
+	BOOL is_ud2() const
+	{
+		return _dInst.opcode==I_UD2;
 	}
 	//prefix judge functions
 	BOOL has_lock_prefix() const
@@ -100,7 +108,64 @@ public:
 	{
 		return has_lock_prefix()||has_repnz_prefix()||has_rep_prefix();
 	}
-	
+	// used for match switch jump
+	BOOL is_movsxd_sib_to_reg(UINT8 &sib_base_reg, UINT8 &dest_reg) const
+	{
+		if((_dInst.opcode==I_MOVSXD) && (_dInst.ops[0].type==O_REG) &&(_dInst.ops[1].type==O_MEM)\
+			&& (_dInst.disp==0) && (_dInst.ops[1].index!=R_NONE) && (_dInst.scale==4)){
+			sib_base_reg = _dInst.base;
+			dest_reg = _dInst.ops[0].index;
+			return true;
+		}else
+			return false;
+	}
+	BOOL is_dest_reg(UINT8 dest_reg) const
+	{
+		//normalizing
+		UINT8 curr_dest_reg = _dInst.ops[0].index;
+		UINT8 compared_reg = curr_dest_reg<=R_R15B ? curr_dest_reg%16 : curr_dest_reg;
+		dest_reg = dest_reg<=R_R15B ? dest_reg%16 : dest_reg;
+		
+		if((_dInst.ops[0].type==O_REG) && (compared_reg==dest_reg))
+			return true;
+		else
+			return false;
+	}
+	BOOL is_add_two_regs(UINT8 dest_reg, UINT8 src_reg) const
+	{
+		switch(_dInst.opcode){
+			case I_ADD:
+				if((_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_REG) && (_dInst.ops[2].type==O_NONE) \
+					&& (_dInst.ops[0].index==dest_reg) && (_dInst.ops[1].index==src_reg))
+					return true;
+				else
+					return false;
+			case I_LEA:
+				if((_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_MEM) && (_dInst.ops[0].index==dest_reg)
+					&& (_dInst.scale==0) && (_dInst.disp==0) && (((_dInst.ops[1].index==dest_reg) && (_dInst.base==src_reg)) \
+					|| ((_dInst.ops[1].index==src_reg) && (_dInst.base==dest_reg))))
+					return true;
+				else
+					return false;
+			default:
+				return false;
+		}
+	}
+	BOOL is_lea_rip(UINT8 dest_reg, F_SIZE &target)
+	{
+		if((_dInst.opcode==I_LEA) && (_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_SMEM) \
+			&& (_dInst.ops[0].index==dest_reg) && (_dInst.ops[1].index==R_RIP)){
+			target = _dInst.disp + _dInst.addr + _dInst.size;
+			return true;
+		}else
+			return false;
+	}
+	UINT8 get_sib_base_reg() const
+	{
+		UINT8 sib_base_reg = 0, dest_reg = 0; 
+		is_movsxd_sib_to_reg(sib_base_reg, dest_reg);
+		return sib_base_reg;
+	}
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;
