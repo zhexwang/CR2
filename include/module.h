@@ -42,6 +42,7 @@ public:
 	enum JUMPIN_TYPE{
 		UNKNOW = 0,
 		SWITCH_CASE,
+		PLT_JMP,
 		LONG_JMP,
 		TYPE_SUM,
 	};
@@ -140,7 +141,9 @@ public:
 	//dump functions
 	static void dump_all_bbls_in_va(P_ADDRX load_base);
 	static void dump_all_bbls_in_off();
+	static void dump_all_jump_table_percent();
 	void dump_bbl_in_va(P_ADDRX load_base) const;
 	void dump_bbl_in_off() const;
 	void dump_br_target(const F_SIZE target_offset) const;
+	void dump_jump_table_percent();
 };

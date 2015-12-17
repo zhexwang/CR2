@@ -11,8 +11,9 @@ int main(int argc, const char **argv)
     Disassembler::disassemble_all_modules();
     Module::split_all_modules_into_bbls();
     //Module::dump_all_bbls_in_off();
-    PinProfile *profile = new PinProfile(argv[2]);
-    profile->check_bbl_safe();
-
+    //PinProfile *profile = new PinProfile(argv[2]);
+    //profile->check_bbl_safe();
+    Module::dump_all_jump_table_percent();
+    
     return 0;
 }

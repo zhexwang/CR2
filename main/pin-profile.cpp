@@ -120,7 +120,6 @@ void PinProfile::check_bbl_safe() const
 {
     for(INT32 idx = 1; idx<_img_num; idx++){
         Module *module = _module_maps[idx];
-        BLUE("Check Module (%s)!\n", module->get_path().c_str());
         set<F_SIZE>::const_iterator it = _img_branch_targets[idx].begin();
         for(;it!=_img_branch_targets[idx].end(); it++){
             F_SIZE target_offset = *it;

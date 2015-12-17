@@ -29,7 +29,8 @@ protected:
 		@Return: None
 		@Introduction: This function mainly disassemble the instruction and record it.
 	*/
-	static Instruction *disassemble_instruction(const F_SIZE instr_off, const Module *module);
+	static Instruction *disassemble_instruction(const F_SIZE instr_off, const Module *module, \
+		const char *objdump_line_buf = NULL);
 public:
 	static void init();
 	/*  @Arguments:None

@@ -337,7 +337,8 @@ void Module::split_bbl()
             //set new bbl entry, first instruction or data in it
             bbl_entry = it;
         }else
-            ASSERTM(0, "instr map list is not ordered!\n");
+            ASSERTM(0, "%s instr map list is not ordered: Last(0x%lx), Curr(0x%lx)\n", \
+                get_path().c_str(), last_next_instr_offset, curr_instr_offset);
         //record curr instruction
         last_next_instr_offset = next_instr_offset;
         last_iterator = it;
@@ -428,6 +429,28 @@ void Module::dump_all_bbls_in_va(const P_ADDRX load_base)
     for(; it!=_all_module_maps.end(); it++){
          it->second->dump_bbl_in_va(load_base);
     }
+}
+
+void Module::dump_all_jump_table_percent()
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+         it->second->dump_jump_table_percent();
+    }
+}
+
+void Module::dump_jump_table_percent()
+{
+    INT32 jump_table_count = 0;
+    INT32 sum = _indirect_jump_maps.size();
+    
+    JUMPIN_MAP_ITER it = _indirect_jump_maps.begin();
+    for(; it!=_indirect_jump_maps.end(); it++){
+        if(it->second.type==SWITCH_CASE)
+            jump_table_count++;
+    }
+    
+    BLUE("%s's jump table percent: %d%%(%d/%d)\n", get_path().c_str(), 100*jump_table_count/sum, jump_table_count, sum);
 }
 
 void Module::dump_all_bbls_in_off()
