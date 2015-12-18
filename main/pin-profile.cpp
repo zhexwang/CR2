@@ -123,13 +123,6 @@ void PinProfile::check_bbl_safe() const
         set<F_SIZE>::const_iterator it = _img_branch_targets[idx].begin();
         for(;it!=_img_branch_targets[idx].end(); it++){
             F_SIZE target_offset = *it;
-
-            if((target_offset>=0x195a0) && (target_offset<=0x19854))
-                continue;
-            else if((target_offset>=0x19895) && (target_offset<=0x1990e))
-                continue;
-            else if ((target_offset>=0x8b0b8) && (target_offset<=0x8b526))
-                continue;
             
             BOOL is_bbl_entry = module->is_bbl_entry_in_off(target_offset);
             if(!is_bbl_entry){

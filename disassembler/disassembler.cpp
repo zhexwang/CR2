@@ -100,21 +100,24 @@ void Disassembler::disassemble_module(Module *module)
                   1642a2:       64 48 c7 45 00 00 00    movq   $0x0,%fs:0x0(%rbp)
                   1642a9:       00 00    
         */
-        char *push_pos = strstr(line_buf, "pushq");
+        char *push_pos = strstr(line_buf, "push");
         if(push_pos){
-            if(pos<=push_pos)
-                pos = push_pos;
-            else
+            if(pos<=push_pos){
+                if(!strstr(line_buf, "<"))
+                    pos = push_pos;
+            }else
                 continue;
         }else{
             if(pos>=(line_buf+strlen(line_buf)))                                                                                                                        
                 continue;
         }
-
         // 4.2 get instruction offset
         P_ADDRX instr_addr;
         sscanf(line_buf, "%lx\n", &instr_addr);
         F_SIZE instr_off = instr_addr - module->get_pt_load_base();
+        if(instr_off==0x182a){
+            PRINT("find!\n");
+        }
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
         // 4.4 record instruction
