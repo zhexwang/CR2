@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include "pin-profile.h"
 #include "module.h"
 #include "basic-block.h"
