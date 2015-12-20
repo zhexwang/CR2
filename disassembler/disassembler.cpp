@@ -28,37 +28,60 @@ static BOOL is_0h_align(F_SIZE offset)
         ...
         movsxd %jump_table_entry, [%jump_table_base, %entry_num*4]
         ...
-        add    %jump_table_entry, %jump_table_base //get real target
-    <Or lea    %jump_table_entry, [%jump_table_base+%jump_table_entry]>
+        <add    %jump_table_entry, %jump_table_base //lea %jump_table_entry, [%jump_table_base+%jump_table_entry]>
         ...
-        jmp    %jump_table_entry
+        jmp    %jump_table_entry>
+        or
+        <add    %jump_table_base, %jump_table_entry //lea %jump_table_base, [%jump_table_base+%jump_table_entry]>
+        ...
+        jmp    %jump_table_base>
 */
 static void likely_switch_jump_pattern(Module *module, Instruction *instr)
 {
     static UINT8 sib_base_reg = R_NONE;//jump table ptr 
     static UINT8 dest_reg = R_NONE;//jump table entry (offset)
-    static BOOL matched_movsxb = false, matched_add_like = false;
+    static BOOL matched_movsxb = false, matched_add_like = false, jump_table_base = false;//use sib base reg to jump
     static Module::PATTERN_INSTRS pattern_instrs;
-    
     if(matched_movsxb){
         if(instr->is_br()){//is br instruction
-            if(matched_add_like && instr->is_indirect_jump() && instr->is_dest_reg(dest_reg)){
-                //no br instructions, expect indirect jump instruction
-                pattern_instrs.push_back(instr->get_instr_offset());//jmp instruction
-                ASSERT(pattern_instrs.size()>=3);
-                module->insert_likely_jump_table_pattern(pattern_instrs);
+            if(matched_add_like && instr->is_indirect_jump()){
+                if((!jump_table_base && instr->is_dest_reg(dest_reg)) || (jump_table_base && instr->is_dest_reg(sib_base_reg))){
+                    //no br instructions, expect indirect jump instruction
+                    pattern_instrs.push_back(instr->get_instr_offset());//jmp instruction
+                    ASSERT(pattern_instrs.size()>=3);
+                    module->insert_likely_jump_table_pattern(pattern_instrs);  
+                }
             }// wrong pattern
         }else{//sequence
             if(instr->is_dest_reg(dest_reg)){// is write dest reg instruction?
-                if(!matched_add_like && instr->is_add_two_regs(dest_reg, sib_base_reg)){
-                    //matched add like instruction
-                    matched_add_like = true;
-                    pattern_instrs.push_back(instr->get_instr_offset());//add instruction
-                    return ;
+                if(matched_add_like){
+                    if(jump_table_base){
+                        pattern_instrs.push_back(instr->get_instr_offset());
+                        return ;
+                    }
+                }else{
+                    if(instr->is_add_two_regs(dest_reg, sib_base_reg)){
+                        //matched add like instruction
+                        matched_add_like = true;
+                        jump_table_base = false;
+                        pattern_instrs.push_back(instr->get_instr_offset());//add instruction
+                        return ;
+                    }
                 }// wrong pattern 
             }else if(instr->is_dest_reg(sib_base_reg)){
-                if(matched_add_like)//sib_base_reg has been used for add like instruction
-                    pattern_instrs.push_back(instr->get_instr_offset());
+                if(matched_add_like){//sib_base_reg has been used for add like instruction
+                    if(!jump_table_base){
+                        pattern_instrs.push_back(instr->get_instr_offset());
+                        return ;
+                    }
+                }else{
+                    if(instr->is_add_two_regs(sib_base_reg, dest_reg)){
+                        matched_add_like = true;
+                        jump_table_base = true;//use sib base reg to jump
+                        pattern_instrs.push_back(instr->get_instr_offset());
+                        return ;
+                    }
+                }
                 //wrong pattern, sib_base_reg has not been used for add like instruction
             } else{// instruction in pattern
                 pattern_instrs.push_back(instr->get_instr_offset());//other instruction
@@ -72,7 +95,7 @@ static void likely_switch_jump_pattern(Module *module, Instruction *instr)
     }
 
     pattern_instrs.clear();
-    matched_movsxb = matched_add_like = false;
+    matched_movsxb = matched_add_like = jump_table_base = false;
     sib_base_reg = dest_reg = R_NONE;
 }
 
@@ -115,9 +138,6 @@ void Disassembler::disassemble_module(Module *module)
         P_ADDRX instr_addr;
         sscanf(line_buf, "%lx\n", &instr_addr);
         F_SIZE instr_off = instr_addr - module->get_pt_load_base();
-        if(instr_off==0x182a){
-            PRINT("find!\n");
-        }
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
         // 4.4 record instruction

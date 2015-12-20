@@ -85,16 +85,20 @@ public:
 	{
 		return _is_so;
 	}
-	BOOL is_in_x_section_va(const S_ADDRX addr) const
+	void get_plt_range(F_SIZE &start, F_SIZE &end) const
 	{
 		SECTION_ITERATOR it = _x_sections.begin();
 		for(;it!=_x_sections.end();it++){
-			S_ADDRX region_start = (*it).start + _map_start;
-			S_ADDRX region_end = (*it).end + _map_start;
-			if((addr>=region_start)&&(addr<region_end))
-				return true;
+			const SECTION_REGION &sr = *it;
+			if(sr.section_name.find(".plt")!=std::string::npos){
+				start = sr.start;
+				end = sr.end;
+				return ;
+			}
 		}
-		return false;
+		start = 0;
+		end = 0;
+		return ;
 	}
 	BOOL is_in_x_section_file(const F_SIZE off) const
 	{
@@ -155,6 +159,11 @@ public:
 	{
 		ASSERT(is_in_x_section_file(offset));
 		return *(UINT8*)(offset+_map_start);
+	}
+	INT16 read_2byte_data_in_off(F_SIZE offset) const
+	{
+		ASSERT(offset<_elf_size);
+		return *(INT16*)(offset+_map_start);
 	}
 	INT32 read_4byte_data_in_off(F_SIZE offset) const
 	{

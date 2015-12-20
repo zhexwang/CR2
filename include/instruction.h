@@ -83,6 +83,10 @@ public:
 	{
 		return is_direct_jump() || is_indirect_jump();
 	}
+	BOOL is_jump_reg() const
+	{
+		return is_indirect_jump() && _dInst.ops[0].type==O_REG;
+	}
 	BOOL is_rip_relative() const
 	{
 		return BITS_ARE_SET(_dInst.flags, FLAG_RIP_RELATIVE) ? true : false;
@@ -119,6 +123,29 @@ public:
 		}else
 			return false;
 	}
+	BOOL is_movsx_sib_to_reg(UINT8 &sib_base_reg, UINT8 &dest_reg) const
+	{
+		if((_dInst.opcode==I_MOVSX) && (_dInst.ops[0].type==O_REG) &&(_dInst.ops[1].type==O_MEM)\
+			&& (_dInst.disp==0) && (_dInst.ops[1].index!=R_NONE) && (_dInst.scale==2)){
+			sib_base_reg = _dInst.base;
+			dest_reg = _dInst.ops[0].index;
+			return true;
+		}else
+			return false;
+	}
+	BOOL is_mov_reg_to_smem() const
+	{
+		if((_dInst.opcode==I_MOV || _dInst.opcode==I_MOVDQA) \
+			&& (_dInst.ops[0].type==O_SMEM) && (_dInst.ops[1].type==O_REG))
+			return true;
+		else
+			return false;
+	}
+	UINT8 get_dest_reg() const
+	{
+		ASSERT(_dInst.ops[0].type==O_REG);
+		return _dInst.ops[0].index;
+	}
 	BOOL is_dest_reg(UINT8 dest_reg) const
 	{
 		//normalizing
@@ -151,6 +178,28 @@ public:
 				return false;
 		}
 	}
+	BOOL is_add_two_regs_1(UINT8 dest_reg, UINT8 &src_reg) const
+	{
+		switch(_dInst.opcode){
+			case I_ADD:
+				if((_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_REG) && (_dInst.ops[2].type==O_NONE) \
+					&& (_dInst.ops[0].index==dest_reg)){
+					 src_reg = _dInst.ops[1].index;
+					return true;
+				}else
+					return false;
+			case I_LEA:
+				if((_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_MEM) && (_dInst.ops[0].index==dest_reg)
+					&& (_dInst.scale==0) && (_dInst.disp==0) && ((_dInst.ops[1].index==dest_reg)\
+					|| (_dInst.base==dest_reg))){
+					src_reg = _dInst.base==dest_reg ? _dInst.ops[1].index : _dInst.base;
+					return true;
+				}else
+					return false;
+			default:
+				return false;
+		}
+	}
 	BOOL is_lea_rip(UINT8 dest_reg, F_SIZE &target)
 	{
 		if((_dInst.opcode==I_LEA) && (_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_SMEM) \
@@ -160,12 +209,15 @@ public:
 		}else
 			return false;
 	}
-	UINT8 get_sib_base_reg() const
+	UINT8 get_sib_base_reg() const//only used for jump table
 	{
-		UINT8 sib_base_reg = 0, dest_reg = 0; 
-		is_movsxd_sib_to_reg(sib_base_reg, dest_reg);
-		return sib_base_reg;
+		if((_dInst.opcode==I_MOVSXD) && (_dInst.ops[0].type==O_REG) &&(_dInst.ops[1].type==O_MEM)\
+			&& (_dInst.disp==0) && (_dInst.ops[1].index!=R_NONE)){
+			return _dInst.base;
+		}else
+			return R_NONE;
 	}
+
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;

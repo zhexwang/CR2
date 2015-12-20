@@ -44,6 +44,7 @@ public:
 		SWITCH_CASE,
 		PLT_JMP,
 		LONG_JMP,
+		MEMSET_JMP,
 		TYPE_SUM,
 	};
 	typedef struct indirect_jump_info{
@@ -72,10 +73,13 @@ protected:
 	JUMP_TABLE_PATTERN _jump_table_pattern;
 	//real load base
 	P_ADDRX _real_load_base;
+	//plt range
+	F_SIZE _plt_start, _plt_end;
 protected:
 	void split_bbl();
 	void analysis_jump_table();
 	void analysis_indirect_jump_targets();
+	BOOL analysis_memset_jump(F_SIZE jump_offset);
 public:
 	Module(const ElfParser *elf);
 	~Module();
@@ -108,11 +112,17 @@ public:
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset) const;
 	BOOL is_bbl_entry_in_off(const F_SIZE target_offset) const;
 	BOOL is_func_entry_in_off(const F_SIZE target_offset) const;
+	BOOL is_in_plt_in_off(const F_SIZE offset) const;
 	BOOL is_instr_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_bbl_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_func_entry_in_va(const P_ADDRX addr) const;
+	BOOL is_in_plt_in_va(const P_ADDRX addr) const;
 	BOOL is_br_target(const F_SIZE target_offset) const;
 	BOOL is_align_entry(F_SIZE offset) const;
+	BOOL is_in_x_section_in_off(const F_SIZE offset) const
+	{
+		return _elf->is_in_x_section_file(offset);
+	}
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
@@ -130,9 +140,9 @@ public:
 	{
 		return _elf->read_1byte_code_in_off(read_offset);
 	}
-	BOOL is_in_x_section_in_off(const F_SIZE offset) const
+	INT16 read_2byte_data_in_off(const F_SIZE read_offset) const
 	{
-		return _elf->is_in_x_section_file(offset);
+		return _elf->read_2byte_data_in_off(read_offset);
 	}
 	INT32 read_4byte_data_in_off(const F_SIZE read_offset) const
 	{
@@ -141,9 +151,9 @@ public:
 	//dump functions
 	static void dump_all_bbls_in_va(P_ADDRX load_base);
 	static void dump_all_bbls_in_off();
-	static void dump_all_jump_table_percent();
+	static void dump_all_indirect_jump_result();
 	void dump_bbl_in_va(P_ADDRX load_base) const;
 	void dump_bbl_in_off() const;
 	void dump_br_target(const F_SIZE target_offset) const;
-	void dump_jump_table_percent();
+	void dump_indirect_jump_result();
 };

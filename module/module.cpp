@@ -7,6 +7,7 @@
 Module::MODULE_MAP Module::_all_module_maps;
 Module::Module(const ElfParser *elf): _elf(elf), _real_load_base(0)
 {
+    _elf->get_plt_range(_plt_start, _plt_end);
     _all_module_maps.insert(make_pair(_elf->get_elf_name(), this));
 }
 
@@ -85,6 +86,19 @@ BOOL Module::is_func_entry_in_off(const F_SIZE target_offset) const
         return true;
     else
         return false;
+}
+
+BOOL Module::is_in_plt_in_off(const F_SIZE offset) const
+{
+    if(offset>=_plt_start && offset<_plt_end)
+        return true;
+    else
+        return false;
+}
+
+BOOL Module::is_in_plt_in_va(const P_ADDRX addr) const
+{
+    return is_in_plt_in_off(addr - _real_load_base);
 }
 
 BOOL Module::is_instr_entry_in_va(const P_ADDRX addr) const
@@ -272,12 +286,12 @@ static BasicBlock *construct_bbl(const std::map<F_SIZE, Instruction*> &instr_map
         return NULL;
 }
 
-
 void Module::split_bbl()
 {
     // 1.check!
     check_br_targets();
-    analysis_jump_table();
+    // Analysis indirect jump instruction to find more br targets!!!!
+    analysis_indirect_jump_targets();
     // 2. init bbl range
     INSTR_MAP_ITERATOR bbl_entry = _instr_maps.end();
     INSTR_MAP_ITERATOR bbl_exit = _instr_maps.end();
@@ -353,9 +367,90 @@ void Module::split_all_modules_into_bbls()
    }
 }
 
+BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
+{
+    UINT8 jump_dest_reg = R_NONE;
+    F_SIZE memset_target = 0;
+    F_SIZE table_target = 0;
+    UINT8 src_reg = R_NONE;
+    BOOL lea_dest_src_matched = false, movsx_matched = false, lea_src_imm_matched = false;
+    INSTR_MAP_ITERATOR scan_iter = _instr_maps.find(jump_offset);
+    while(scan_iter!=_instr_maps.end()){
+        Instruction *instr = scan_iter->second;
+        if(jump_dest_reg == R_NONE)//indirect jump instruction
+            if(instr->is_jump_reg())
+                jump_dest_reg = instr->get_dest_reg();
+            else
+                return false;
+        else{
+            if(!lea_dest_src_matched){
+                if(instr->is_add_two_regs_1(jump_dest_reg, src_reg)){
+                    lea_dest_src_matched = true;
+                }else
+                    return false;
+            }else{
+                UINT8 movsx_dest = R_NONE, movsx_src = R_NONE;
+                if(!movsx_matched){
+                    if(instr->is_movsx_sib_to_reg(movsx_src, movsx_dest)){
+                        if(movsx_src==src_reg && movsx_src==movsx_dest){
+                            movsx_matched = true;
+                        }else
+                            return false;
+                    }
+                }else{
+                    if(!lea_src_imm_matched){
+                        if(instr->is_lea_rip(src_reg, table_target)){
+                            lea_src_imm_matched = true;
+                        }else
+                            return false;
+                    }else{
+                        if(instr->is_lea_rip(jump_dest_reg, memset_target)){
+                            break;
+                        }else
+                            return false;
+                    }
+                }
+            }
+        }
+        scan_iter--;
+    }
+    //find target list
+    F_SIZE entry_offset = table_target;
+    INT16 entry_data = read_2byte_data_in_off(entry_offset);
+    do{
+        //record jump targets
+        F_SIZE memset_entry_target = memset_target + entry_data;
+        if(find_instr_by_off(memset_entry_target))
+            insert_br_target(memset_entry_target, jump_offset);
+        entry_offset += 2;
+        entry_data = read_2byte_data_in_off(entry_offset);
+    }while(entry_data!=0);
+    
+    return true;
+}
+
 void Module::analysis_indirect_jump_targets()
 {
-    NOT_IMPLEMENTED(wangzhe);
+    // 1. analysis switch case
+    analysis_jump_table();
+    // 2. analysis other cases
+    for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
+        JUMPIN_INFO &info = iter->second;
+        F_SIZE jump_offset = iter->first;
+        if(info.type==UNKNOW){//analysis other
+            if(is_in_plt_in_off(jump_offset)){//jmpq *%rip... in plt section
+                info.type = PLT_JMP;
+                info.table_offset = 0;
+                info.table_size = 0;
+            }else if(analysis_memset_jump(jump_offset)){//assembly code in library
+                info.type = MEMSET_JMP;
+                info.table_offset = 0;
+                info.table_size = 0;
+            }else{//longjmp
+                ;
+            }
+        }
+    }
 }
 
 void Module::analysis_jump_table()
@@ -365,10 +460,10 @@ void Module::analysis_jump_table()
         PATTERN_INSTRS &instrs = *pattern_it;
         F_SIZE pattern_first_instr = instrs.front();
         F_SIZE indirect_jump_offset = instrs.back();
-
         //should be more precise: control flow analysis        
         INSTR_MAP_ITERATOR pattern_start_instr_it = _instr_maps.find(pattern_first_instr);
         UINT8 table_base_reg = pattern_start_instr_it->second->get_sib_base_reg();
+        ASSERT(table_base_reg!=R_NONE);
         pattern_start_instr_it--;
         INT32 fault_count = 0;
         INT32 fault_tolerant = 10;
@@ -376,12 +471,7 @@ void Module::analysis_jump_table()
             Instruction *instr = pattern_start_instr_it->second;
             F_SIZE table_base_offset = 0;
             if(instr->is_dest_reg(table_base_reg)){
-                if(instr->is_lea_rip(table_base_reg, table_base_offset)){/*
-                    BLUE("Switch Jump Table[0x%lx]: (%s)\n", table_base_offset, get_path().c_str());
-                    while(instrs_first_it!=instrs.end()){
-                        get_instr_by_off(*instrs_first_it)->dump_file_inst();
-                        instrs_first_it++;
-                    }*/
+                if(instr->is_lea_rip(table_base_reg, table_base_offset)){
                     //check jump table: there is 4byte data in one entry! Also check entry is instruction aligned
                     F_SIZE entry_offset = table_base_offset;
                     INT32 entry_data = read_4byte_data_in_off(entry_offset);
@@ -431,26 +521,36 @@ void Module::dump_all_bbls_in_va(const P_ADDRX load_base)
     }
 }
 
-void Module::dump_all_jump_table_percent()
+void Module::dump_all_indirect_jump_result()
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
-         it->second->dump_jump_table_percent();
+         it->second->dump_indirect_jump_result();
     }
 }
 
-void Module::dump_jump_table_percent()
+void Module::dump_indirect_jump_result()
 {
-    INT32 jump_table_count = 0;
+    INT32 switch_case_count = 0;
+    INT32 plt_jmp_count = 0;
+    INT32 memset_jmp_count = 0;
     INT32 sum = _indirect_jump_maps.size();
     
     JUMPIN_MAP_ITER it = _indirect_jump_maps.begin();
     for(; it!=_indirect_jump_maps.end(); it++){
-        if(it->second.type==SWITCH_CASE)
-            jump_table_count++;
+        switch(it->second.type){
+            case SWITCH_CASE: switch_case_count++; break;
+            case PLT_JMP: plt_jmp_count++; break;
+            case MEMSET_JMP: memset_jmp_count++; break;
+            default:
+                ;//find_instr_by_off(it->first)->dump_file_inst();
+        }
+        
     }
     
-    BLUE("%s's jump table percent: %d%%(%d/%d)\n", get_path().c_str(), 100*jump_table_count/sum, jump_table_count, sum);
+    BLUE("Indirect Jump Types (%d in %s): %d%%(%d switch), %d%%(%d plt), %d%%(%d memset)\n", sum, get_path().c_str(), \
+        100*switch_case_count/sum, switch_case_count, 100*plt_jmp_count/sum, plt_jmp_count,\
+        100*memset_jmp_count/sum, memset_jmp_count);
 }
 
 void Module::dump_all_bbls_in_off()
@@ -490,8 +590,9 @@ BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
 Instruction *Module::find_instr_by_off(F_SIZE offset) const
 {
     INSTR_MAP_ITERATOR instr_it = _instr_maps.find(offset);
-    while(instr_it == _instr_maps.end()){
-        offset--;
-    }
-    return instr_it->second;
+    if(instr_it == _instr_maps.end()){
+        instr_it = _instr_maps.find(--offset);//lock prefix
+        return instr_it==_instr_maps.end()? NULL : instr_it->second;
+    }else
+        return instr_it->second;
 }
