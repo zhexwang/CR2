@@ -111,11 +111,11 @@ void Disassembler::disassemble_module(Module *module)
     FILE *p_stream = popen(command, type);
     ASSERTM(p_stream, "popen() error!\n");
     // 4.parse the stream to get address of instructions
-    SIZE len = 200;
+    SIZE len = 5000;
     char *line_buf = new char[len];
     Instruction *instr = NULL;
     BOOL has_nop_instrs = false;
-    char *pos = NULL;
+    char *pos = line_buf;
     // objdump error : there are numbers of 0h after ret and jmp instructions, used for align! 
     std::set<Instruction *> maybe_0h_align_start_instrs;
     while(getline(&line_buf, &len, p_stream)!=-1) {

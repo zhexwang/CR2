@@ -41,6 +41,15 @@ END_LEGAL */
 #include <cassert>
 #include <stdlib.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#define COLOR_RED "\033[01;31m"
+#define COLOR_GREEN "\033[32m"
+#define COLOR_HIGH_GREEN "\033[01;32m"
+#define COLOR_YELLOW "\033[33m"
+#define COLOR_BLUE "\033[01;36m"
+#define COLOR_END "\033[0m"
 
 char application_name[1000];
 
@@ -118,6 +127,7 @@ public:
 };
 
 SS thread_ss;
+set<UINT64> ss_unmatched;
 
 /*
     Hash Function to record Indirect Branch instructions' inst_addr and target_address
@@ -253,9 +263,11 @@ VOID record_ret_target(THREADID thread_id, ADDRINT rsp, ADDRINT inst_address, AD
         if(IMG_Valid(src_image) && IMG_Valid(target_image)){
             ADDRINT src_addr = inst_address - IMG_LowAddress(src_image);
             ADDRINT target_addr = inst_target - IMG_LowAddress(target_image);
-            fprintf(stderr, "[ERROR] Detected shadow stack unmatch: 0x%lx(%s) ==> 0x%lx(%s)\n", \
+            UINT32 src_id = find_img_id(src_image);
+            UINT32 target_id = find_img_id(target_image);
+            ss_unmatched.insert(hash(src_addr, src_id, target_addr, target_id));
+            fprintf(stderr, COLOR_RED"[ERROR] Detected shadow stack unmatch: 0x%lx(%s) ==> 0x%lx(%s)\n"COLOR_END, \
                    src_addr, IMG_Name(src_image).c_str(), target_addr, IMG_Name(target_image).c_str());
-            assert(0);
         }
     }
 	PIN_UnlockClient();
@@ -314,6 +326,39 @@ KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool",
 
 ofstream OutFile;
 
+static string get_real_path(const char *file_path)
+{
+    #define PATH_LEN 1024
+    #define INCREASE_IDX ++idx;idx%=2
+    #define OTHER_IDX (idx==0 ? 1 : 0)
+    #define CURR_IDX idx
+    
+    char path[2][PATH_LEN];
+    for(INT32 i=0; i<2; i++)
+        memset(path[i], '\0', PATH_LEN);
+    INT32 idx = 0;
+    INT32 ret = 0;
+    struct stat statbuf;
+    //init
+    strcpy(path[CURR_IDX], file_path);
+    //loop to find real path
+    while(1){
+        ret = lstat(path[CURR_IDX], &statbuf);
+        if(ret!=0)//lstat failed
+            break;
+        if(S_ISLNK(statbuf.st_mode)){
+            ret = readlink(path[CURR_IDX], path[OTHER_IDX], PATH_LEN);
+            if(ret<=0)
+                cerr<<"readlink error!"<<endl;
+
+            INCREASE_IDX;
+        }else
+            break;
+    }
+    
+    return string(path[CURR_IDX]); 
+}
+
 // This function is called when the application exits
 VOID Fini(INT32 code, VOID *v)
 {	
@@ -323,15 +368,14 @@ VOID Fini(INT32 code, VOID *v)
 	OutFile<<"IMG_NUM= "<<image_vec.size()<<endl;
 	for(UINT32 idx=0; idx != image_vec.size(); idx++){
 		IMAG_ITEM &item = image_vec[idx];
-		char process_real_path[1024] = "\0";
-		UINT32 ret = readlink(item.image_name.c_str(), process_real_path, 1024); 
-		if(ret<=0)
-			cerr<<"readlink error!"<<endl;
-		
-		if(process_real_path[0]!='\0')
-			OutFile<<setw(2)<<idx<<" "<<process_real_path<<" "<<endl;
-		else
-			OutFile<<setw(2)<<idx<<" "<<item.image_name<<" "<<endl;
+        string real_path = get_real_path(item.image_name.c_str());
+        UINT32 found = real_path.find_last_of("/");
+        string image_name;
+        if(found==string::npos)
+            image_name = real_path;
+        else
+            image_name = real_path.substr(found+1);
+        OutFile<<setw(2)<<idx<<" "<<image_name<<" "<<endl;
 	}
     for(UINT32 idx=0; idx != INDIRECT_BRANCH_SUM; idx++){
     	OutFile<<indirect_branch_type_to_name[idx]<<"_NUM= "<<indirect_inst_set[idx].size()<<endl;
@@ -343,6 +387,15 @@ VOID Fini(INT32 code, VOID *v)
     		parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
     		OutFile<<src_addr<<" ( "<<(src_id-1)<<" )--> "<<target_addr<<" ( "<<(target_id-1)<<" )"<<endl;
     	}
+    }
+    OutFile<<"ShadowStackUnmatchedNum= "<<ss_unmatched.size()<<endl;
+    for(set<UINT64>::iterator iter = ss_unmatched.begin(); iter!=ss_unmatched.end(); iter++){
+        ADDRINT src_addr = 0;
+        ADDRINT target_addr = 0;
+        UINT32 src_id = 0;
+        UINT32 target_id = 0;
+        parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
+        OutFile<<src_addr<<" ( "<<(src_id-1)<<" )--> "<<target_addr<<" ( "<<(target_id-1)<<" )"<<endl;
     }
 	OutFile.close();
 }

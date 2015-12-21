@@ -1,4 +1,7 @@
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <string.h>
 
 #include "pin-profile.h"
 #include "module.h"
@@ -20,6 +23,8 @@ PinProfile::PinProfile(const char *path) : _path(string(path))
     read_indirect_branch_info(ifs, _indirect_jump_maps, INDIRECT_JUMP);
     //5. read ret info
     read_indirect_branch_info(ifs, _ret_maps, RET);
+    //6. read shadow stack unmatched info
+    read_ss_unmatched_info(ifs);
 }
 
 PinProfile::~PinProfile()
@@ -43,11 +48,8 @@ void PinProfile::read_image_info(ifstream &ifs)
     for(INT32 idx=0; idx<_img_num; idx++){
         ifs>>hex>>index>>image_path;
         ASSERT(index==idx);
-        UINT32 found = image_path.find_last_of("/");
-        if(found==string::npos)
-            _img_name[idx] = image_path;
-        else
-            _img_name[idx] = image_path.substr(found+1);
+        ASSERT(image_path.find_last_of("/") == string::npos);
+        _img_name[idx] = image_path;
     }
 }
 
@@ -79,6 +81,25 @@ void PinProfile::read_indirect_branch_info(ifstream &ifs, multimap<INST_POS, INS
     }
 }
 
+void PinProfile::read_ss_unmatched_info(std::ifstream &ifs)
+{
+    string padding;
+    UINT8 c;
+    INT32 instr_num = 0;
+    ifs>>hex>>padding>>instr_num;
+    for(INT32 idx=0; idx<instr_num; idx++){
+        //record ret information
+        F_SIZE src_offset, target_offset;
+        INT32 src_image_index, target_image_index;
+        ifs>>hex>>src_offset>>c>>src_image_index>>padding>>target_offset>>c>>target_image_index>>c;
+        INST_POS src = {src_offset, src_image_index};
+        INST_POS target = {target_offset, target_image_index};
+        _unmatched_ret.insert(make_pair(src, target));
+        //insert branch targets
+        _img_branch_targets[target_image_index].insert(target_offset);
+    }    
+}
+
 void PinProfile::dump_profile_image_info() const
 {
     for(INT32 idx = 0; idx<_img_num; idx++){
@@ -95,23 +116,51 @@ INT32 PinProfile::get_img_index_by_name(string name) const
     return -1;
 }
 
+static string get_real_path(const char *file_path)
+{
+    #define PATH_LEN 1024
+    #define INCREASE_IDX ++idx;idx%=2
+    #define OTHER_IDX (idx==0 ? 1 : 0)
+    #define CURR_IDX idx
+    
+    char path[2][PATH_LEN];
+    for(INT32 i=0; i<2; i++)
+        memset(path[i], '\0', PATH_LEN);
+    INT32 idx = 0;
+    INT32 ret = 0;
+    struct stat statbuf;
+    //init
+    strcpy(path[CURR_IDX], file_path);
+    //loop to find real path
+    while(1){
+        ret = lstat(path[CURR_IDX], &statbuf);
+        if(ret!=0)//lstat failed
+            break;
+        if(S_ISLNK(statbuf.st_mode)){
+            ret = readlink(path[CURR_IDX], path[OTHER_IDX], PATH_LEN);
+            PERROR(ret>0, "readlink error!\n");
+            INCREASE_IDX;
+        }else
+            break;
+    }
+    
+    return string(path[CURR_IDX]); 
+}
+
 void PinProfile::map_modules()
 {
     Module::MODULE_MAP_ITERATOR it = Module::_all_module_maps.begin();
     for(; it!=Module::_all_module_maps.end(); it++){
-        // module path maybe record a symbol link 
-        char real_path[1024] = "\0";
-        UINT32 ret = readlink(it->second->get_path().c_str(), real_path, 1024);
-        FATAL(ret<=0, "readlink error!\n");
         // get real path
-        string str_path = real_path[0]=='\0' ? it->second->get_path() : string(real_path);
+        string str_path = get_real_path(it->second->get_path().c_str());
+        // get name
         UINT32 found = str_path.find_last_of("/");
         string name;
         if(found==string::npos)
             name = str_path;
         else
             name = str_path.substr(found+1);
-        //match _all_modules to _module_maps**;    
+        // match _all_modules to _module_maps**;    
         INT32 index = get_img_index_by_name(name);
         FATAL(index==-1, "map failed!\n");
         _module_maps[index] = it->second;

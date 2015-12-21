@@ -38,9 +38,11 @@ private:
     std::multimap<INST_POS, INST_POS> _indirect_call_maps;
     std::multimap<INST_POS, INST_POS> _indirect_jump_maps;
     std::multimap<INST_POS, INST_POS> _ret_maps;
+	std::multimap<INST_POS, INST_POS> _unmatched_ret;//shadow stack
 protected:
     void read_image_info(std::ifstream &ifs);
     void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps, INST_TYPE type);
+	void read_ss_unmatched_info(std::ifstream &ifs);
 public:
     PinProfile(const char *profile_path);
     ~PinProfile();
