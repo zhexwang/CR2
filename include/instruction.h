@@ -87,6 +87,14 @@ public:
 	{
 		return is_indirect_jump() && _dInst.ops[0].type==O_REG;
 	}
+	BOOL is_jump_mem() const
+	{
+		return is_indirect_jump() && _dInst.ops[0].type==O_MEM;
+	}
+	BOOL is_jump_smem() const
+	{
+		return is_indirect_jump() && _dInst.ops[0].type==O_SMEM;
+	}
 	BOOL is_rip_relative() const
 	{
 		return BITS_ARE_SET(_dInst.flags, FLAG_RIP_RELATIVE) ? true : false;
@@ -94,6 +102,10 @@ public:
 	BOOL is_ud2() const
 	{
 		return _dInst.opcode==I_UD2;
+	}
+	BOOL is_hlt() const
+	{
+		return _dInst.opcode==I_HLT;
 	}
 	//prefix judge functions
 	BOOL has_lock_prefix() const
@@ -129,6 +141,18 @@ public:
 			&& (_dInst.disp==0) && (_dInst.ops[1].index!=R_NONE) && (_dInst.scale==2)){
 			sib_base_reg = _dInst.base;
 			dest_reg = _dInst.ops[0].index;
+			return true;
+		}else
+			return false;
+	}
+	// used for switch jump in main file
+	BOOL is_mov_sib_to_reg64(UINT8 &sib_base_reg, UINT8 &dest_reg, UINT64 &disp) const
+	{
+		if((_dInst.opcode==I_MOV) && (_dInst.ops[0].type==O_REG) &&(_dInst.ops[1].type==O_MEM)\
+		    && (_dInst.ops[1].index!=R_NONE) && (_dInst.scale==8)){
+			sib_base_reg = _dInst.base;
+			dest_reg = _dInst.ops[0].index;
+			disp = _dInst.disp;
 			return true;
 		}else
 			return false;
@@ -209,15 +233,18 @@ public:
 		}else
 			return false;
 	}
-	UINT8 get_sib_base_reg() const//only used for jump table
+	void get_sib(UINT8 ops_num, UINT8 &base, UINT8 &index, UINT8 &scale, UINT64 &disp)
 	{
-		if((_dInst.opcode==I_MOVSXD) && (_dInst.ops[0].type==O_REG) &&(_dInst.ops[1].type==O_MEM)\
-			&& (_dInst.disp==0) && (_dInst.ops[1].index!=R_NONE)){
-			return _dInst.base;
-		}else
-			return R_NONE;
+		ASSERT(_dInst.ops[ops_num].type==O_MEM);
+		base = _dInst.base;
+		index = _dInst.ops[ops_num].index;
+		scale = _dInst.scale;
+		disp = _dInst.disp;
 	}
-
+	UINT64 get_disp()
+	{
+		return _dInst.disp;
+	}
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;

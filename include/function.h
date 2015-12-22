@@ -14,10 +14,9 @@ protected:
 	const SIZE _size;
 	std::vector<const BasicBlock*> _bbl_vec;
 	std::vector<const BasicBlock*> _entry_bbl_vec;
-	std::vector<const Instruction*> _instr_vec;
 public:
 	Function(const F_SIZE start, const SIZE size, const std::vector<const BasicBlock*> &bbl_vec, \
-		const std::vector<const BasicBlock*> &entry_bbl_vec, const std::vector<const Instruction*> &instr_vec);
+		const std::vector<const BasicBlock*> &entry_bbl_vec);
 	~Function();
 	//get functions
 	F_SIZE get_func_offset() const {return _start;}

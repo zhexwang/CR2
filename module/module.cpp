@@ -5,7 +5,7 @@
 #include "function.h"
 
 Module::MODULE_MAP Module::_all_module_maps;
-Module::Module(const ElfParser *elf): _elf(elf), _real_load_base(0)
+Module::Module(ElfParser *elf): _elf(elf), _real_load_base(0)
 {
     _elf->get_plt_range(_plt_start, _plt_end);
     _all_module_maps.insert(make_pair(_elf->get_elf_name(), this));
@@ -209,8 +209,7 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
             F_SIZE src = erased_instr->get_instr_offset();
             erase_br_target(target, src);
         }
-            
-        erase_instr(erased_instr);
+        erase_instr(erased_instr);        
         erased_instrs.push_back(erased_instr);
     }
 }
@@ -429,6 +428,89 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
     return true;
 }
 
+//direct call target and symbol table recorded functions are true function, but align function maybe false
+void Module::split_function()
+{
+    //1. scan elf symbol table to find functions(include dynamic symbol table)
+    _elf->search_function_from_sym_table(_func_info_maps);
+    //2. scan aligned entry
+    for(ALIGN_ENTRY::iterator iter = _align_entries.begin(); iter!=_align_entries.end(); iter++){
+        insert_func_info(*iter, 0, ALIGN_FUNC, "align");
+    }
+    //3. analysis all func info to find all function [range_start, range_end]
+    for(FUNC_INFO_MAP::iterator iter = _func_info_maps.begin(); iter!=_func_info_maps.end(); iter++){
+        FUNC_INFO &info = iter->second;
+        if(info.range_start==info.range_end){
+            ;
+
+            
+        }//if range_start!=range_end, the function is read from symbol table
+    }
+}
+
+void Module::insert_func_info(F_SIZE func_start, SIZE func_size, FUNC_TYPE type, std::string func_name)
+{
+    FUNC_INFO_MAP::iterator iter = _func_info_maps.find(func_start);
+    if(iter==_func_info_maps.end()){
+        FUNC_INFO info = {func_start, func_size+func_start, type, func_name};
+        _func_info_maps.insert(std::make_pair(func_start, info));
+    }else{
+        FUNC_INFO &info = iter->second;
+        info.range_start = func_start;
+        info.range_end = func_start+func_size;
+        info.type = type;
+        info.func_name = func_name;
+    }
+}
+
+BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size)
+{
+    INSTR_MAP_ITERATOR iter = _instr_maps.find(jump_offset); 
+    Instruction *instr = iter->second;
+    UINT8 base, index, scale;
+    UINT64 disp = 0;
+    if(instr->is_jump_mem()){
+        instr->get_sib(0, base, index, scale, disp);
+        if(base!=R_NONE || index==R_NONE || scale!=8)
+            return false;
+    }else if(instr->is_jump_smem()){
+        disp = instr->get_disp();
+    }else{//
+        ASSERT(instr->is_jump_reg());
+        UINT8 jump_base_reg = instr->get_dest_reg();
+        iter--;
+        while(iter!=_instr_maps.end()){
+            Instruction *inst = iter->second;
+            UINT8 base_reg, dest_reg;
+            if(inst->is_dest_reg(jump_base_reg)){
+                if(inst->is_mov_sib_to_reg64(base_reg, dest_reg, disp) && base_reg==R_NONE && dest_reg==jump_base_reg)
+                    break;
+                else
+                    return false;
+            }
+            iter--;
+        }
+    }
+    F_SIZE entry_offset = disp - get_pt_load_base();
+    table_base = entry_offset;
+    INT64 entry_data = read_8byte_data_in_off(entry_offset);
+    do{
+        F_SIZE target_instr = entry_data - get_pt_load_base();
+        //record jump targets
+        if(is_instr_entry_in_off(target_instr))//makae sure that is real jump target!
+            insert_br_target(target_instr, jump_offset);
+        else{
+            entry_offset -=8;
+            break;
+        }
+        entry_offset += 8;
+        entry_data = read_8byte_data_in_off(entry_offset);
+    }while((entry_data&0xffffffff)!=0);
+    table_size = entry_offset - table_base;
+    return true;
+}
+
+
 void Module::analysis_indirect_jump_targets()
 {
     // 1. analysis switch case
@@ -437,6 +519,7 @@ void Module::analysis_indirect_jump_targets()
     for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
         JUMPIN_INFO &info = iter->second;
         F_SIZE jump_offset = iter->first;
+        F_SIZE table_base, table_size;
         if(info.type==UNKNOW){//analysis other
             if(is_in_plt_in_off(jump_offset)){//jmpq *%rip... in plt section
                 info.type = PLT_JMP;
@@ -446,7 +529,11 @@ void Module::analysis_indirect_jump_targets()
                 info.type = MEMSET_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
-            }else{//longjmp
+            }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size)){
+                info.type = SWITCH_CASE_ABSOLUTE;
+                info.table_offset = table_base;
+                info.table_size = table_size;
+            }else{//longjump
                 ;
             }
         }
@@ -462,8 +549,11 @@ void Module::analysis_jump_table()
         F_SIZE indirect_jump_offset = instrs.back();
         //should be more precise: control flow analysis        
         INSTR_MAP_ITERATOR pattern_start_instr_it = _instr_maps.find(pattern_first_instr);
-        UINT8 table_base_reg = pattern_start_instr_it->second->get_sib_base_reg();
-        ASSERT(table_base_reg!=R_NONE);
+
+        UINT8 table_base_reg, index_reg, scale;
+        UINT64 disp;
+        pattern_start_instr_it->second->get_sib(1, table_base_reg, index_reg, scale, disp);
+        ASSERT(table_base_reg!=R_NONE && disp==0);
         pattern_start_instr_it--;
         INT32 fault_count = 0;
         INT32 fault_tolerant = 10;
@@ -488,7 +578,7 @@ void Module::analysis_jump_table()
                     
                     JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
                     JUMPIN_INFO &info = iter->second;
-                    info.type = SWITCH_CASE;
+                    info.type = SWITCH_CASE_OFFSET;
                     info.table_offset = table_base_offset;
                     info.table_size = entry_offset - table_base_offset;
                     
@@ -513,6 +603,14 @@ void Module::analysis_all_modules_indirect_jump_targets()
    }
 }
 
+void Module::split_all_modules_into_funcs()
+{
+   MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+   for(; it!=_all_module_maps.end(); it++){
+        it->second->split_function();
+   }
+}
+
 void Module::dump_all_bbls_in_va(const P_ADDRX load_base)
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
@@ -531,7 +629,7 @@ void Module::dump_all_indirect_jump_result()
 
 void Module::dump_indirect_jump_result()
 {
-    INT32 switch_case_count = 0;
+    INT32 switch_case_off_count = 0, switch_case_absolute_count = 0;
     INT32 plt_jmp_count = 0;
     INT32 memset_jmp_count = 0;
     INT32 sum = _indirect_jump_maps.size();
@@ -539,8 +637,9 @@ void Module::dump_indirect_jump_result()
     JUMPIN_MAP_ITER it = _indirect_jump_maps.begin();
     for(; it!=_indirect_jump_maps.end(); it++){
         switch(it->second.type){
-            case SWITCH_CASE: switch_case_count++; break;
+            case SWITCH_CASE_OFFSET: switch_case_off_count++; break;
             case PLT_JMP: plt_jmp_count++; break;
+            case SWITCH_CASE_ABSOLUTE: switch_case_absolute_count++; break;
             case MEMSET_JMP: memset_jmp_count++; break;
             default:
                 ;//find_instr_by_off(it->first)->dump_file_inst();
@@ -548,9 +647,28 @@ void Module::dump_indirect_jump_result()
         
     }
     
-    BLUE("Indirect Jump Types (%d in %s): %d%%(%d switch), %d%%(%d plt), %d%%(%d memset)\n", sum, get_path().c_str(), \
-        100*switch_case_count/sum, switch_case_count, 100*plt_jmp_count/sum, plt_jmp_count,\
-        100*memset_jmp_count/sum, memset_jmp_count);
+    BLUE("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset)\n",\
+        sum, get_name().c_str(), 100*switch_case_off_count/sum, switch_case_off_count, 100*switch_case_absolute_count/sum,\
+        switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count);
+}
+
+void Module::dump_func_info_in_off() const 
+{
+    FUNC_INFO_MAP::const_iterator iter = _func_info_maps.begin();
+    for(; iter!=_func_info_maps.end(); iter++){
+        FUNC_INFO info = iter->second;
+        PRINT("Range:[%lx-%lx] Name: %s\n", info.range_start, info.range_end, info.func_name.c_str());
+    }
+}
+
+void Module::dump_all_func_info_in_off()
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+        BLUE("Dump %s function info:\n", it->first.c_str());
+        if(it->first.find("ls")!=std::string::npos)        
+            it->second->dump_func_info_in_off();
+    }
 }
 
 void Module::dump_all_bbls_in_off()

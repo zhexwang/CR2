@@ -41,7 +41,8 @@ public:
 	//typedef indirect jump targets
 	enum JUMPIN_TYPE{
 		UNKNOW = 0,
-		SWITCH_CASE,
+		SWITCH_CASE_OFFSET,
+		SWITCH_CASE_ABSOLUTE,
 		PLT_JMP,
 		LONG_JMP,
 		MEMSET_JMP,
@@ -58,7 +59,7 @@ public:
 	typedef std::map<std::string, Module*> MODULE_MAP;
 	typedef MODULE_MAP::iterator MODULE_MAP_ITERATOR;
 protected:
-	const ElfParser *_elf;
+	ElfParser *_elf;
 	INSTR_MAP _instr_maps;//all instructions
 	BBL_MAP _bbl_maps;//all basic blocks
 	FUNC_MAP _func_maps;//all functions, but ignore multi-entry
@@ -75,17 +76,22 @@ protected:
 	P_ADDRX _real_load_base;
 	//plt range
 	F_SIZE _plt_start, _plt_end;
+	//function record
+	FUNC_INFO_MAP _func_info_maps;
 protected:
 	void split_bbl();
 	void analysis_jump_table();
 	void analysis_indirect_jump_targets();
+	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size);
 	BOOL analysis_memset_jump(F_SIZE jump_offset);
+	void split_function();
 public:
-	Module(const ElfParser *elf);
+	Module(ElfParser *elf);
 	~Module();
 	//analysis
 	static void split_all_modules_into_bbls();
 	static void analysis_all_modules_indirect_jump_targets();
+	static void split_all_modules_into_funcs();
 	//check functions
 	/*	@Arguments: none
 		@Return value: none
@@ -123,6 +129,10 @@ public:
 	{
 		return _elf->is_in_x_section_file(offset);
 	}
+	BOOL is_shared_object() const
+	{
+		return _elf->is_shared_object();
+	}
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
@@ -132,6 +142,7 @@ public:
 	void insert_align_entry(F_SIZE offset);
 	void insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern);
 	void insert_indirect_jump(F_SIZE offset);
+	void insert_func_info(F_SIZE func_start, SIZE func_size, FUNC_TYPE type, std::string func_name);
 	//erase functions
 	void erase_instr(Instruction *instr);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
@@ -148,10 +159,16 @@ public:
 	{
 		return _elf->read_4byte_data_in_off(read_offset);
 	}
+	INT64 read_8byte_data_in_off(const F_SIZE read_offset) const
+	{
+		return _elf->read_8byte_data_in_off(read_offset);
+	}
 	//dump functions
 	static void dump_all_bbls_in_va(P_ADDRX load_base);
 	static void dump_all_bbls_in_off();
 	static void dump_all_indirect_jump_result();
+	static void dump_all_func_info_in_off();
+	void dump_func_info_in_off() const;
 	void dump_bbl_in_va(P_ADDRX load_base) const;
 	void dump_bbl_in_off() const;
 	void dump_br_target(const F_SIZE target_offset) const;
