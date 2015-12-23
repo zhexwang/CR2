@@ -16,7 +16,7 @@ int main(int argc, const char **argv)
     profile->check_bbl_safe();
     Module::dump_all_indirect_jump_result();
     
-    //Module::split_all_modules_into_funcs();
+    Module::split_all_modules_into_funcs();
     //Module::dump_all_func_info_in_off();
     return 0;
 }

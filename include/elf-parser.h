@@ -7,22 +7,14 @@
 
 #include "type.h"
 #include "utility.h"
-
-enum FUNC_TYPE{
-	SYM_FUNC = 0,
-	DIRECT_CALL_FUNC,
-	ALIGN_FUNC,
-	FUNC_SUM,
-};
-
+ 
 //typdef function
 typedef struct func_info{
 	F_SIZE range_start;
 	F_SIZE range_end;
-	FUNC_TYPE type;
 	std::string func_name;//if has name in symbol table
 }FUNC_INFO;
-typedef std::map<F_SIZE, FUNC_INFO> FUNC_INFO_MAP;
+typedef std::map<F_SIZE, FUNC_INFO> SYM_FUNC_INFO_MAP;
 
 class ElfParser
 {
@@ -81,7 +73,7 @@ protected:
 			_all_parsed_elfs.insert(make_pair(elf->get_elf_name(), elf));
 	}
 	void find_function_from_sym_table(const Elf64_Sym *sym_table, const INT32 sym_num,\
-		const char *str, FUNC_INFO_MAP &func_info_map);
+		const char *str, SYM_FUNC_INFO_MAP &func_info_map);
 public:
 	ElfParser(const char *elf_path);
 	~ElfParser();
@@ -192,7 +184,7 @@ public:
 		ASSERT(offset<_elf_size);
 		return *(INT64*)(offset+_map_start);
 	}
-	void search_function_from_sym_table(FUNC_INFO_MAP &func_info_map);
+	void search_function_from_sym_table(SYM_FUNC_INFO_MAP &func_info_map);
 	//dump functions
 	void dump_x_sections() const;
 	void dump_dependence() const;

@@ -107,6 +107,62 @@ public:
 	{
 		return _dInst.opcode==I_HLT;
 	}
+	BOOL is_push_reg() const
+	{
+		return _dInst.opcode==I_PUSH && _dInst.ops[0].type==O_REG;
+	}
+	BOOL is_pop_reg() const
+	{
+		return _dInst.opcode==I_POP && _dInst.ops[0].type==O_REG;
+	}
+	BOOL is_decrease_rsp(BOOL &increase_rsp) const
+	{
+		switch(_dInst.opcode){
+			case I_SUB:
+				if(_dInst.ops[0].type==O_REG && _dInst.ops[0].index==R_RSP && _dInst.ops[1].type==O_IMM \
+					&& _dInst.ops[2].type==O_NONE){
+					if(_dInst.imm.sqword>0){
+						increase_rsp = false;
+						return true;
+					}else{
+						increase_rsp = true;
+						return false;
+					}
+				}else
+					break;
+			case I_ADD:
+				if(_dInst.ops[0].type==O_REG && _dInst.ops[0].index==R_RSP && _dInst.ops[1].type==O_IMM \
+					&& _dInst.ops[2].type==O_NONE){
+					if(_dInst.imm.sqword<=0){
+						increase_rsp = false;
+						return true;
+					}else{
+						increase_rsp = true;
+						return false;
+					}
+
+				}else
+					break;
+			case I_LEA:
+				if(_dInst.ops[0].type==O_REG && _dInst.ops[0].index==R_RSP && _dInst.ops[1].type==O_SMEM \
+					&& _dInst.ops[1].index==R_RSP && _dInst.ops[2].type==O_NONE){
+					if((INT64)_dInst.disp>0){
+						increase_rsp = true;
+						return false;
+					}else{
+						increase_rsp = false;
+						return true;
+					}
+
+				}else
+					break;
+			default:
+				;
+		}
+		increase_rsp = false;
+		return false;
+	}
+
 	//prefix judge functions
 	BOOL has_lock_prefix() const
 	{

@@ -8,12 +8,20 @@ Module::MODULE_MAP Module::_all_module_maps;
 Module::Module(ElfParser *elf): _elf(elf), _real_load_base(0)
 {
     _elf->get_plt_range(_plt_start, _plt_end);
+    _elf->search_function_from_sym_table(_func_info_maps);
     _all_module_maps.insert(make_pair(_elf->get_elf_name(), this));
 }
 
 Module::~Module()
 {
     NOT_IMPLEMENTED(wangzhe);
+}
+
+std::string Module::get_sym_func_name(F_SIZE offset) const
+{
+    SYM_FUNC_INFO_MAP::const_iterator iter = _func_info_maps.find(offset);
+    ASSERT(iter!=_func_info_maps.end());
+    return iter->second.func_name;
 }
 
 Instruction *Module::get_instr_by_off(const F_SIZE off) const
@@ -121,6 +129,11 @@ BOOL Module::is_br_target(const F_SIZE target_offset) const
     return _br_targets.find(target_offset)!=_br_targets.end();
 }
 
+BOOL Module::is_call_target(const F_SIZE offset) const
+{
+    return _call_targets.find(offset)!=_call_targets.end();
+}
+
 void Module::dump_br_target(const F_SIZE target_offset) const
 {
     BR_TARGETS_CONST_ITER br_it = _br_targets.find(target_offset);
@@ -172,6 +185,11 @@ void Module::insert_br_target(const F_SIZE target, const F_SIZE src)
         ASSERT(srcs.size()!=0);
         srcs.insert(src);
     }
+}
+
+void Module::insert_call_target(const F_SIZE target)
+{
+    _call_targets.insert(target);
 }
 
 //[target_offset, next_offset_of_target_instr)
@@ -262,27 +280,59 @@ void Module::check_br_targets()
     }
 }
 
-static BasicBlock *construct_bbl(const std::map<F_SIZE, Instruction*> &instr_maps, BOOL is_call_proceeded)
+BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_call_proceeded)
 {
     const Instruction *first_instr = instr_maps.begin()->second;
     F_SIZE bbl_start = first_instr->get_instr_offset();
     const Instruction *last_instr = instr_maps.rbegin()->second;
     F_SIZE bbl_end = last_instr->get_next_offset();
     SIZE bbl_size = bbl_end - bbl_start;
-    BOOL has_prefix = first_instr->has_prefix();        
+
+    BOOL has_prefix = first_instr->has_prefix();    
+    BasicBlock *generated_bbl = NULL;
+    
     
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
-        return new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_call())
-        return new CallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new CallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_jump())
-        return new JumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new JumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_condition_branch())
-        return new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_ret())
-        return new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
-	else
-        return NULL;
+        generated_bbl = new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+    else
+        ASSERTM(generated_bbl, "unkown instruction list!\n");
+    //judge is function entry or not
+    if(is_sym_func_entry(bbl_start)){
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::SYM_RECORD));
+    }else if(is_call_target(bbl_start)){
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::CALL_TARGET));
+    }else{
+        INT32 push_reg_instr_num = 0;
+        INT32 decrease_rsp_instr_num = 0;
+        BOOL increase_rsp = false;
+        BOOL has_pop_before_push = false;
+        //judge maybe function entry bb or not
+        for(Module::INSTR_MAP_ITERATOR iter = instr_maps.begin(); iter!=instr_maps.end(); iter++){
+            Instruction *instr = iter->second;
+            if(push_reg_instr_num==0 && instr->is_pop_reg()){
+                has_pop_before_push = true;
+                break;
+            }
+            if(instr->is_push_reg())
+                push_reg_instr_num++;
+            if(!increase_rsp && instr->is_decrease_rsp(increase_rsp))
+                decrease_rsp_instr_num++;
+
+        }
+
+        if(!has_pop_before_push && !increase_rsp && (push_reg_instr_num>0 || decrease_rsp_instr_num>0))
+            _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::PROLOG_MATCH));
+    }
+
+    return generated_bbl;
 }
 
 void Module::split_bbl()
@@ -308,7 +358,7 @@ void Module::split_bbl()
         if(last_next_instr_offset==curr_instr_offset){
             /*these two instructions are sequence */
             // 1. find bbl entry (consider prefix instruction and align entries)
-            if(is_br_target(curr_instr_offset) || is_align_entry(curr_instr_offset) || \
+            if(is_sym_func_entry(curr_instr_offset)|| is_br_target(curr_instr_offset) || is_align_entry(curr_instr_offset) || \
                 (instr->has_prefix() && (is_br_target(curr_instr_offset+1) || is_align_entry(curr_instr_offset+1)))){
                 /* curr instruction is bbl entry, so last instr is bbl exit */
                 // <bbl_entry, last_iterator> is a bbl
@@ -316,7 +366,6 @@ void Module::split_bbl()
                     bbl_exit = last_iterator;
                     BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
                     bbl_exit--;
-                    ASSERTM(new_bbl, "unkown instruction list!\n");
                     insert_bbl(new_bbl);
                 }//already create new bbl
                 // set next bbl entry
@@ -329,7 +378,6 @@ void Module::split_bbl()
                 bbl_exit = it;
                 BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
                 bbl_exit--;
-                ASSERTM(new_bbl, "unkown instruction list!\n");
                 insert_bbl(new_bbl);
                 // set next bbl entry
                 bbl_entry = ++it;
@@ -344,7 +392,6 @@ void Module::split_bbl()
                 bbl_exit = last_iterator;
                 BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
                 bbl_exit--;
-                ASSERTM(new_bbl, "unkown instruction list!\n");
                 insert_bbl(new_bbl);
             }
             //set new bbl entry, first instruction or data in it
@@ -428,39 +475,32 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
     return true;
 }
 
-//direct call target and symbol table recorded functions are true function, but align function maybe false
+//direct call target, symbol table recorded functions and prolog match functions are true function
 void Module::split_function()
-{
-    //1. scan elf symbol table to find functions(include dynamic symbol table)
-    _elf->search_function_from_sym_table(_func_info_maps);
-    //2. scan aligned entry
-    for(ALIGN_ENTRY::iterator iter = _align_entries.begin(); iter!=_align_entries.end(); iter++){
-        insert_func_info(*iter, 0, ALIGN_FUNC, "align");
+{   
+    //find plt bbl range
+    BBL_MAP_ITERATOR plt_start_bb_iter = find_bbl_iter_cover_off(_plt_start);
+    BBL_MAP_ITERATOR plt_end_bb_iter = find_bbl_iter_cover_off(_plt_end-1);
+    //using maybe func entry to split all modules
+    BBL_MAP_ITERATOR func_entry_bbl_iter;
+    Function::FUNC_TYPE func_type;
+    for(FUNC_ENTRY_BBL_MAP::iterator iter = _maybe_func_entry.begin(); iter!=_maybe_func_entry.end(); iter++){
+        BasicBlock *bb = iter->first;
+        F_SIZE second_offset;
+        F_SIZE bb_entry = bb->get_bbl_offset(second_offset);
+        BBL_MAP_ITERATOR curr_iter = find_bbl_iter_by_offset(bb_entry);  
+        BBL_MAP_ITERATOR func_entry_bbl_iter = curr_iter;
+        
+        BBL_MAP_ITERATOR func_end_bbl_iter = ++curr_iter;
+        
     }
-    //3. analysis all func info to find all function [range_start, range_end]
-    for(FUNC_INFO_MAP::iterator iter = _func_info_maps.begin(); iter!=_func_info_maps.end(); iter++){
-        FUNC_INFO &info = iter->second;
-        if(info.range_start==info.range_end){
-            ;
-
-            
-        }//if range_start!=range_end, the function is read from symbol table
-    }
+    //check function is legal or not
+    check_function();
 }
 
-void Module::insert_func_info(F_SIZE func_start, SIZE func_size, FUNC_TYPE type, std::string func_name)
+void Module::check_function()
 {
-    FUNC_INFO_MAP::iterator iter = _func_info_maps.find(func_start);
-    if(iter==_func_info_maps.end()){
-        FUNC_INFO info = {func_start, func_size+func_start, type, func_name};
-        _func_info_maps.insert(std::make_pair(func_start, info));
-    }else{
-        FUNC_INFO &info = iter->second;
-        info.range_start = func_start;
-        info.range_end = func_start+func_size;
-        info.type = type;
-        info.func_name = func_name;
-    }
+    ;
 }
 
 BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size)
@@ -654,20 +694,15 @@ void Module::dump_indirect_jump_result()
 
 void Module::dump_func_info_in_off() const 
 {
-    FUNC_INFO_MAP::const_iterator iter = _func_info_maps.begin();
-    for(; iter!=_func_info_maps.end(); iter++){
-        FUNC_INFO info = iter->second;
-        PRINT("Range:[%lx-%lx] Name: %s\n", info.range_start, info.range_end, info.func_name.c_str());
-    }
+    for(FUNC_MAP_ITERATOR iter = _func_maps.begin(); iter!=_func_maps.end(); iter++)
+        iter->second->dump_in_off();
 }
 
 void Module::dump_all_func_info_in_off()
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
-        BLUE("Dump %s function info:\n", it->first.c_str());
-        if(it->first.find("ls")!=std::string::npos)        
-            it->second->dump_func_info_in_off();
+        it->second->dump_func_info_in_off();
     }
 }
 
@@ -694,6 +729,13 @@ void Module::dump_bbl_in_off() const
         it->second->dump_in_off();
     }
 }
+//not consider prefix
+Module::BBL_MAP_ITERATOR Module::find_bbl_iter_by_offset(F_SIZE offset) const
+{
+    BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
+    ASSERT(it!=_bbl_maps.end());
+    return it;
+}
 
 BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
 {
@@ -703,6 +745,15 @@ BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
         instr_it--;
     }
     return bbl_it->second;
+}
+
+Module::BBL_MAP_ITERATOR Module::find_bbl_iter_cover_off(F_SIZE offset) const
+{
+    BBL_MAP_ITERATOR bbl_it;
+    while((bbl_it = _bbl_maps.find(offset)) == _bbl_maps.end()){
+        offset--;
+    }
+    return bbl_it;
 }
 
 Instruction *Module::find_instr_by_off(F_SIZE offset) const

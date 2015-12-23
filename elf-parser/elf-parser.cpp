@@ -167,7 +167,7 @@ void ElfParser::check_relocation() const
 }
 
 void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const INT32 sym_num, \
-    const char *str, FUNC_INFO_MAP &func_info_map)
+    const char *str, SYM_FUNC_INFO_MAP &func_info_map)
 {
     F_SIZE plt_start, plt_end;
     get_plt_range(plt_start, plt_end);
@@ -184,15 +184,14 @@ void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const I
             if(func_start==0 || (func_start>=plt_start && func_start<plt_end))
                 continue;
 
-            FUNC_INFO_MAP::iterator iter = func_info_map.find(func_start);
+            SYM_FUNC_INFO_MAP::iterator iter = func_info_map.find(func_start);
             if(iter==func_info_map.end()){
-                FUNC_INFO info = {func_start, func_end, SYM_FUNC, std::string(str + sym.st_name)};    
+                FUNC_INFO info = {func_start, func_end, std::string(str + sym.st_name)};    
                 func_info_map.insert(std::make_pair(func_start, info));
             }else{
                 FUNC_INFO &info = iter->second;                
                 ASSERT(func_start==info.range_start);
                 info.range_end = func_end;
-                info.type = SYM_FUNC;
                 info.func_name = std::string(str+sym.st_name);
             }
         }
@@ -200,7 +199,7 @@ void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const I
 
 }
 
-void ElfParser::search_function_from_sym_table(FUNC_INFO_MAP &func_info_map)
+void ElfParser::search_function_from_sym_table(SYM_FUNC_INFO_MAP &func_info_map)
 {
     // 1.scan dynamic symbol table
     find_function_from_sym_table(_dynsym_table, _dynsymt_num, _dynstr_table, func_info_map);

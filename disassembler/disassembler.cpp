@@ -167,7 +167,7 @@ void Disassembler::disassemble_module(Module *module)
                 module->insert_indirect_jump(instr->get_instr_offset());
             // 4.4.6 record direct call target(maybe function)
             if(instr->is_direct_call() && !module->is_in_plt_in_off(instr->get_target_offset()))
-                module->insert_func_info(instr->get_target_offset(), 0, DIRECT_CALL_FUNC, "callTarget");
+                module->insert_call_target(instr->get_target_offset());
         }
     }
     free(line_buf);

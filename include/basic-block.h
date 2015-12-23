@@ -32,6 +32,10 @@ public:
 		
 		return _start;
 	}
+	F_SIZE get_bbl_end_offset() const
+	{
+		return _start+_size;
+	}
 	P_ADDRX get_bbl_paddr(const P_ADDRX load_base, F_SIZE &second_addrx) const 
 	{
 		if(_has_prefix)

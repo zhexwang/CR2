@@ -7,10 +7,10 @@
 
 #include "type.h"
 #include "elf-parser.h"
+#include "function.h"
 
 class Instruction;
 class BasicBlock;
-class Function;
 
 class Module{
     friend class PinProfile;
@@ -31,6 +31,7 @@ public:
 	typedef std::map<F_SIZE, BR_TARGET_SRCS> BR_TARGETS;
 	typedef BR_TARGETS::iterator BR_TARGETS_ITERATOR;
 	typedef BR_TARGETS::const_iterator BR_TARGETS_CONST_ITER;
+	typedef std::set<F_SIZE> CALL_TARGETS;
 	//typedef aligned entry
 	typedef std::set<F_SIZE> ALIGN_ENTRY;
 	//typedef likely jump table pattern
@@ -38,6 +39,8 @@ public:
 	typedef std::vector<F_SIZE>::iterator PATTERN_INSTRS_ITER;
 	typedef std::list<PATTERN_INSTRS> JUMP_TABLE_PATTERN;
 	typedef std::list<PATTERN_INSTRS>::iterator JUMP_TABLE_PATTERN_ITER;
+	//typedef likey function entry
+	typedef std::map<BasicBlock*, Function::FUNC_TYPE> FUNC_ENTRY_BBL_MAP;
 	//typedef indirect jump targets
 	enum JUMPIN_TYPE{
 		UNKNOW = 0,
@@ -66,6 +69,8 @@ protected:
 	BBL_MAP _func_left_bbl_maps;//out-of function region
 	BR_TARGETS _br_targets;// direct jump/call, conditional branch and recoginized jump table 
 	static MODULE_MAP _all_module_maps;
+	//call target
+	CALL_TARGETS _call_targets;
 	//aligned entry
 	ALIGN_ENTRY _align_entries;
 	//all indirect jump
@@ -76,8 +81,10 @@ protected:
 	P_ADDRX _real_load_base;
 	//plt range
 	F_SIZE _plt_start, _plt_end;
-	//function record
-	FUNC_INFO_MAP _func_info_maps;
+	//maybe function entry BBL(symbol function, call target and prolog match)
+	FUNC_ENTRY_BBL_MAP _maybe_func_entry;
+	//symbol function information
+	SYM_FUNC_INFO_MAP _func_info_maps;
 protected:
 	void split_bbl();
 	void analysis_jump_table();
@@ -85,6 +92,8 @@ protected:
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size);
 	BOOL analysis_memset_jump(F_SIZE jump_offset);
 	void split_function();
+	
+	BasicBlock *construct_bbl(const INSTR_MAP &instr_maps, BOOL is_call_proceeded);
 public:
 	Module(ElfParser *elf);
 	~Module();
@@ -98,11 +107,14 @@ public:
 		@Introduction: check if all br targets are exist in module instruction list! 
 	*/
 	void check_br_targets();
+	// check if all functions are satisfactory 
+	void check_function();
 	//set functions
 	void set_real_load_base(P_ADDRX load_base) {_real_load_base = load_base;}
 	//get functions
 	std::string get_path() const {return _elf->get_elf_path();}
 	std::string get_name() const {return _elf->get_elf_name();}
+	std::string get_sym_func_name(F_SIZE offset) const;
 	P_ADDRX get_pt_load_base() const {return _elf->get_pt_load_base();}
  	UINT8 *get_code_offset_ptr(const F_SIZE off) const {return _elf->get_code_offset_ptr(off);}
 	//get functions
@@ -113,7 +125,9 @@ public:
 	Function *get_func_by_off(const F_SIZE off) const;
 	Function *get_func_by_va(const P_ADDRX addr) const; 
 	BasicBlock *find_bbl_by_instr(Instruction *instr) const;
+	Module::BBL_MAP_ITERATOR find_bbl_iter_cover_off(F_SIZE offset) const;
 	Instruction *find_instr_by_off(F_SIZE offset) const;
+	Module::BBL_MAP_ITERATOR find_bbl_iter_by_offset(F_SIZE offset) const;
 	//judge functions
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset) const;
 	BOOL is_bbl_entry_in_off(const F_SIZE target_offset) const;
@@ -124,7 +138,12 @@ public:
 	BOOL is_func_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_in_plt_in_va(const P_ADDRX addr) const;
 	BOOL is_br_target(const F_SIZE target_offset) const;
+	BOOL is_call_target(const F_SIZE offset) const;
 	BOOL is_align_entry(F_SIZE offset) const;
+	BOOL is_sym_func_entry(F_SIZE offset) const
+	{
+		return _func_info_maps.find(offset)!=_func_info_maps.end();
+	}
 	BOOL is_in_x_section_in_off(const F_SIZE offset) const
 	{
 		return _elf->is_in_x_section_file(offset);
@@ -136,13 +155,13 @@ public:
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
+	void insert_call_target(const F_SIZE target);
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);
 	void insert_func(Function *func);
 	void insert_align_entry(F_SIZE offset);
 	void insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern);
 	void insert_indirect_jump(F_SIZE offset);
-	void insert_func_info(F_SIZE func_start, SIZE func_size, FUNC_TYPE type, std::string func_name);
 	//erase functions
 	void erase_instr(Instruction *instr);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
