@@ -2,9 +2,13 @@
 #include "elf-parser.h"
 #include "instruction.h"
 #include "basic-block.h"
-#include "function.h"
 
 Module::MODULE_MAP Module::_all_module_maps;
+const std::string Module::func_type_name[Module::FUNC_TYPE_NUM] = 
+{
+    "CALL_TARGET", "PROLOG_MATCH", "SYM_RECORD",
+};
+
 Module::Module(ElfParser *elf): _elf(elf), _real_load_base(0)
 {
     _elf->get_plt_range(_plt_start, _plt_end);
@@ -54,21 +58,6 @@ BasicBlock *Module::get_bbl_by_va(const P_ADDRX addr) const
     return get_bbl_by_off(addr - _real_load_base);
 }
 
-Function *Module::get_func_by_off(const F_SIZE off) const
-{
-    FUNC_MAP_ITERATOR it = _func_maps.find(off);
-    if(it!=_func_maps.end())
-        return it->second;
-    else
-        return NULL;
-}
-
-Function *Module::get_func_by_va(const P_ADDRX addr) const
-{
-    ASSERTM(_real_load_base!=0, "Forgot setting real load base of module(%s)\n", get_name().c_str());
-    return get_func_by_off(addr - _real_load_base);
-}
-
 BOOL Module::is_instr_entry_in_off(const F_SIZE target_offset) const
 {
     INSTR_MAP_ITERATOR ret = _instr_maps.find(target_offset);
@@ -85,15 +74,6 @@ BOOL Module::is_bbl_entry_in_off(const F_SIZE target_offset) const
         return true;
     else
         return false;    
-}
-
-BOOL Module::is_func_entry_in_off(const F_SIZE target_offset) const
-{
-    FUNC_MAP_ITERATOR it = _func_maps.find(target_offset);
-    if(it!=_func_maps.end())
-        return true;
-    else
-        return false;
 }
 
 BOOL Module::is_in_plt_in_off(const F_SIZE offset) const
@@ -117,11 +97,6 @@ BOOL Module::is_instr_entry_in_va(const P_ADDRX addr) const
 BOOL Module::is_bbl_entry_in_va(const P_ADDRX addr) const
 {
     return is_bbl_entry_in_off(addr - _real_load_base);
-}
-
-BOOL Module::is_func_entry_in_va(const P_ADDRX addr) const
-{
-    return is_func_entry_in_off(addr - _real_load_base);
 }
 
 BOOL Module::is_br_target(const F_SIZE target_offset) const
@@ -238,11 +213,6 @@ void Module::insert_bbl(BasicBlock *bbl)
     _bbl_maps.insert(std::make_pair(bbl->get_bbl_offset(second_offset), bbl));
 }
 
-void Module::insert_func(Function *func)
-{
-    _func_maps.insert(std::make_pair(func->get_func_offset(), func));
-}
-
 void Module::insert_align_entry(F_SIZE offset)
 {
     _align_entries.insert(offset);
@@ -253,6 +223,15 @@ BOOL Module::is_align_entry(F_SIZE offset) const
     return _align_entries.find(offset)!=_align_entries.end();
 }
 
+BOOL Module::is_maybe_func_entry(F_SIZE offset) const
+{
+    BasicBlock *bb = find_bbl_by_offset(offset);
+    if(!bb)
+        return false;
+    else
+        return _maybe_func_entry.find(bb)!=_maybe_func_entry.end();
+}
+
 void Module::insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern)
 {
     _jump_table_pattern.push_back(pattern);
@@ -260,7 +239,10 @@ void Module::insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern)
 
 void Module::insert_indirect_jump(F_SIZE offset)
 {
-    JUMPIN_INFO info = {UNKNOW, 0, 0};
+    JUMPIN_INFO info;
+    info.type = UNKNOW;
+    info.table_offset = 0;
+    info.table_size = 0;
     _indirect_jump_maps.insert(std::make_pair(offset, info));
 }
 
@@ -306,9 +288,9 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
         ASSERTM(generated_bbl, "unkown instruction list!\n");
     //judge is function entry or not
     if(is_sym_func_entry(bbl_start)){
-        _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::SYM_RECORD));
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, SYM_RECORD));
     }else if(is_call_target(bbl_start)){
-        _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::CALL_TARGET));
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, CALL_TARGET));
     }else{
         INT32 push_reg_instr_num = 0;
         INT32 decrease_rsp_instr_num = 0;
@@ -329,7 +311,7 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
         }
 
         if(!has_pop_before_push && !increase_rsp && (push_reg_instr_num>0 || decrease_rsp_instr_num>0))
-            _maybe_func_entry.insert(std::make_pair(generated_bbl, Function::PROLOG_MATCH));
+            _maybe_func_entry.insert(std::make_pair(generated_bbl, PROLOG_MATCH));
     }
 
     return generated_bbl;
@@ -413,7 +395,7 @@ void Module::split_all_modules_into_bbls()
    }
 }
 
-BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
+BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
 {
     UINT8 jump_dest_reg = R_NONE;
     F_SIZE memset_target = 0;
@@ -466,8 +448,10 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
     do{
         //record jump targets
         F_SIZE memset_entry_target = memset_target + entry_data;
-        if(find_instr_by_off(memset_entry_target))
+        if(find_instr_by_off(memset_entry_target)){
             insert_br_target(memset_entry_target, jump_offset);
+            targets.insert(memset_entry_target);
+        }
         entry_offset += 2;
         entry_data = read_2byte_data_in_off(entry_offset);
     }while(entry_data!=0);
@@ -476,14 +460,14 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset)
 }
 
 //direct call target, symbol table recorded functions and prolog match functions are true function
-void Module::split_function()
+void Module::separate_movable_bbls()
 {   
     //find plt bbl range
     BBL_MAP_ITERATOR plt_start_bb_iter = find_bbl_iter_cover_off(_plt_start);
     BBL_MAP_ITERATOR plt_end_bb_iter = find_bbl_iter_cover_off(_plt_end-1);
     //using maybe func entry to split all modules
     BBL_MAP_ITERATOR func_entry_bbl_iter;
-    Function::FUNC_TYPE func_type;
+    FUNC_TYPE func_type;
     for(FUNC_ENTRY_BBL_MAP::iterator iter = _maybe_func_entry.begin(); iter!=_maybe_func_entry.end(); iter++){
         BasicBlock *bb = iter->first;
         F_SIZE second_offset;
@@ -503,7 +487,7 @@ void Module::check_function()
     ;
 }
 
-BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size)
+BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets)
 {
     INSTR_MAP_ITERATOR iter = _instr_maps.find(jump_offset); 
     Instruction *instr = iter->second;
@@ -537,9 +521,10 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
     do{
         F_SIZE target_instr = entry_data - get_pt_load_base();
         //record jump targets
-        if(is_instr_entry_in_off(target_instr))//makae sure that is real jump target!
+        if(is_instr_entry_in_off(target_instr)){//makae sure that is real jump target!
             insert_br_target(target_instr, jump_offset);
-        else{
+            targets.insert(target_instr);
+        }else{
             entry_offset -=8;
             break;
         }
@@ -553,7 +538,7 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
 
 void Module::analysis_indirect_jump_targets()
 {
-    // 1. analysis switch case
+    // 1. analysis switch case in shared object
     analysis_jump_table();
     // 2. analysis other cases
     for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
@@ -565,11 +550,12 @@ void Module::analysis_indirect_jump_targets()
                 info.type = PLT_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
-            }else if(analysis_memset_jump(jump_offset)){//assembly code in library
+                info.targets.clear();
+            }else if(analysis_memset_jump(jump_offset, info.targets)){//assembly code in library
                 info.type = MEMSET_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
-            }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size)){
+            }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size, info.targets)){
                 info.type = SWITCH_CASE_ABSOLUTE;
                 info.table_offset = table_base;
                 info.table_size = table_size;
@@ -608,17 +594,18 @@ void Module::analysis_jump_table()
                     F_SIZE first_entry_instr = entry_data + table_base_offset;
                     if(!is_instr_entry_in_off(first_entry_instr))//makae sure that is real jump table!
                         break;
+                    JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
+                    JUMPIN_INFO &info = iter->second;
                     //calculate jump table size
                     do{
                         //record jump targets
                         insert_br_target(table_base_offset+entry_data, indirect_jump_offset);
+                        info.targets.insert(table_base_offset+entry_data);
                         entry_offset += 4;
                         entry_data = read_4byte_data_in_off(entry_offset);
                     }while(entry_data!=0);
-                    
-                    JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
-                    JUMPIN_INFO &info = iter->second;
                     info.type = SWITCH_CASE_OFFSET;
+                    
                     info.table_offset = table_base_offset;
                     info.table_size = entry_offset - table_base_offset;
                     
@@ -643,11 +630,11 @@ void Module::analysis_all_modules_indirect_jump_targets()
    }
 }
 
-void Module::split_all_modules_into_funcs()
+void Module::separate_movable_bbls_from_all_modules()
 {
    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
    for(; it!=_all_module_maps.end(); it++){
-        it->second->split_function();
+        it->second->separate_movable_bbls();
    }
 }
 
@@ -692,20 +679,6 @@ void Module::dump_indirect_jump_result()
         switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count);
 }
 
-void Module::dump_func_info_in_off() const 
-{
-    for(FUNC_MAP_ITERATOR iter = _func_maps.begin(); iter!=_func_maps.end(); iter++)
-        iter->second->dump_in_off();
-}
-
-void Module::dump_all_func_info_in_off()
-{
-    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
-    for(; it!=_all_module_maps.end(); it++){
-        it->second->dump_func_info_in_off();
-    }
-}
-
 void Module::dump_all_bbls_in_off()
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
@@ -735,6 +708,15 @@ Module::BBL_MAP_ITERATOR Module::find_bbl_iter_by_offset(F_SIZE offset) const
     BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
     ASSERT(it!=_bbl_maps.end());
     return it;
+}
+
+BasicBlock *Module::find_bbl_by_offset(F_SIZE offset) const
+{
+    BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
+    if(it!=_bbl_maps.end())
+        return it->second;
+    else
+        return NULL;
 }
 
 BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const

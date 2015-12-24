@@ -24,6 +24,7 @@ public:
         F_SIZE instr_offset;
         INT32 image_index;
     }INST_POS;
+	typedef std::multimap<INST_POS, INST_POS> INDIRECT_BRANCH_INFO;
 private:
     //record path
     const std::string _path;
@@ -34,11 +35,12 @@ private:
     Module **_module_maps;
     //record image branch targets
     std::set<F_SIZE> *_img_branch_targets;
+	std::set<F_SIZE> *_img_indirect_call_targets;
     //record indirect branch instructions
-    std::multimap<INST_POS, INST_POS> _indirect_call_maps;
-    std::multimap<INST_POS, INST_POS> _indirect_jump_maps;
-    std::multimap<INST_POS, INST_POS> _ret_maps;
-	std::multimap<INST_POS, INST_POS> _unmatched_ret;//shadow stack
+    INDIRECT_BRANCH_INFO _indirect_call_maps;
+    INDIRECT_BRANCH_INFO _indirect_jump_maps;
+    INDIRECT_BRANCH_INFO _ret_maps;
+	INDIRECT_BRANCH_INFO _unmatched_ret;//shadow stack
 protected:
     void read_image_info(std::ifstream &ifs);
     void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps, INST_TYPE type);

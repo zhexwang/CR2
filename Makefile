@@ -4,7 +4,7 @@ BIN := cr2
 BIN_DIR := bin
 SCRIPT_DIR := script
 BUILD_DIR := build
-SRC_DIR := include main elf-parser disassembler module function basic-block instruction map-table
+SRC_DIR := include main elf-parser disassembler module basic-block instruction map-table
 DISASM_DIR := distorm3
 DISASM_AR := distorm3.a
 

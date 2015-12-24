@@ -174,7 +174,7 @@ void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const I
     
     for(INT32 idx = 0; idx<sym_num; idx++){
         Elf64_Sym sym = sym_table[idx];
-        if(ELF64_ST_TYPE(sym.st_info)==STT_FUNC){
+        if(ELF64_ST_TYPE(sym.st_info)==STT_FUNC || ELF64_ST_TYPE(sym.st_info)==STT_GNU_IFUNC){
             if(sym.st_value==0)
                 continue;
             
@@ -222,7 +222,10 @@ static const char *type_name[] = {
     TO_STRING_INTERNAL(FILE),   /* Symbol's name is file name */           
     TO_STRING_INTERNAL(COMMON), /* Symbol is a common data object */         
     TO_STRING_INTERNAL(TLS),    /* Symbol is thread-local data object*/
-    TO_STRING_INTERNAL(NUM),    /* Number of defined types.*/            
+    TO_STRING_INTERNAL(NUM),    /* Number of defined types.*/
+    TO_STRING_INTERNAL(UNKOWN),
+    TO_STRING_INTERNAL(UNKOWN),
+    TO_STRING_INTERNAL(IFUNC),  /* Symbol is indirect code object */                                                                                                   
 };
 
 static const char *vis_name[] = {
