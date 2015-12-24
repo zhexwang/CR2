@@ -178,15 +178,10 @@ void PinProfile::check_bbl_safe() const
         set<F_SIZE>::const_iterator it = _img_branch_targets[idx].begin();
         for(;it!=_img_branch_targets[idx].end(); it++){
             F_SIZE target_offset = *it;
-            
-            BOOL is_bbl_entry = module->is_bbl_entry_in_off(target_offset);
+            BOOL is_bbl_entry = module->is_bbl_entry_in_off(target_offset, true);
+
             if(!is_bbl_entry){
-                //test prefix
-                BasicBlock *bb = module->get_bbl_by_off(target_offset-1);
-                is_bbl_entry = bb&&bb->has_prefix() ? true : false;
-            }
-            if(!is_bbl_entry){
-                Instruction *instr = module->find_instr_by_off(target_offset);
+                Instruction *instr = module->find_instr_by_off(target_offset, true);
                 BasicBlock *bbl = module->find_bbl_by_instr(instr);
                 bbl->dump_in_off();
                 FATAL(!is_bbl_entry, "check one indirect branch target (%s:0x%lx) is not bbl entry!\n", \
@@ -206,8 +201,7 @@ void PinProfile::check_func_safe() const
             F_SIZE target_offset = *it;
             BOOL is_func_entry  = module->is_maybe_func_entry(target_offset);
             if(!is_func_entry){
-                Instruction *instr = module->find_instr_by_off(target_offset);
-                BasicBlock *bbl = module->find_bbl_by_instr(instr);
+                BasicBlock *bbl = module->find_bbl_by_offset(target_offset, true);
                 bbl->dump_in_off();
                 ERR("check one indirect call target (%s:0x%lx) is not func entry!\n", \
                     _module_maps[idx]->get_path().c_str(), target_offset);
@@ -238,8 +232,7 @@ void PinProfile::check_func_safe() const
         }//left jumpin must be function call
         BOOL is_func_entry  = target_module->is_maybe_func_entry(target_offset);
         if(!is_func_entry){
-            Instruction *instr = target_module->find_instr_by_off(target_offset);
-            BasicBlock *bbl = target_module->find_bbl_by_instr(instr);
+            BasicBlock *bbl = target_module->find_bbl_by_offset(target_offset, true);
             bbl->dump_in_off();
             ERR("check one indirect jump target (%s:0x%lx) is not func entry!\n", \
                 target_module->get_path().c_str(), target_offset);

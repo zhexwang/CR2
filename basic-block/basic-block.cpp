@@ -3,8 +3,11 @@
 
 const std::string SequenceBBL::_bbl_type = "SequenceBBL";
 const std::string RetBBL::_bbl_type = "RetBBL";
-const std::string CallBBL::_bbl_type = "CallBBL";
-const std::string JumpBBL::_bbl_type = "JumpBBL";
+const std::string DirectCallBBL::_bbl_type = "DirectCallBBL";
+const std::string IndirectCallBBL::_bbl_type = "IndirectCallBBL";
+
+const std::string DirectJumpBBL::_bbl_type = "DirectJumpBBL";
+const std::string IndirectJumpBBL::_bbl_type = "IndirectJumpBBL";
 const std::string ConditionBrBBL::_bbl_type = "ConditionBrBBL";
 
 BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
@@ -56,7 +59,8 @@ SequenceBBL::SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proce
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
 {
-    ;
+    _target = 0;
+    _fallthrough = start+size;
 }
 
 SequenceBBL::~SequenceBBL()
@@ -68,7 +72,8 @@ RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
 {
-    ;
+    _target = 0;
+    _fallthrough = 0;
 }
 
 RetBBL::~RetBBL()
@@ -76,26 +81,54 @@ RetBBL::~RetBBL()
     ;
 }
 
-CallBBL::CallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+DirectCallBBL::DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
 {
-    ;
+    _target = instr_maps.rbegin()->second->get_target_offset();
+    _fallthrough = start+size;
 }
     
-CallBBL::~CallBBL()
+DirectCallBBL::~DirectCallBBL()
 {
     ;
 }
 
-JumpBBL::JumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+IndirectCallBBL::IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
 {
+    _target = 0;
+    _fallthrough = start+size;
+}
+    
+IndirectCallBBL::~IndirectCallBBL()
+{
     ;
 }
 
-JumpBBL::~JumpBBL()
+DirectJumpBBL::DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
+{
+    _target = instr_maps.rbegin()->second->get_target_offset();
+    _fallthrough = 0;
+}
+
+DirectJumpBBL::~DirectJumpBBL()
+{
+    ;
+}
+
+IndirectJumpBBL::IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
+{
+    _target = 0;
+    _fallthrough = 0;
+}
+
+IndirectJumpBBL::~IndirectJumpBBL()
 {
     ;
 }
@@ -104,7 +137,8 @@ ConditionBrBBL::ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
 {
-    ;
+    _target = instr_maps.rbegin()->second->get_target_offset();
+    _fallthrough = start+size;
 }
 
 ConditionBrBBL::~ConditionBrBBL()

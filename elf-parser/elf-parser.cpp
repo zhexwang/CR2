@@ -61,7 +61,9 @@ ElfParser::ElfParser(const char *elf_path): _sym_table(NULL), _symt_num(0), _dyn
         }else if(strcmp(secName, ".rela.plt")==0){
 			_rela_plt= (Elf64_Rela *)(_map_start + currentSec->sh_offset); 
 			_rela_plt_num = currentSec->sh_size/sizeof(Elf64_Rela);
-        }else if(BITS_ARE_SET(currentSec->sh_flags, SHF_EXECINSTR)){
+        }
+
+        if(BITS_ARE_SET(currentSec->sh_flags, SHF_EXECINSTR)){
             SECTION_REGION element = {currentSec->sh_offset, currentSec->sh_offset+currentSec->sh_size, \
                 std::string(secName)};
             _x_sections.push_back(element);

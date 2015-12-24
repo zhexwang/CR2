@@ -18,6 +18,8 @@ protected:
 	const BOOL _is_call_proceeded;
 	const BOOL _has_prefix;
 	INSTR_MAPS _instr_maps;
+	F_SIZE _target;
+	F_SIZE _fallthrough;
 public:
 	BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
@@ -45,12 +47,22 @@ public:
 		
 		return _start + load_base;
 	}
+	F_SIZE get_last_instr_offset() const {return _instr_maps.rbegin()->second->get_instr_offset();}
 	const Module *get_module() const {return _instr_maps.begin()->second->get_module();}
 	virtual const std::string get_type() const =0;
+	F_SIZE get_target_offset() const {return _target;};
+	F_SIZE get_fallthrough_offset() const {return _fallthrough;};
 	BOOL has_prefix() const {return _has_prefix;}
 	//dump functions
 	void dump_in_va(const P_ADDRX load_base) const;
 	void dump_in_off() const;
+	virtual BOOL is_sequence() const =0;
+	virtual BOOL is_direct_call() const =0;
+	virtual BOOL is_indirect_call() const =0;
+	virtual BOOL is_direct_jump() const =0;
+	virtual BOOL is_indirect_jump() const =0;
+	virtual BOOL is_condition_branch() const =0;
+	virtual BOOL is_ret() const =0;
 };
 
 class SequenceBBL : public BasicBlock
@@ -62,6 +74,13 @@ public:
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~SequenceBBL();
+	BOOL is_sequence() const {return true;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return false;}
 };
 
 class RetBBL : public BasicBlock
@@ -73,28 +92,85 @@ public:
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~RetBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return true;}
 };
 
-class CallBBL : public BasicBlock
+class DirectCallBBL : public BasicBlock
 {
 protected:
 	const static std::string _bbl_type;
 public:
-	CallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
-	~CallBBL();
+	~DirectCallBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return true;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return false;}
 };
 
-class JumpBBL : public BasicBlock
+class IndirectCallBBL : public BasicBlock
 {
 protected:
 	const static std::string _bbl_type;
 public:
-	JumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
-	~JumpBBL();
+	~IndirectCallBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return true;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return false;}
+};
+
+class DirectJumpBBL : public BasicBlock
+{
+protected:
+	const static std::string _bbl_type;
+public:
+	DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+		BasicBlock::INSTR_MAPS &instr_maps);
+	const std::string get_type() const {return _bbl_type;}
+	~DirectJumpBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return true;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return false;}
+};
+
+class IndirectJumpBBL : public BasicBlock
+{
+protected:
+	const static std::string _bbl_type;
+public:
+	IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+		BasicBlock::INSTR_MAPS &instr_maps);
+	const std::string get_type() const {return _bbl_type;}
+	~IndirectJumpBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return true;}
+	BOOL is_condition_branch() const {return false;}
+	BOOL is_ret() const {return false;}
 };
 
 class ConditionBrBBL : public BasicBlock
@@ -106,6 +182,13 @@ public:
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~ConditionBrBBL();
+	BOOL is_sequence() const {return false;}
+	BOOL is_direct_call() const {return false;}
+	BOOL is_indirect_call() const {return false;}
+	BOOL is_direct_jump() const {return false;}
+	BOOL is_indirect_jump() const {return false;}
+	BOOL is_condition_branch() const {return true;}
+	BOOL is_ret() const {return false;}
 };
 
 

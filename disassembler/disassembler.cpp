@@ -104,7 +104,7 @@ void Disassembler::disassemble_module(Module *module)
     /*Use objdump tools to split the code and data*/
     // 1.generate command string
     char command[500];
-    sprintf(command, "objdump -d %s | sed '/>:/d' | sed '/section/d' | sed '/format/d' | grep \":\"", \
+    sprintf(command, "objdump -d %s | sed '/>:/d' | sed '/Disassembly/d' | sed '/elf64-x86-64/d' | grep \":\"", \
         module->get_path().c_str());
     char type[3] = "r";
     // 2.get stream of command's output
@@ -140,6 +140,8 @@ void Disassembler::disassemble_module(Module *module)
         F_SIZE instr_off = instr_addr - module->get_pt_load_base();
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
+        if(instr_off==0x44edb)
+            instr->dump_file_inst();
         // 4.4 record instruction
         if(instr){
             module->insert_instr(instr);
@@ -166,7 +168,7 @@ void Disassembler::disassemble_module(Module *module)
             if(instr->is_indirect_jump())
                 module->insert_indirect_jump(instr->get_instr_offset());
             // 4.4.6 record direct call target(maybe function)
-            if(instr->is_direct_call() && !module->is_in_plt_in_off(instr->get_target_offset()))
+            if(instr->is_direct_call())
                 module->insert_call_target(instr->get_target_offset());
         }
     }
@@ -200,7 +202,7 @@ void Disassembler::disassemble_module(Module *module)
         module->insert_align_entry(erase_end);
         // 6.1.4 regenerated new instructions to subtitute the objdump results    
         Instruction *new_instr = NULL;
-        while(!module->is_instr_entry_in_off(erase_end)){
+        while(!module->is_instr_entry_in_off(erase_end, false)){
             new_instr = disassemble_instruction(erase_end, module);
             ASSERT(new_instr);
             new_generated_instrs.push_back(new_instr);
@@ -250,7 +252,7 @@ fix_again:
             continue;
             
         F_SIZE target_offset = *it;
-        if(!module->is_instr_entry_in_off(target_offset)){
+        if(!module->is_instr_entry_in_off(target_offset, false)){
             //judge is prefix. instruction or not 
             target_offset -= 1;
             Instruction *instr = module->get_instr_by_off(target_offset);
@@ -267,7 +269,7 @@ fix_again:
                     target_instr->dump_file_inst();
                     new_generated_instr.push_back(target_instr);
                     next_offset_of_target_instr = target_instr->get_next_offset();
-                }while(!module->is_instr_entry_in_off(next_offset_of_target_instr));
+                }while(!module->is_instr_entry_in_off(next_offset_of_target_instr, false));
                 //erase
                 std::vector<Instruction*> erased_instrs;
                 module->erase_instr_range(target_offset, next_offset_of_target_instr, erased_instrs);
@@ -375,7 +377,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                 if(search_rip_relative_instr){
                     _dInst.size = 10;
                     _dInst.flags = FLAG_RIP_RELATIVE;
-                }else{
+                }else if(){7//0x44eda libm
                     _dInst.size = 6;
                     _dInst.flags = 0;
                 }

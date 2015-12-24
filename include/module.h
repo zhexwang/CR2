@@ -100,6 +100,7 @@ protected:
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
 	void separate_movable_bbls();
+	void recursive_to_find_movable_bbls(BasicBlock *bbl);
 	BasicBlock *construct_bbl(const INSTR_MAP &instr_maps, BOOL is_call_proceeded);
 public:
 	Module(ElfParser *elf);
@@ -130,21 +131,21 @@ public:
 	BasicBlock *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock *get_bbl_by_va(const P_ADDRX addr) const;
 	BasicBlock *find_bbl_by_instr(Instruction *instr) const;
-	Module::BBL_MAP_ITERATOR find_bbl_iter_cover_off(F_SIZE offset) const;
-	Instruction *find_instr_by_off(F_SIZE offset) const;
-	Module::BBL_MAP_ITERATOR find_bbl_iter_by_offset(F_SIZE offset) const;
-	BasicBlock *find_bbl_by_offset(F_SIZE offset) const;
+	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
+	BasicBlock *find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const;
 	//judge functions
-	BOOL is_instr_entry_in_off(const F_SIZE target_offset) const;
-	BOOL is_bbl_entry_in_off(const F_SIZE target_offset) const;
+	BOOL is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
+	BOOL is_bbl_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
+	BOOL is_instr_entry_in_va(const P_ADDRX addr, BOOL consider_prefix) const;
+	BOOL is_bbl_entry_in_va(const P_ADDRX addr, BOOL consider_prefix) const;
 	BOOL is_in_plt_in_off(const F_SIZE offset) const;
-	BOOL is_instr_entry_in_va(const P_ADDRX addr) const;
-	BOOL is_bbl_entry_in_va(const P_ADDRX addr) const;
 	BOOL is_in_plt_in_va(const P_ADDRX addr) const;
 	BOOL is_br_target(const F_SIZE target_offset) const;
 	BOOL is_call_target(const F_SIZE offset) const;
 	BOOL is_align_entry(F_SIZE offset) const;
 	BOOL is_maybe_func_entry(F_SIZE offset) const;
+	BOOL is_fixed_bbl(BasicBlock *bbl);
+	BOOL is_movable_bbl(BasicBlock *bbl);
 	BOOL is_sym_func_entry(F_SIZE offset) const
 	{
 		return _func_info_maps.find(offset)!=_func_info_maps.end();

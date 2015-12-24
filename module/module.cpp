@@ -58,22 +58,38 @@ BasicBlock *Module::get_bbl_by_va(const P_ADDRX addr) const
     return get_bbl_by_off(addr - _real_load_base);
 }
 
-BOOL Module::is_instr_entry_in_off(const F_SIZE target_offset) const
+BOOL Module::is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const
 {
     INSTR_MAP_ITERATOR ret = _instr_maps.find(target_offset);
     if(ret!=_instr_maps.end())
         return true;
-    else
-        return false;    
+    else{
+        if(consider_prefix){
+            ret = _instr_maps.find(target_offset-1);
+            if(ret!=_instr_maps.end())
+                return ret->second->has_prefix();
+            else
+                return false;
+        }else
+            return false;
+    }
 }
 
-BOOL Module::is_bbl_entry_in_off(const F_SIZE target_offset) const
+BOOL Module::is_bbl_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const
 {
     BBL_MAP_ITERATOR ret = _bbl_maps.find(target_offset);
-    if(ret!=_bbl_maps.end())
+    if(ret != _bbl_maps.end())
         return true;
-    else
-        return false;    
+    else{
+        if(consider_prefix){
+            ret = _bbl_maps.find(target_offset-1);
+            if(ret != _bbl_maps.end())
+                return ret->second->has_prefix();
+            else
+                return false;
+        }else
+            return false;
+    }
 }
 
 BOOL Module::is_in_plt_in_off(const F_SIZE offset) const
@@ -89,14 +105,14 @@ BOOL Module::is_in_plt_in_va(const P_ADDRX addr) const
     return is_in_plt_in_off(addr - _real_load_base);
 }
 
-BOOL Module::is_instr_entry_in_va(const P_ADDRX addr) const
+BOOL Module::is_instr_entry_in_va(const P_ADDRX addr, BOOL consider_prefix) const
 {
-    return is_instr_entry_in_off(addr - _real_load_base);
+    return is_instr_entry_in_off(addr - _real_load_base, consider_prefix);
 }
 
-BOOL Module::is_bbl_entry_in_va(const P_ADDRX addr) const
+BOOL Module::is_bbl_entry_in_va(const P_ADDRX addr, BOOL consider_prefix) const
 {
-    return is_bbl_entry_in_off(addr - _real_load_base);
+    return is_bbl_entry_in_off(addr - _real_load_base, consider_prefix);
 }
 
 BOOL Module::is_br_target(const F_SIZE target_offset) const
@@ -120,7 +136,7 @@ void Module::dump_br_target(const F_SIZE target_offset) const
 }
 
 void Module::insert_instr(Instruction *instr)
-{
+{        
     _instr_maps.insert(std::make_pair(instr->get_instr_offset(), instr));
 }
 
@@ -181,7 +197,7 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
     if(range_start_instr->get_next_offset()<=target_offset){//data in code 
         guess_start_instr = target_offset;
             
-        while(!is_instr_entry_in_off(guess_start_instr))
+        while(!is_instr_entry_in_off(guess_start_instr, false))
             guess_start_instr++;
     }
 
@@ -225,7 +241,7 @@ BOOL Module::is_align_entry(F_SIZE offset) const
 
 BOOL Module::is_maybe_func_entry(F_SIZE offset) const
 {
-    BasicBlock *bb = find_bbl_by_offset(offset);
+    BasicBlock *bb = find_bbl_by_offset(offset, true);
     if(!bb)
         return false;
     else
@@ -250,15 +266,9 @@ void Module::check_br_targets()
 {
     for(BR_TARGETS_ITERATOR it = _br_targets.begin(); it!=_br_targets.end(); it++){
         F_SIZE target_offset = it->first;
-        
-        if(!is_instr_entry_in_off(target_offset)){
-            //judge is prefix. instruction or not 
-            F_SIZE target_offset2 = target_offset - 1;
-            Instruction *instr = get_instr_by_off(target_offset2);
-            FATAL(!(instr && instr->has_prefix()), \
-                "find one br target (offset:0x%lx, src:0x%lx) is not in module (%s) instruction list!\n", \
-                target_offset, *(it->second.begin()), get_path().c_str());
-        }
+        FATAL(!is_instr_entry_in_off(target_offset, true), \
+            "find one br target (offset:0x%lx, src:0x%lx) is not in module (%s) instruction list!\n", \
+            target_offset, *(it->second.begin()), get_path().c_str());
     }
 }
 
@@ -276,21 +286,29 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
     
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
         generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
-    else if(last_instr->is_call())
-        generated_bbl = new CallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
-    else if(last_instr->is_jump())
-        generated_bbl = new JumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+    else if(last_instr->is_direct_call())
+        generated_bbl = new DirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+    else if(last_instr->is_indirect_call())
+        generated_bbl = new IndirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+    else if(last_instr->is_direct_jump())
+        generated_bbl = new DirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+    else if(last_instr->is_indirect_jump())
+        generated_bbl = new IndirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_condition_branch())
         generated_bbl = new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else if(last_instr->is_ret())
         generated_bbl = new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
     else
         ASSERTM(generated_bbl, "unkown instruction list!\n");
-    //judge is function entry or not
-    if(is_sym_func_entry(bbl_start)){
+    //judge is function entry or not, ignore plt
+    if(is_in_plt_in_off(bbl_start)){
+        _fixed_bbls.insert(generated_bbl);
+    }else if(is_sym_func_entry(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, SYM_RECORD));
+        _fixed_bbls.insert(generated_bbl);
     }else if(is_call_target(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, CALL_TARGET));
+        _fixed_bbls.insert(generated_bbl);
     }else{
         INT32 push_reg_instr_num = 0;
         INT32 decrease_rsp_instr_num = 0;
@@ -307,11 +325,12 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
                 push_reg_instr_num++;
             if(!increase_rsp && instr->is_decrease_rsp(increase_rsp))
                 decrease_rsp_instr_num++;
-
         }
 
-        if(!has_pop_before_push && !increase_rsp && (push_reg_instr_num>0 || decrease_rsp_instr_num>0))
+        if(!has_pop_before_push && !increase_rsp && (push_reg_instr_num>0 || decrease_rsp_instr_num>0)){
             _maybe_func_entry.insert(std::make_pair(generated_bbl, PROLOG_MATCH));
+            _fixed_bbls.insert(generated_bbl);
+        }
     }
 
     return generated_bbl;
@@ -319,9 +338,7 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
 
 void Module::split_bbl()
 {
-    // 1.check!
-    check_br_targets();
-    // Analysis indirect jump instruction to find more br targets!!!!
+    // 1. Analysis indirect jump instruction to find more br targets!!!!
     analysis_indirect_jump_targets();
     // 2. init bbl range
     INSTR_MAP_ITERATOR bbl_entry = _instr_maps.end();
@@ -448,7 +465,7 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
     do{
         //record jump targets
         F_SIZE memset_entry_target = memset_target + entry_data;
-        if(find_instr_by_off(memset_entry_target)){
+        if(is_instr_entry_in_off(memset_entry_target, true)){
             insert_br_target(memset_entry_target, jump_offset);
             targets.insert(memset_entry_target);
         }
@@ -459,27 +476,95 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
     return true;
 }
 
-//direct call target, symbol table recorded functions and prolog match functions are true function
+/*  from maybe function entry to use control flow to find out all movable bbls, the left bbls are fixed
+    (include fucntion entry and plt) 
+*/
 void Module::separate_movable_bbls()
 {   
-    //find plt bbl range
-    BBL_MAP_ITERATOR plt_start_bb_iter = find_bbl_iter_cover_off(_plt_start);
-    BBL_MAP_ITERATOR plt_end_bb_iter = find_bbl_iter_cover_off(_plt_end-1);
-    //using maybe func entry to split all modules
-    BBL_MAP_ITERATOR func_entry_bbl_iter;
-    FUNC_TYPE func_type;
     for(FUNC_ENTRY_BBL_MAP::iterator iter = _maybe_func_entry.begin(); iter!=_maybe_func_entry.end(); iter++){
-        BasicBlock *bb = iter->first;
-        F_SIZE second_offset;
-        F_SIZE bb_entry = bb->get_bbl_offset(second_offset);
-        BBL_MAP_ITERATOR curr_iter = find_bbl_iter_by_offset(bb_entry);  
-        BBL_MAP_ITERATOR func_entry_bbl_iter = curr_iter;
-        
-        BBL_MAP_ITERATOR func_end_bbl_iter = ++curr_iter;
-        
+        BasicBlock *bbl = iter->first;
+        //curr bbl must be fixed
+        ASSERT(is_fixed_bbl(bbl));
+        recursive_to_find_movable_bbls(bbl);
     }
     //check function is legal or not
     check_function();
+}
+
+void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
+{
+    F_SIZE target_offset = bbl->get_target_offset();
+    F_SIZE fallthrough_offset = bbl->get_fallthrough_offset();
+    
+    if(bbl->is_sequence() || bbl->is_indirect_call() || bbl->is_direct_call()){
+        //find fallthrough movable bbls
+        BasicBlock *fallthrough_bbl = find_bbl_by_offset(fallthrough_offset, true);
+        if(!fallthrough_bbl){
+            ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
+            return ;
+        }
+        if(is_movable_bbl(fallthrough_bbl) || is_fixed_bbl(fallthrough_bbl))
+            return ;
+        _movable_bbls.insert(fallthrough_bbl);
+        recursive_to_find_movable_bbls(fallthrough_bbl);
+    }else if(bbl->is_condition_branch()){
+        //find target movable bbls
+        BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
+        ASSERT(target_bbl);
+        if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
+            return ;
+        _movable_bbls.insert(target_bbl);
+        recursive_to_find_movable_bbls(target_bbl);
+        //find fallthrough movable bbls
+        BasicBlock *fallthrough_bbl = find_bbl_by_offset(fallthrough_offset, true);
+        if(!fallthrough_bbl){
+            ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
+            return ;
+        }
+        if(is_movable_bbl(fallthrough_bbl) || is_fixed_bbl(fallthrough_bbl))
+            return ;
+        _movable_bbls.insert(fallthrough_bbl);
+        recursive_to_find_movable_bbls(fallthrough_bbl);
+    }else if(bbl->is_direct_jump()){
+        //find target movable bbls
+        BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
+        ASSERT(target_bbl);
+        if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
+            return ;
+        _movable_bbls.insert(target_bbl);
+        recursive_to_find_movable_bbls(target_bbl);
+    }else if(bbl->is_indirect_jump()){
+        //find target movable bbls
+        JUMPIN_MAP::iterator iter = _indirect_jump_maps.find(bbl->get_last_instr_offset());
+        ASSERT(iter!=_indirect_jump_maps.end());
+        JUMPIN_INFO &info = iter->second;
+        
+        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP){
+            for(std::set<F_SIZE>::iterator target_iter = info.targets.begin(); target_iter!=info.targets.end(); target_iter++){
+                BasicBlock *target_bbl = find_bbl_by_offset(*target_iter, true);
+                ASSERT(target_bbl);
+                if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
+                    continue ;
+                else{
+                    _movable_bbls.insert(target_bbl);
+                    recursive_to_find_movable_bbls(target_bbl);
+                }
+            }
+        }else
+            ASSERT(info.type!=PLT_JMP);
+    }
+    
+    return ;
+}
+
+BOOL Module::is_movable_bbl(BasicBlock *bbl)
+{
+    return _movable_bbls.find(bbl)!=_movable_bbls.end();
+}
+
+BOOL Module::is_fixed_bbl(BasicBlock *bbl)
+{
+    return _fixed_bbls.find(bbl)!=_fixed_bbls.end();
 }
 
 void Module::check_function()
@@ -521,7 +606,7 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
     do{
         F_SIZE target_instr = entry_data - get_pt_load_base();
         //record jump targets
-        if(is_instr_entry_in_off(target_instr)){//makae sure that is real jump target!
+        if(is_instr_entry_in_off(target_instr, true)){//makae sure that is real jump target!
             insert_br_target(target_instr, jump_offset);
             targets.insert(target_instr);
         }else{
@@ -592,15 +677,18 @@ void Module::analysis_jump_table()
                     F_SIZE entry_offset = table_base_offset;
                     INT32 entry_data = read_4byte_data_in_off(entry_offset);
                     F_SIZE first_entry_instr = entry_data + table_base_offset;
-                    if(!is_instr_entry_in_off(first_entry_instr))//makae sure that is real jump table!
+                    if(!is_instr_entry_in_off(first_entry_instr, true))//makae sure that is real jump table!
                         break;
                     JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
                     JUMPIN_INFO &info = iter->second;
                     //calculate jump table size
                     do{
                         //record jump targets
-                        insert_br_target(table_base_offset+entry_data, indirect_jump_offset);
-                        info.targets.insert(table_base_offset+entry_data);
+                        F_SIZE target_offset = table_base_offset+entry_data;
+                        if(is_instr_entry_in_off(target_offset, true)){
+                            insert_br_target(table_base_offset+entry_data, indirect_jump_offset);
+                            info.targets.insert(table_base_offset+entry_data);
+                        }
                         entry_offset += 4;
                         entry_data = read_4byte_data_in_off(entry_offset);
                     }while(entry_data!=0);
@@ -702,21 +790,22 @@ void Module::dump_bbl_in_off() const
         it->second->dump_in_off();
     }
 }
-//not consider prefix
-Module::BBL_MAP_ITERATOR Module::find_bbl_iter_by_offset(F_SIZE offset) const
-{
-    BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
-    ASSERT(it!=_bbl_maps.end());
-    return it;
-}
 
-BasicBlock *Module::find_bbl_by_offset(F_SIZE offset) const
+BasicBlock *Module::find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const
 {
     BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
     if(it!=_bbl_maps.end())
         return it->second;
-    else
-        return NULL;
+    else{
+        if(consider_prefix){
+            it = _bbl_maps.find(offset-1);
+            if(it!=_bbl_maps.end() && it->second->has_prefix())
+                return it->second;
+            else
+                return NULL;
+        }else
+            return NULL;
+    }
 }
 
 BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
@@ -729,21 +818,18 @@ BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
     return bbl_it->second;
 }
 
-Module::BBL_MAP_ITERATOR Module::find_bbl_iter_cover_off(F_SIZE offset) const
-{
-    BBL_MAP_ITERATOR bbl_it;
-    while((bbl_it = _bbl_maps.find(offset)) == _bbl_maps.end()){
-        offset--;
-    }
-    return bbl_it;
-}
-
-Instruction *Module::find_instr_by_off(F_SIZE offset) const
+Instruction *Module::find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const
 {
     INSTR_MAP_ITERATOR instr_it = _instr_maps.find(offset);
     if(instr_it == _instr_maps.end()){
-        instr_it = _instr_maps.find(--offset);//lock prefix
-        return instr_it==_instr_maps.end()? NULL : instr_it->second;
+        if(consider_prefix){
+            instr_it = _instr_maps.find(offset-1);
+            if(instr_it!=_instr_maps.end() && instr_it->second->has_prefix())
+                return instr_it->second;
+            else
+                return NULL;
+        }else
+            return NULL;
     }else
         return instr_it->second;
 }
