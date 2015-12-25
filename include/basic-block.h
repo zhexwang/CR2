@@ -18,6 +18,7 @@ protected:
 	const BOOL _is_call_proceeded;
 	const BOOL _has_prefix;
 	INSTR_MAPS _instr_maps;
+	BOOL _is_nop;
 	F_SIZE _target;
 	F_SIZE _fallthrough;
 public:
@@ -38,6 +39,11 @@ public:
 	{
 		return _start+_size;
 	}
+	SIZE get_bbl_size() const
+	{
+		return _size;
+	}
+	INT32 get_instr_num() const {return (INT32)_instr_maps.size();}
 	P_ADDRX get_bbl_paddr(const P_ADDRX load_base, F_SIZE &second_addrx) const 
 	{
 		if(_has_prefix)
@@ -56,6 +62,13 @@ public:
 	//dump functions
 	void dump_in_va(const P_ADDRX load_base) const;
 	void dump_in_off() const;
+	BOOL is_in_bbl(F_SIZE offset) const {return offset>=_start && offset<(_start+_size);}
+	BOOL is_in_bbl(Instruction *instr) const 
+	{
+		F_SIZE instr_offset = instr->get_instr_offset(); 
+		return _instr_maps.find(instr_offset)!=_instr_maps.end() ? true : false;
+	}
+	BOOL is_nop() const {return _is_nop;}
 	virtual BOOL is_sequence() const =0;
 	virtual BOOL is_direct_call() const =0;
 	virtual BOOL is_indirect_call() const =0;

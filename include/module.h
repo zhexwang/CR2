@@ -41,6 +41,8 @@ public:
 		CALL_TARGET = 0,
 		PROLOG_MATCH,
 		SYM_RECORD,
+		RELA_TARGET,
+		ALIGNED_ENTRY,
 		FUNC_TYPE_NUM,
 	};
 	typedef std::map<BasicBlock*, FUNC_TYPE> FUNC_ENTRY_BBL_MAP;
@@ -89,6 +91,12 @@ protected:
 	FUNC_ENTRY_BBL_MAP _maybe_func_entry;
 	//symbol function information
 	SYM_FUNC_INFO_MAP _func_info_maps;
+	//plt information
+	PLT_INFO_MAP _plt_info_map;
+	//rela targets in x sections
+	RELA_X_TARGETS _rela_targets;
+	//special handling 
+	F_SIZE _setjmp_plt;
 	//bbl's entry must be fixed
 	BBL_SET _fixed_bbls;
 	BBL_SET _movable_bbls;
@@ -101,7 +109,7 @@ protected:
 	BOOL analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
 	void separate_movable_bbls();
 	void recursive_to_find_movable_bbls(BasicBlock *bbl);
-	BasicBlock *construct_bbl(const INSTR_MAP &instr_maps, BOOL is_call_proceeded);
+	BasicBlock *construct_bbl(const INSTR_MAP &instr_maps, BOOL is_call_proceeded, BOOL is_call_setjmp_proceeded);
 public:
 	Module(ElfParser *elf);
 	~Module();
@@ -115,24 +123,24 @@ public:
 		@Introduction: check if all br targets are exist in module instruction list! 
 	*/
 	void check_br_targets();
-	// check if all functions are satisfactory 
-	void check_function();
 	//set functions
 	void set_real_load_base(P_ADDRX load_base) {_real_load_base = load_base;}
 	//get functions
-	std::string get_path() const {return _elf->get_elf_path();}
-	std::string get_name() const {return _elf->get_elf_name();}
-	std::string get_sym_func_name(F_SIZE offset) const;
-	P_ADDRX get_pt_load_base() const {return _elf->get_pt_load_base();}
- 	UINT8 *get_code_offset_ptr(const F_SIZE off) const {return _elf->get_code_offset_ptr(off);}
-	//get functions
+	std::string  get_path() const {return _elf->get_elf_path();}
+	std::string  get_name() const {return _elf->get_elf_name();}
+	std::string  get_sym_func_name(F_SIZE offset) const;
+	P_ADDRX      get_pt_load_base() const {return _elf->get_pt_load_base();}
+ 	UINT8       *get_code_offset_ptr(const F_SIZE off) const {return _elf->get_code_offset_ptr(off);}
 	Instruction *get_instr_by_off(const F_SIZE off) const;
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
-	BasicBlock *get_bbl_by_off(const F_SIZE off) const;
-	BasicBlock *get_bbl_by_va(const P_ADDRX addr) const;
-	BasicBlock *find_bbl_by_instr(Instruction *instr) const;
+	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
+	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
+	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
-	BasicBlock *find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const;
+	Instruction *find_instr_cover_offset(F_SIZE offset) const;
+	BasicBlock  *find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const;
+	BasicBlock  *find_bbl_cover_offset(F_SIZE offset) const;
+	BasicBlock  *find_bbl_cover_instr(Instruction *instr) const;	
 	//judge functions
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
 	BOOL is_bbl_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
@@ -144,11 +152,16 @@ public:
 	BOOL is_call_target(const F_SIZE offset) const;
 	BOOL is_align_entry(F_SIZE offset) const;
 	BOOL is_maybe_func_entry(F_SIZE offset) const;
+	BOOL is_maybe_func_entry(BasicBlock *bb) const;
 	BOOL is_fixed_bbl(BasicBlock *bbl);
 	BOOL is_movable_bbl(BasicBlock *bbl);
 	BOOL is_sym_func_entry(F_SIZE offset) const
 	{
 		return _func_info_maps.find(offset)!=_func_info_maps.end();
+	}
+	BOOL is_rela_target(F_SIZE offset) const
+	{
+		return _rela_targets.find(offset)!=_rela_targets.end();
 	}
 	BOOL is_in_x_section_in_off(const F_SIZE offset) const
 	{
@@ -160,7 +173,6 @@ public:
 	}
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
-	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void insert_call_target(const F_SIZE target);
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);
@@ -169,6 +181,7 @@ public:
 	void insert_indirect_jump(F_SIZE offset);
 	//erase functions
 	void erase_instr(Instruction *instr);
+	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
 	//read functions
 	UINT8 read_1byte_code_in_off(const F_SIZE read_offset) const
@@ -191,8 +204,10 @@ public:
 	static void dump_all_bbls_in_va(P_ADDRX load_base);
 	static void dump_all_bbls_in_off();
 	static void dump_all_indirect_jump_result();
+	static void dump_all_bbl_movable_info();
 	void dump_bbl_in_va(P_ADDRX load_base) const;
 	void dump_bbl_in_off() const;
 	void dump_br_target(const F_SIZE target_offset) const;
 	void dump_indirect_jump_result();
+	void dump_bbl_movable_info() const;
 };

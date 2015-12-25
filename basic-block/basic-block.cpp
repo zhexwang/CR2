@@ -15,7 +15,10 @@ BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceed
     : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _has_prefix(has_prefix),\
         _instr_maps(instr_maps)
 {
-    ;
+    _is_nop = true;
+    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++)
+        if(!iter->second->is_nop())
+            _is_nop = false;
 }
 
 BasicBlock::~BasicBlock()
@@ -43,7 +46,7 @@ void BasicBlock::dump_in_off() const
 {
     F_SIZE second_entry = 0;
     F_SIZE first_entry = get_bbl_offset(second_entry);
-    BLUE("%s[0x%lx - 0x%lx)(INSTR_NUM: %d): <Path:%s>", \
+    BLUE("%s[0x%lx - 0x%lx)(INSTR_NUM: %d): <Path:%s> ", \
         get_type().c_str(), first_entry, first_entry+_size, (INT32)_instr_maps.size(), get_module()->get_path().c_str());
     if(second_entry==0)//only one entry
         BLUE("BBL_Entry(0x%lx)\n", first_entry);

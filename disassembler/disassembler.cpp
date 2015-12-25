@@ -140,8 +140,6 @@ void Disassembler::disassemble_module(Module *module)
         F_SIZE instr_off = instr_addr - module->get_pt_load_base();
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
-        if(instr_off==0x44edb)
-            instr->dump_file_inst();
         // 4.4 record instruction
         if(instr){
             module->insert_instr(instr);
@@ -370,6 +368,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
         for(INT32 idx = 0; idx<4; idx++){
             if(strstr(objdump_line_buf, failed_disasm_instrs[idx].c_str())){
                 BOOL search_rip_relative_instr = strstr(objdump_line_buf, "rip") ? true : false;
+                BOOL search_sib_relative_instr = strstr(objdump_line_buf, ")") ? true : false;
                 //generate new instruction
                 _dInst.opcode = 0;  
                 _dInst.addr = instr_off;
@@ -377,8 +376,8 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                 if(search_rip_relative_instr){
                     _dInst.size = 10;
                     _dInst.flags = FLAG_RIP_RELATIVE;
-                }else if(){7//0x44eda libm
-                    _dInst.size = 6;
+                }else{
+                    _dInst.size = search_sib_relative_instr ? 7 : 6;
                     _dInst.flags = 0;
                 }
                 return new SequenceInstr(_dInst, module);

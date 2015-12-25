@@ -201,6 +201,30 @@ void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const I
 
 }
 
+void ElfParser::search_plt_info(PLT_INFO_MAP &plt_map)
+{
+    F_SIZE plt_start, plt_end; 
+    get_plt_range(plt_start, plt_end);
+    for(INT32 idx = 0; idx<_rela_plt_num; idx++){
+        INT32 sym_idx =  ELF64_R_SYM(_rela_plt[idx].r_info);
+        F_SIZE plt_item_start = plt_start + (idx+1)*16;
+        F_SIZE plt_item_end = plt_item_start + 16;
+        std::string plt_name = std::string(_dynstr_table + _dynsym_table[sym_idx].st_name);
+        PLT_ITEM item = {plt_item_start, plt_item_end, plt_name};
+        plt_map.insert(std::make_pair(plt_item_start, item));
+    }    
+}
+
+void ElfParser::search_rela_x_section(RELA_X_TARGETS &rela_targets)
+{
+    for(INT32 idx = 0; idx<_rela_dyn_num; idx++){
+        Elf64_Rela rela = _rela_dyn[idx];
+        if(ELF64_R_TYPE(rela.r_info)==R_X86_64_RELATIVE && is_in_x_section_file(rela.r_addend)){
+            rela_targets.insert(rela.r_addend);
+        }
+    }
+}
+
 void ElfParser::search_function_from_sym_table(SYM_FUNC_INFO_MAP &func_info_map)
 {
     // 1.scan dynamic symbol table

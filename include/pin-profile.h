@@ -35,7 +35,6 @@ private:
     Module **_module_maps;
     //record image branch targets
     std::set<F_SIZE> *_img_branch_targets;
-	std::set<F_SIZE> *_img_indirect_call_targets;
     //record indirect branch instructions
     INDIRECT_BRANCH_INFO _indirect_call_maps;
     INDIRECT_BRANCH_INFO _indirect_jump_maps;

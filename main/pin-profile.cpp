@@ -43,7 +43,6 @@ void PinProfile::read_image_info(ifstream &ifs)
     //init image
     _img_name = new string[_img_num]();
     _img_branch_targets = new set<F_SIZE>[_img_num]();
-    _img_indirect_call_targets = new set<F_SIZE>[_img_num]();
     _module_maps = new Module*[_img_num]();
     //read image list
     for(INT32 idx=0; idx<_img_num; idx++){
@@ -79,9 +78,6 @@ void PinProfile::read_indirect_branch_info(ifstream &ifs, multimap<INST_POS, INS
         maps.insert(make_pair(src, target));
         //insert branch targets
         _img_branch_targets[target_image_index].insert(target_offset);
-        //indirect call targets
-        if(type==INDIRECT_CALL)
-            _img_indirect_call_targets[target_image_index].insert(target_offset);
     }
 }
 
@@ -182,7 +178,8 @@ void PinProfile::check_bbl_safe() const
 
             if(!is_bbl_entry){
                 Instruction *instr = module->find_instr_by_off(target_offset, true);
-                BasicBlock *bbl = module->find_bbl_by_instr(instr);
+                ASSERT(instr);
+                BasicBlock *bbl = module->find_bbl_cover_instr(instr);
                 bbl->dump_in_off();
                 FATAL(!is_bbl_entry, "check one indirect branch target (%s:0x%lx) is not bbl entry!\n", \
                     _module_maps[idx]->get_path().c_str(), target_offset);
@@ -194,18 +191,24 @@ void PinProfile::check_bbl_safe() const
 void PinProfile::check_func_safe() const
 {
     //check indirect call
-    for(INT32 idx = 1; idx<_img_num; idx++){
-        Module *module = _module_maps[idx];
-        set<F_SIZE>::const_iterator it = _img_indirect_call_targets[idx].begin();
-        for(;it!=_img_indirect_call_targets[idx].end(); it++){
-            F_SIZE target_offset = *it;
-            BOOL is_func_entry  = module->is_maybe_func_entry(target_offset);
-            if(!is_func_entry){
-                BasicBlock *bbl = module->find_bbl_by_offset(target_offset, true);
-                bbl->dump_in_off();
-                ERR("check one indirect call target (%s:0x%lx) is not func entry!\n", \
-                    _module_maps[idx]->get_path().c_str(), target_offset);
-            }
+    for(INDIRECT_BRANCH_INFO::const_iterator iter = _indirect_call_maps.begin(); iter!=_indirect_call_maps.end(); iter++){
+        INST_POS src = iter->first;
+        Module *src_module = _module_maps[src.image_index];
+        F_SIZE src_offset = src.instr_offset;
+        INST_POS target = iter->second;
+        Module *target_module = _module_maps[target.image_index];
+        F_SIZE target_offset = target.instr_offset;
+        BasicBlock *src_bbl = src_module->find_bbl_cover_offset(src_offset);
+        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, true);
+        ASSERT(src_bbl && target_bbl);
+        BOOL is_fixed  = target_module->is_fixed_bbl(target_bbl);
+        if(!is_fixed){
+            ERR("check one indirect call target bbl (%s:0x%lx) is not fixed!\n ", \
+                target_module->get_path().c_str(), target_offset);
+            ERR("SrcBBL:\n");
+            src_bbl->dump_in_off();
+            ERR("TargetBBL:\n");
+            target_bbl->dump_in_off();
         }
     }
     //check indirect jump
@@ -216,9 +219,14 @@ void PinProfile::check_func_safe() const
         INST_POS target = iter->second;
         Module *target_module = _module_maps[target.image_index];
         F_SIZE target_offset = target.instr_offset;
+        BasicBlock *src_bbl = src_module->find_bbl_cover_offset(src_offset);
+        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, true);
+        ASSERT(src_bbl && target_bbl);
         
-        if(src_module->is_in_plt_in_off(src_offset))
+        if(src_module->is_in_plt_in_off(src_offset)){
+            ASSERT(src_module->is_fixed_bbl(src_bbl));
             continue;
+        }
         
         if(src_module==target_module){//we only recognize the indirect jump in curr modules
             Module::JUMPIN_MAP_ITER it =  src_module->_indirect_jump_maps.find(src_offset);
@@ -229,13 +237,15 @@ void PinProfile::check_func_safe() const
                 ASSERT(info.targets.find(target_offset)!=info.targets.end());
                 continue;
             }
-        }//left jumpin must be function call
-        BOOL is_func_entry  = target_module->is_maybe_func_entry(target_offset);
-        if(!is_func_entry){
-            BasicBlock *bbl = target_module->find_bbl_by_offset(target_offset, true);
-            bbl->dump_in_off();
-            ERR("check one indirect jump target (%s:0x%lx) is not func entry!\n", \
+        }//left jumpin must be fixed
+        BOOL is_fixed  = target_module->is_fixed_bbl(target_bbl);
+        if(!is_fixed){
+            ERR("check one indirect jump target (%s:0x%lx) is not fixed!\n", \
                 target_module->get_path().c_str(), target_offset);
+            ERR("SrcBBL:\n");
+            src_bbl->dump_in_off();
+            ERR("TargetBBL:\n");
+            target_bbl->dump_in_off();
         }
     }
 }

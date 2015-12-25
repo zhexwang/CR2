@@ -13,6 +13,14 @@ Module::Module(ElfParser *elf): _elf(elf), _real_load_base(0)
 {
     _elf->get_plt_range(_plt_start, _plt_end);
     _elf->search_function_from_sym_table(_func_info_maps);
+    _elf->search_plt_info(_plt_info_map);
+    
+    _setjmp_plt = 0;
+    for(PLT_INFO_MAP::iterator iter = _plt_info_map.begin(); iter!=_plt_info_map.end(); iter++)
+        if(iter->second.plt_name.find("setjmp")!=std::string::npos)
+            _setjmp_plt = iter->first;
+        
+    _elf->search_rela_x_section(_rela_targets);
     _all_module_maps.insert(make_pair(_elf->get_elf_name(), this));
 }
 
@@ -248,6 +256,11 @@ BOOL Module::is_maybe_func_entry(F_SIZE offset) const
         return _maybe_func_entry.find(bb)!=_maybe_func_entry.end();
 }
 
+BOOL Module::is_maybe_func_entry(BasicBlock *bb) const
+{
+    return _maybe_func_entry.find(bb)!=_maybe_func_entry.end();
+}
+
 void Module::insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern)
 {
     _jump_table_pattern.push_back(pattern);
@@ -272,7 +285,8 @@ void Module::check_br_targets()
     }
 }
 
-BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_call_proceeded)
+BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_call_proceeded, \
+    BOOL is_call_setjmp_proceeded)
 {
     const Instruction *first_instr = instr_maps.begin()->second;
     F_SIZE bbl_start = first_instr->get_instr_offset();
@@ -303,11 +317,18 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
     //judge is function entry or not, ignore plt
     if(is_in_plt_in_off(bbl_start)){
         _fixed_bbls.insert(generated_bbl);
+    }else if(is_call_setjmp_proceeded){//setjmp proceeded must be fixed
+        ASSERT(is_call_proceeded);
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, RELA_TARGET));
+        _fixed_bbls.insert(generated_bbl);
     }else if(is_sym_func_entry(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, SYM_RECORD));
         _fixed_bbls.insert(generated_bbl);
     }else if(is_call_target(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, CALL_TARGET));
+        _fixed_bbls.insert(generated_bbl);
+    }else if(is_rela_target(bbl_start)){
+        _maybe_func_entry.insert(std::make_pair(generated_bbl, RELA_TARGET));
         _fixed_bbls.insert(generated_bbl);
     }else{
         INT32 push_reg_instr_num = 0;
@@ -347,23 +368,27 @@ void Module::split_bbl()
     F_SIZE last_next_instr_offset = 0;
     INSTR_MAP_ITERATOR last_iterator = _instr_maps.end();
     BOOL last_bbl_is_call = false;
+    BOOL last_bbl_is_call_setjmp = false;
     // 4. scan all instructions to build bbl 
     for(INSTR_MAP_ITERATOR it = _instr_maps.begin(); it!=_instr_maps.end(); it++){
         // 4.1 get current instruction information
         Instruction *instr = it->second;
         F_SIZE curr_instr_offset = instr->get_instr_offset();
         F_SIZE next_instr_offset = instr->get_next_offset();
+        BOOL is_aligned = is_align_entry(curr_instr_offset);
         // 4.2 judge
         if(last_next_instr_offset==curr_instr_offset){
             /*these two instructions are sequence */
             // 1. find bbl entry (consider prefix instruction and align entries)
-            if(is_sym_func_entry(curr_instr_offset)|| is_br_target(curr_instr_offset) || is_align_entry(curr_instr_offset) || \
-                (instr->has_prefix() && (is_br_target(curr_instr_offset+1) || is_align_entry(curr_instr_offset+1)))){
+            if(is_rela_target(curr_instr_offset) || is_sym_func_entry(curr_instr_offset)|| is_br_target(curr_instr_offset) \
+                || is_aligned || (instr->has_prefix() && (is_br_target(curr_instr_offset+1) \
+                || is_align_entry(curr_instr_offset+1)))){
                 /* curr instruction is bbl entry, so last instr is bbl exit */
                 // <bbl_entry, last_iterator> is a bbl
                 if(bbl_exit!=last_iterator){
                     bbl_exit = last_iterator;
-                    BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
+                    BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call, \
+                        last_bbl_is_call_setjmp);
                     bbl_exit--;
                     insert_bbl(new_bbl);
                 }//already create new bbl
@@ -375,7 +400,8 @@ void Module::split_bbl()
                 // <bbl_entry, bbl_exit> new bbl
                 ASSERT(bbl_exit!=it);
                 bbl_exit = it;
-                BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
+                BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call, \
+                    last_bbl_is_call_setjmp);
                 bbl_exit--;
                 insert_bbl(new_bbl);
                 // set next bbl entry
@@ -383,13 +409,23 @@ void Module::split_bbl()
                 it--;
                 // judge next bbl is call proceeded
                 last_bbl_is_call = instr->is_call() ? true : false;
+                if(instr->is_direct_call()){
+                    F_SIZE call_target_offset = instr->get_target_offset();
+                    ASSERT(call_target_offset!=0);
+                    if(call_target_offset==_setjmp_plt)
+                        last_bbl_is_call_setjmp = true;
+                    else
+                        last_bbl_is_call_setjmp = false;
+                }else
+                    last_bbl_is_call_setjmp = false;
             }
         }else if (last_next_instr_offset<curr_instr_offset){
             /*these two instructions are not sequence (maybe data in it)*/
             if((last_next_instr_offset!=0) && (bbl_exit!=last_iterator)){
                 //data in it, last instruction is bbl exit
                 bbl_exit = last_iterator;
-                BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call);
+                BasicBlock *new_bbl = construct_bbl(INSTR_MAP(bbl_entry, ++bbl_exit), last_bbl_is_call, \
+                    last_bbl_is_call_setjmp);
                 bbl_exit--;
                 insert_bbl(new_bbl);
             }
@@ -480,22 +516,45 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
     (include fucntion entry and plt) 
 */
 void Module::separate_movable_bbls()
-{   
+{ 
+    // 1.find all maybe function CFG
+    std::vector<BasicBlock*> fixed_aligned_bbl;
     for(FUNC_ENTRY_BBL_MAP::iterator iter = _maybe_func_entry.begin(); iter!=_maybe_func_entry.end(); iter++){
         BasicBlock *bbl = iter->first;
         //curr bbl must be fixed
         ASSERT(is_fixed_bbl(bbl));
         recursive_to_find_movable_bbls(bbl);
     }
-    //check function is legal or not
-    check_function();
+    // 2.the left aligned bbl maybe function entry
+    for(ALIGN_ENTRY::iterator iter = _align_entries.begin(); iter!=_align_entries.end(); iter++){
+        BasicBlock *bbl = find_bbl_by_offset(*iter, false);
+        if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl)){
+            _fixed_bbls.insert(bbl);
+            //find maybe aligned function
+            _maybe_func_entry.insert(std::make_pair(bbl, ALIGNED_ENTRY));
+            fixed_aligned_bbl.push_back(bbl);
+        }
+    }
+    // 3.find all aligned funciton CFG
+    for(std::vector<BasicBlock*>::iterator iter = fixed_aligned_bbl.begin(); iter!=fixed_aligned_bbl.end(); iter++)
+        recursive_to_find_movable_bbls(*iter);
+    // 4.left aligned funciton 
+    for(BBL_MAP_ITERATOR iter = _bbl_maps.begin(); iter!=_bbl_maps.end(); iter++){
+        BasicBlock *bbl = iter->second;
+        if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl)){
+            if(bbl->is_nop())
+                _movable_bbls.insert(bbl);
+            else
+                _fixed_bbls.insert(bbl);                
+        }
+    } 
 }
 
 void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
 {
     F_SIZE target_offset = bbl->get_target_offset();
     F_SIZE fallthrough_offset = bbl->get_fallthrough_offset();
-    
+
     if(bbl->is_sequence() || bbl->is_indirect_call() || bbl->is_direct_call()){
         //find fallthrough movable bbls
         BasicBlock *fallthrough_bbl = find_bbl_by_offset(fallthrough_offset, true);
@@ -503,36 +562,36 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
             ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
             return ;
         }
-        if(is_movable_bbl(fallthrough_bbl) || is_fixed_bbl(fallthrough_bbl))
-            return ;
-        _movable_bbls.insert(fallthrough_bbl);
-        recursive_to_find_movable_bbls(fallthrough_bbl);
+        if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
+            _movable_bbls.insert(fallthrough_bbl);
+            recursive_to_find_movable_bbls(fallthrough_bbl);
+        }
     }else if(bbl->is_condition_branch()){
         //find target movable bbls
         BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
         ASSERT(target_bbl);
-        if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
-            return ;
-        _movable_bbls.insert(target_bbl);
-        recursive_to_find_movable_bbls(target_bbl);
+        if(!is_movable_bbl(target_bbl) && !is_fixed_bbl(target_bbl)){
+            _movable_bbls.insert(target_bbl);
+            recursive_to_find_movable_bbls(target_bbl);
+        }
         //find fallthrough movable bbls
         BasicBlock *fallthrough_bbl = find_bbl_by_offset(fallthrough_offset, true);
         if(!fallthrough_bbl){
             ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
             return ;
         }
-        if(is_movable_bbl(fallthrough_bbl) || is_fixed_bbl(fallthrough_bbl))
-            return ;
-        _movable_bbls.insert(fallthrough_bbl);
-        recursive_to_find_movable_bbls(fallthrough_bbl);
+        if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
+            _movable_bbls.insert(fallthrough_bbl);
+            recursive_to_find_movable_bbls(fallthrough_bbl);
+        }
     }else if(bbl->is_direct_jump()){
         //find target movable bbls
         BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
         ASSERT(target_bbl);
-        if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
-            return ;
-        _movable_bbls.insert(target_bbl);
-        recursive_to_find_movable_bbls(target_bbl);
+        if(!is_movable_bbl(target_bbl) && !is_fixed_bbl(target_bbl)){
+            _movable_bbls.insert(target_bbl);
+            recursive_to_find_movable_bbls(target_bbl);
+        }
     }else if(bbl->is_indirect_jump()){
         //find target movable bbls
         JUMPIN_MAP::iterator iter = _indirect_jump_maps.find(bbl->get_last_instr_offset());
@@ -565,11 +624,6 @@ BOOL Module::is_movable_bbl(BasicBlock *bbl)
 BOOL Module::is_fixed_bbl(BasicBlock *bbl)
 {
     return _fixed_bbls.find(bbl)!=_fixed_bbls.end();
-}
-
-void Module::check_function()
-{
-    ;
 }
 
 BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets)
@@ -686,8 +740,8 @@ void Module::analysis_jump_table()
                         //record jump targets
                         F_SIZE target_offset = table_base_offset+entry_data;
                         if(is_instr_entry_in_off(target_offset, true)){
-                            insert_br_target(table_base_offset+entry_data, indirect_jump_offset);
-                            info.targets.insert(table_base_offset+entry_data);
+                            insert_br_target(target_offset, indirect_jump_offset);
+                            info.targets.insert(target_offset);
                         }
                         entry_offset += 4;
                         entry_data = read_4byte_data_in_off(entry_offset);
@@ -736,6 +790,7 @@ void Module::dump_all_bbls_in_va(const P_ADDRX load_base)
 
 void Module::dump_all_indirect_jump_result()
 {
+    BLUE("Dump all indirect jump info:\n");
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
          it->second->dump_indirect_jump_result();
@@ -762,7 +817,7 @@ void Module::dump_indirect_jump_result()
         
     }
     
-    BLUE("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset)\n",\
+    PRINT("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset)\n",\
         sum, get_name().c_str(), 100*switch_case_off_count/sum, switch_case_off_count, 100*switch_case_absolute_count/sum,\
         switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count);
 }
@@ -791,6 +846,32 @@ void Module::dump_bbl_in_off() const
     }
 }
 
+void Module::dump_bbl_movable_info() const
+{
+    INT32 gadget_num = 0;
+    INT32 little_gadget = 0;
+    for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
+        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
+            gadget_num++;
+            if((*iter)->get_instr_num()<=5 && is_maybe_func_entry(*iter))
+                little_gadget++;
+        }
+    }
+    INT32 movable_bbl_num = (INT32)_movable_bbls.size();
+    INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
+    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[instrNo.<=5 && isNotFuncEntry])\n", 
+            get_name().c_str(), 100*fixed_bbl_num/(fixed_bbl_num+movable_bbl_num), fixed_bbl_num, gadget_num, little_gadget);
+}
+
+void Module::dump_all_bbl_movable_info()
+{   
+    BLUE("Dump bbl movable info:\n");
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+         it->second->dump_bbl_movable_info();
+    }
+}
+
 BasicBlock *Module::find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const
 {
     BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
@@ -808,14 +889,44 @@ BasicBlock *Module::find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) cons
     }
 }
 
-BasicBlock *Module::find_bbl_by_instr(Instruction *instr) const
+BasicBlock *Module::find_bbl_cover_offset(F_SIZE offset) const
+{
+    BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
+    while(it==_bbl_maps.end()){
+        if(is_in_x_section_in_off(offset))
+            it = _bbl_maps.find(--offset);
+        else
+            return NULL;
+    }
+    BasicBlock *ret = it->second;
+    return ret->is_in_bbl(offset) ? ret : NULL;
+}
+
+BasicBlock *Module::find_bbl_cover_instr(Instruction *instr) const
 {
     BBL_MAP_ITERATOR bbl_it;
     INSTR_MAP_ITERATOR instr_it = _instr_maps.find(instr->get_instr_offset());
     while((bbl_it = _bbl_maps.find(instr_it->first)) == _bbl_maps.end()){
-        instr_it--;
+        if(instr_it!=_instr_maps.end())
+            instr_it--;
+        else
+            return NULL;
     }
-    return bbl_it->second;
+    BasicBlock *ret = bbl_it->second;
+    return ret->is_in_bbl(instr) ? ret : NULL;
+}
+
+Instruction *Module::find_instr_cover_offset(F_SIZE offset) const
+{
+    INSTR_MAP_ITERATOR it = _instr_maps.find(offset);
+    while(it==_instr_maps.end()){
+        if(is_in_x_section_in_off(offset))
+            it = _instr_maps.find(--offset);
+        else
+            return NULL;
+    }
+    Instruction *ret = it->second;
+    return ret->is_in_instr(offset) ? ret : NULL;
 }
 
 Instruction *Module::find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const

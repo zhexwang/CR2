@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <set>
 
 #include "type.h"
 #include "utility.h"
@@ -16,6 +17,19 @@ typedef struct func_info{
 }FUNC_INFO;
 typedef std::map<F_SIZE, FUNC_INFO> SYM_FUNC_INFO_MAP;
 
+/* sizeof(plt_item) = 16
+ff 25 7a 5b 29 00	   jmpq   *0x295b7a(%rip)		 
+68 00 00 00 00		   pushq  $0x0
+e9 e0 ff ff ff		   jmpq   402470 <_init+0x20>	
+*/	
+typedef struct plt_item{
+	F_SIZE plt_start;
+	F_SIZE plt_end;
+	std::string plt_name;	
+}PLT_ITEM;
+typedef std::map<F_SIZE, PLT_ITEM> PLT_INFO_MAP;
+
+typedef std::set<F_SIZE> RELA_X_TARGETS;
 class ElfParser
 {
 public:
@@ -184,7 +198,9 @@ public:
 		ASSERT(offset<_elf_size);
 		return *(INT64*)(offset+_map_start);
 	}
+	void search_plt_info(PLT_INFO_MAP &plt_map);
 	void search_function_from_sym_table(SYM_FUNC_INFO_MAP &func_info_map);
+	void search_rela_x_section(RELA_X_TARGETS &rela_targets);
 	//dump functions
 	void dump_x_sections() const;
 	void dump_dependence() const;
