@@ -851,15 +851,15 @@ void Module::dump_bbl_movable_info() const
     INT32 gadget_num = 0;
     INT32 little_gadget = 0;
     for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
-        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
+        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump()){//ret is protected by shadow stack
             gadget_num++;
-            if((*iter)->get_instr_num()<=5 && is_maybe_func_entry(*iter))
+            if(is_maybe_func_entry(*iter))
                 little_gadget++;
         }
     }
     INT32 movable_bbl_num = (INT32)_movable_bbls.size();
     INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
-    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[instrNo.<=5 && isNotFuncEntry])\n", 
+    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
             get_name().c_str(), 100*fixed_bbl_num/(fixed_bbl_num+movable_bbl_num), fixed_bbl_num, gadget_num, little_gadget);
 }
 
