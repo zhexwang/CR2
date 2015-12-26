@@ -31,11 +31,6 @@ public:
 	typedef std::set<F_SIZE> CALL_TARGETS;
 	//typedef aligned entry
 	typedef std::set<F_SIZE> ALIGN_ENTRY;
-	//typedef likely jump table pattern
-	typedef std::vector<F_SIZE> PATTERN_INSTRS;
-	typedef std::vector<F_SIZE>::iterator PATTERN_INSTRS_ITER;
-	typedef std::list<PATTERN_INSTRS> JUMP_TABLE_PATTERN;
-	typedef std::list<PATTERN_INSTRS>::iterator JUMP_TABLE_PATTERN_ITER;
 	//typedef likey function entry
 	enum FUNC_TYPE{
 		CALL_TARGET = 0,
@@ -81,8 +76,6 @@ protected:
 	ALIGN_ENTRY _align_entries;
 	//all indirect jump
 	JUMPIN_MAP _indirect_jump_maps;
-	//switch jump
-	JUMP_TABLE_PATTERN _jump_table_pattern;
 	//real load base
 	P_ADDRX _real_load_base;
 	//plt range
@@ -103,9 +96,9 @@ protected:
 	static const std::string func_type_name[FUNC_TYPE_NUM];
 protected:
 	void split_bbl();
-	void analysis_jump_table();
 	void analysis_indirect_jump_targets();
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
+	BOOL analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
 	void separate_movable_bbls();
 	void recursive_to_find_movable_bbls(BasicBlock *bbl);
@@ -177,7 +170,6 @@ public:
 	void insert_instr(Instruction *instr);
 	void insert_bbl(BasicBlock *bbl);
 	void insert_align_entry(F_SIZE offset);
-	void insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern);
 	void insert_indirect_jump(F_SIZE offset);
 	//erase functions
 	void erase_instr(Instruction *instr);

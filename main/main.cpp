@@ -13,8 +13,9 @@ int main(int argc, const char **argv)
     
     Module::split_all_modules_into_bbls();
     PinProfile *profile = new PinProfile(argv[2]);
-    profile->check_bbl_safe();
+
     Module::dump_all_indirect_jump_result();
+    profile->check_bbl_safe();
     
     Module::separate_movable_bbls_from_all_modules();
     profile->check_func_safe();

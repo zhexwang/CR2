@@ -261,11 +261,6 @@ BOOL Module::is_maybe_func_entry(BasicBlock *bb) const
     return _maybe_func_entry.find(bb)!=_maybe_func_entry.end();
 }
 
-void Module::insert_likely_jump_table_pattern(Module::PATTERN_INSTRS pattern)
-{
-    _jump_table_pattern.push_back(pattern);
-}
-
 void Module::insert_indirect_jump(F_SIZE offset)
 {
     JUMPIN_INFO info;
@@ -465,16 +460,21 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
                 return false;
         else{
             if(!lea_dest_src_matched){
-                if(instr->is_add_two_regs_1(jump_dest_reg, src_reg)){
-                    lea_dest_src_matched = true;
-                }else
-                    return false;
+                if(instr->is_dest_reg(jump_dest_reg)){
+                    if(instr->is_add_two_regs_1(jump_dest_reg, src_reg)){
+                        lea_dest_src_matched = true;
+                    }else
+                        return false;
+                }
             }else{
                 UINT8 movsx_dest = R_NONE, movsx_src = R_NONE;
                 if(!movsx_matched){
-                    if(instr->is_movsx_sib_to_reg(movsx_src, movsx_dest)){
-                        if(movsx_src==src_reg && movsx_src==movsx_dest){
-                            movsx_matched = true;
+                    if(instr->is_dest_reg(src_reg)){
+                        if(instr->is_movsx_sib_to_reg(movsx_src, movsx_dest)){
+                            if(movsx_src==src_reg && movsx_src==movsx_dest)
+                                movsx_matched = true;
+                            else
+                                return false;
                         }else
                             return false;
                     }
@@ -677,9 +677,6 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
 
 void Module::analysis_indirect_jump_targets()
 {
-    // 1. analysis switch case in shared object
-    analysis_jump_table();
-    // 2. analysis other cases
     for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
         JUMPIN_INFO &info = iter->second;
         F_SIZE jump_offset = iter->first;
@@ -690,77 +687,149 @@ void Module::analysis_indirect_jump_targets()
                 info.table_offset = 0;
                 info.table_size = 0;
                 info.targets.clear();
-            }else if(analysis_memset_jump(jump_offset, info.targets)){//assembly code in library
-                info.type = MEMSET_JMP;
-                info.table_offset = 0;
-                info.table_size = 0;
+            }else if(is_shared_object() && analysis_jump_table_in_so(jump_offset, table_base, table_size, info.targets)){
+                info.type = SWITCH_CASE_OFFSET;
+                info.table_offset = table_base;
+                info.table_size = table_size;
             }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size, info.targets)){
                 info.type = SWITCH_CASE_ABSOLUTE;
                 info.table_offset = table_base;
                 info.table_size = table_size;
-            }else{//longjump
-                ;
+            }else if(analysis_memset_jump(jump_offset, info.targets)){//assembly code in library
+                info.type = MEMSET_JMP;
+                info.table_offset = 0;
+                info.table_size = 0;
             }
         }
     }
 }
 
-void Module::analysis_jump_table()
-{    
-    JUMP_TABLE_PATTERN_ITER pattern_it = _jump_table_pattern.begin();
-    while(pattern_it!=_jump_table_pattern.end()){
-        PATTERN_INSTRS &instrs = *pattern_it;
-        F_SIZE pattern_first_instr = instrs.front();
-        F_SIZE indirect_jump_offset = instrs.back();
-        //should be more precise: control flow analysis        
-        INSTR_MAP_ITERATOR pattern_start_instr_it = _instr_maps.find(pattern_first_instr);
+BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets)
+{
+    INSTR_MAP_ITERATOR iter = _instr_maps.find(jump_offset); 
+    Instruction *instr = iter->second;
+    if(!instr->is_jump_reg())
+        return false;
+    UINT8 jump_reg = instr->get_dest_reg();
+    iter--;
+    
+    UINT8 base_or_entry_reg1 = R_NONE, base_or_entry_reg2 = R_NONE;
+    BOOL find_reg1_base = false, find_reg2_base = false;
+    F_SIZE reg1_base = 0, reg2_base = 0;
+    
+    UINT8 movsxd_dest_reg = R_NONE, movsxd_sib_base_reg = R_NONE;
+    BOOL find_movsxd_sib_base = false;
+    F_SIZE movsxd_sib_base;
+    BOOL add_instr_is_matched = false, movsxd_instr_is_matched = false;
 
-        UINT8 table_base_reg, index_reg, scale;
-        UINT64 disp;
-        pattern_start_instr_it->second->get_sib(1, table_base_reg, index_reg, scale, disp);
-        ASSERT(table_base_reg!=R_NONE && disp==0);
-        pattern_start_instr_it--;
-        INT32 fault_count = 0;
-        INT32 fault_tolerant = 10;
-        while(pattern_start_instr_it!=_instr_maps.end()){
-            Instruction *instr = pattern_start_instr_it->second;
-            F_SIZE table_base_offset = 0;
-            if(instr->is_dest_reg(table_base_reg)){
-                if(instr->is_lea_rip(table_base_reg, table_base_offset)){
-                    //check jump table: there is 4byte data in one entry! Also check entry is instruction aligned
-                    F_SIZE entry_offset = table_base_offset;
-                    INT32 entry_data = read_4byte_data_in_off(entry_offset);
-                    F_SIZE first_entry_instr = entry_data + table_base_offset;
-                    if(!is_instr_entry_in_off(first_entry_instr, true))//makae sure that is real jump table!
-                        break;
-                    JUMPIN_MAP_ITER iter = _indirect_jump_maps.find(indirect_jump_offset);
-                    JUMPIN_INFO &info = iter->second;
-                    //calculate jump table size
-                    do{
-                        //record jump targets
-                        F_SIZE target_offset = table_base_offset+entry_data;
-                        if(is_instr_entry_in_off(target_offset, true)){
-                            insert_br_target(target_offset, indirect_jump_offset);
-                            info.targets.insert(target_offset);
-                        }
-                        entry_offset += 4;
-                        entry_data = read_4byte_data_in_off(entry_offset);
-                    }while(entry_data!=0);
-                    info.type = SWITCH_CASE_OFFSET;
-                    
-                    info.table_offset = table_base_offset;
-                    info.table_size = entry_offset - table_base_offset;
-                    
-                    break;
-                }else if(fault_count<fault_tolerant)
-                    fault_count++;
-                else
-                    break;
+    UINT8 add_base_reg = R_NONE;
+    BOOL find_add_base_reg = false;
+    F_SIZE add_base = 0;
+
+    INT32 fault_count = 0;
+    INT32 fault_tolerant = 10;
+    
+    while(iter!=_instr_maps.end()){
+        instr = iter->second;
+        if(!add_instr_is_matched){
+            if(instr->is_dest_reg(jump_reg)){
+                if(instr->is_add_two_regs_1(jump_reg, base_or_entry_reg2)){
+                    base_or_entry_reg1 = jump_reg;
+                    add_instr_is_matched = true;
+                }else
+                    return false;//wrong
             }
-            pattern_start_instr_it--;
+        }else{//add instr is matched
+            if(!movsxd_instr_is_matched){
+                if(!find_reg1_base && instr->is_dest_reg(base_or_entry_reg1)){
+                    if(instr->is_lea_rip(base_or_entry_reg1, reg1_base)){
+                        find_reg1_base = true;
+                        add_base_reg = base_or_entry_reg1;
+                        find_add_base_reg = true;
+                        add_base = reg1_base;
+                    }else if(instr->is_movsxd_sib_to_reg(movsxd_sib_base_reg, movsxd_dest_reg) \
+                        && movsxd_dest_reg==base_or_entry_reg1){
+                        movsxd_instr_is_matched = true;
+                        add_base_reg = base_or_entry_reg2;
+                        find_add_base_reg = find_reg2_base;
+                        add_base = reg2_base;
+                    }else
+                        return false;
+                }else if(!find_reg2_base && instr->is_dest_reg(base_or_entry_reg2)){
+                    if(instr->is_lea_rip(base_or_entry_reg2, reg2_base)){
+                        find_reg2_base = true;
+                        add_base_reg = base_or_entry_reg2;
+                        find_add_base_reg = true;
+                        add_base = reg2_base;
+                    }else if(instr->is_movsxd_sib_to_reg(movsxd_sib_base_reg, movsxd_dest_reg) \
+                        && movsxd_dest_reg==base_or_entry_reg2){
+                        movsxd_instr_is_matched = true;
+                        add_base_reg = base_or_entry_reg1;
+                        find_add_base_reg = find_reg1_base;
+                        add_base = reg1_base;
+                    }else
+                        return false;
+                }
+
+                if(find_reg1_base && find_reg2_base)
+                    return false;
+            }else{
+                if(!find_add_base_reg){
+                    if(instr->is_dest_reg(add_base_reg)){
+                        if(instr->is_lea_rip(add_base_reg, add_base))
+                            find_add_base_reg = true;
+                        else if(fault_count<fault_tolerant)
+                            fault_count++;
+                        else
+                            return false;
+                    }
+                }
+                if(!find_movsxd_sib_base){
+                    if(instr->is_dest_reg(movsxd_sib_base_reg)){
+                        if(instr->is_lea_rip(movsxd_sib_base_reg, movsxd_sib_base))
+                            find_movsxd_sib_base = true;
+                        else if(fault_count<fault_tolerant)
+                            fault_count++;
+                        else
+                            return false;
+                    }
+                }
+                if(find_add_base_reg && find_movsxd_sib_base){
+                    if(add_base==movsxd_sib_base){
+                        table_base = movsxd_sib_base;
+                        break;
+                    }else
+                        return false;
+                }
+            }
         }
+        iter--;
+    }
+    
+    if(iter==_instr_maps.end())
+        return false;
+    else{
+        //check jump table: there is 4byte data in one entry! Also check entry is instruction aligned
+        F_SIZE entry_offset = table_base;
+        INT32 entry_data = read_4byte_data_in_off(entry_offset);
+        F_SIZE first_entry_instr = entry_data + table_base;
+        if(!is_instr_entry_in_off(first_entry_instr, true))//makae sure that is real jump table!
+            return false;
+        //calculate jump table size
+        do{
+            //record jump targets
+            F_SIZE target_offset = table_base+entry_data;
+            if(is_instr_entry_in_off(target_offset, true)){
+                insert_br_target(target_offset, jump_offset);
+                targets.insert(target_offset);
+            }
+            entry_offset += 4;
+            entry_data = read_4byte_data_in_off(entry_offset);
+        }while(entry_data!=0);
         
-        pattern_it++;    
+        table_size = entry_offset - table_base;
+        
+        return true;
     }
 }
 
@@ -807,7 +876,7 @@ void Module::dump_indirect_jump_result()
     JUMPIN_MAP_ITER it = _indirect_jump_maps.begin();
     for(; it!=_indirect_jump_maps.end(); it++){
         switch(it->second.type){
-            case SWITCH_CASE_OFFSET: switch_case_off_count++; break;
+            case SWITCH_CASE_OFFSET:switch_case_off_count++; break;
             case PLT_JMP: plt_jmp_count++; break;
             case SWITCH_CASE_ABSOLUTE: switch_case_absolute_count++; break;
             case MEMSET_JMP: memset_jmp_count++; break;

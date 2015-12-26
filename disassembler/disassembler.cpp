@@ -21,84 +21,6 @@ static BOOL is_0h_align(F_SIZE offset)
     return (offset&(0xfull))==0;
 }
 
-/*
-    @Introduction: only recoginze the following pattern: (compiled by gcc compiler)
-        lea    %jump_table_base, [%RIP+$offset]
-        ...
-        ...
-        movsxd %jump_table_entry, [%jump_table_base, %entry_num*4]
-        ...
-        <add    %jump_table_entry, %jump_table_base //lea %jump_table_entry, [%jump_table_base+%jump_table_entry]>
-        ...
-        jmp    %jump_table_entry>
-        or
-        <add    %jump_table_base, %jump_table_entry //lea %jump_table_base, [%jump_table_base+%jump_table_entry]>
-        ...
-        jmp    %jump_table_base>
-*/
-static void likely_switch_jump_pattern(Module *module, Instruction *instr)
-{
-    static UINT8 sib_base_reg = R_NONE;//jump table ptr 
-    static UINT8 dest_reg = R_NONE;//jump table entry (offset)
-    static BOOL matched_movsxb = false, matched_add_like = false, jump_table_base = false;//use sib base reg to jump
-    static Module::PATTERN_INSTRS pattern_instrs;
-    if(matched_movsxb){
-        if(instr->is_br()){//is br instruction
-            if(matched_add_like && instr->is_indirect_jump()){
-                if((!jump_table_base && instr->is_dest_reg(dest_reg)) || (jump_table_base && instr->is_dest_reg(sib_base_reg))){
-                    //no br instructions, expect indirect jump instruction
-                    pattern_instrs.push_back(instr->get_instr_offset());//jmp instruction
-                    ASSERT(pattern_instrs.size()>=3);
-                    module->insert_likely_jump_table_pattern(pattern_instrs);  
-                }
-            }// wrong pattern
-        }else{//sequence
-            if(instr->is_dest_reg(dest_reg)){// is write dest reg instruction?
-                if(matched_add_like){
-                    if(jump_table_base){
-                        pattern_instrs.push_back(instr->get_instr_offset());
-                        return ;
-                    }
-                }else{
-                    if(instr->is_add_two_regs(dest_reg, sib_base_reg)){
-                        //matched add like instruction
-                        matched_add_like = true;
-                        jump_table_base = false;
-                        pattern_instrs.push_back(instr->get_instr_offset());//add instruction
-                        return ;
-                    }
-                }// wrong pattern 
-            }else if(instr->is_dest_reg(sib_base_reg)){
-                if(matched_add_like){//sib_base_reg has been used for add like instruction
-                    if(!jump_table_base){
-                        pattern_instrs.push_back(instr->get_instr_offset());
-                        return ;
-                    }
-                }else{
-                    if(instr->is_add_two_regs(sib_base_reg, dest_reg)){
-                        matched_add_like = true;
-                        jump_table_base = true;//use sib base reg to jump
-                        pattern_instrs.push_back(instr->get_instr_offset());
-                        return ;
-                    }
-                }
-                //wrong pattern, sib_base_reg has not been used for add like instruction
-            } else{// instruction in pattern
-                pattern_instrs.push_back(instr->get_instr_offset());//other instruction
-                return ;
-            }
-        }
-    }else if(instr->is_movsxd_sib_to_reg(sib_base_reg, dest_reg)){
-        pattern_instrs.push_back(instr->get_instr_offset());//movsxd instruction
-        matched_movsxb = true;
-        return;
-    }
-
-    pattern_instrs.clear();
-    matched_movsxb = matched_add_like = jump_table_base = false;
-    sib_base_reg = dest_reg = R_NONE;
-}
-
 void Disassembler::disassemble_module(Module *module)
 {
     /*Use objdump tools to split the code and data*/
@@ -160,12 +82,10 @@ void Disassembler::disassemble_module(Module *module)
                     module->insert_align_entry(instr_off);
                 has_nop_instrs = false;
             }
-            // 4.4.4 record likely switch jump pattern
-            likely_switch_jump_pattern(module, instr);
-            // 4.4.5 record indirect jump
+            // 4.4.4 record indirect jump
             if(instr->is_indirect_jump())
                 module->insert_indirect_jump(instr->get_instr_offset());
-            // 4.4.6 record direct call target(maybe function)
+            // 4.4.5 record direct call target(maybe function)
             if(instr->is_direct_call())
                 module->insert_call_target(instr->get_target_offset());
         }
