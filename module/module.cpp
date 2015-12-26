@@ -528,7 +528,9 @@ void Module::separate_movable_bbls()
     // 2.the left aligned bbl maybe function entry
     for(ALIGN_ENTRY::iterator iter = _align_entries.begin(); iter!=_align_entries.end(); iter++){
         BasicBlock *bbl = find_bbl_by_offset(*iter, false);
-        if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl)){
+        F_SIZE second_entry;
+        F_SIZE bbl_entry = bbl->get_bbl_offset(second_entry);
+        if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl) && ((bbl_entry&0xf)==0)){
             _fixed_bbls.insert(bbl);
             //find maybe aligned function
             _maybe_func_entry.insert(std::make_pair(bbl, ALIGNED_ENTRY));
@@ -545,7 +547,7 @@ void Module::separate_movable_bbls()
             if(bbl->is_nop())
                 _movable_bbls.insert(bbl);
             else
-                _fixed_bbls.insert(bbl);                
+                _fixed_bbls.insert(bbl); 
         }
     } 
 }
@@ -719,7 +721,7 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
     
     UINT8 movsxd_dest_reg = R_NONE, movsxd_sib_base_reg = R_NONE;
     BOOL find_movsxd_sib_base = false;
-    F_SIZE movsxd_sib_base;
+    F_SIZE movsxd_sib_base = 0;
     BOOL add_instr_is_matched = false, movsxd_instr_is_matched = false;
 
     UINT8 add_base_reg = R_NONE;
@@ -919,17 +921,22 @@ void Module::dump_bbl_movable_info() const
 {
     INT32 gadget_num = 0;
     INT32 little_gadget = 0;
+    INT32 plt_num = 0;
     for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
-        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump()){//ret is protected by shadow stack
+        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
             gadget_num++;
-            if(is_maybe_func_entry(*iter))
+            if(!is_maybe_func_entry(*iter) && !(*iter)->is_ret())//ret is protected by shadow stack
                 little_gadget++;
         }
+        F_SIZE second;
+        if(is_in_plt_in_off((*iter)->get_bbl_offset(second)))
+            plt_num++;
     }
     INT32 movable_bbl_num = (INT32)_movable_bbls.size();
     INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
-    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
-            get_name().c_str(), 100*fixed_bbl_num/(fixed_bbl_num+movable_bbl_num), fixed_bbl_num, gadget_num, little_gadget);
+    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d [PLT: %3d] Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
+            get_name().c_str(), 100*fixed_bbl_num/(fixed_bbl_num+movable_bbl_num), fixed_bbl_num, plt_num, \
+            gadget_num, little_gadget);
 }
 
 void Module::dump_all_bbl_movable_info()

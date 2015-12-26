@@ -18,8 +18,8 @@ int main(int argc, const char **argv)
     profile->check_bbl_safe();
     
     Module::separate_movable_bbls_from_all_modules();
-    profile->check_func_safe();
     Module::dump_all_bbl_movable_info();
+    profile->check_func_safe();
     
     return 0;
 }
