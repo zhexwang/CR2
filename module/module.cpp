@@ -923,20 +923,26 @@ void Module::dump_bbl_movable_info() const
     INT32 little_gadget = 0;
     INT32 plt_num = 0;
     for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
-        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
-            gadget_num++;
-            if(!is_maybe_func_entry(*iter) && !(*iter)->is_ret())//ret is protected by shadow stack
-                little_gadget++;
-        }
         F_SIZE second;
-        if(is_in_plt_in_off((*iter)->get_bbl_offset(second)))
+        F_SIZE target = (*iter)->get_bbl_offset(second);
+        if(is_in_plt_in_off(target))
             plt_num++;
+        
+        if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
+            if(!is_in_plt_in_off(target)){
+                gadget_num++;
+                if(!is_maybe_func_entry(*iter) && !(*iter)->is_ret())//ret is protected by shadow stack
+                    little_gadget++;
+            }
+        }
+
     }
     INT32 movable_bbl_num = (INT32)_movable_bbls.size();
     INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
-    PRINT("%20s: Fixed bbls (No.P: %2d%%) Sum: %4d [PLT: %3d] Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
-            get_name().c_str(), 100*fixed_bbl_num/(fixed_bbl_num+movable_bbl_num), fixed_bbl_num, plt_num, \
-            gadget_num, little_gadget);
+    INT32 sum = fixed_bbl_num + movable_bbl_num;
+    INT32 fixed_bbl_wo_plt = fixed_bbl_num - plt_num;
+    PRINT("%20s: Fixed bbls [without plt] (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
+            get_name().c_str(), 100*fixed_bbl_wo_plt/sum, fixed_bbl_wo_plt, gadget_num, little_gadget);
 }
 
 void Module::dump_all_bbl_movable_info()
