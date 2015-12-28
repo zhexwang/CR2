@@ -2,9 +2,12 @@
 #include "disassembler.h"
 #include "module.h"
 #include "pin-profile.h"
+#include "option.h"
 
 int main(int argc, const char **argv)
 {
+    Options::show_system();
+    
     ElfParser::init();
     ElfParser::parse_elf(argv[1]);
     

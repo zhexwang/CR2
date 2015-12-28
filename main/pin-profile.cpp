@@ -9,6 +9,8 @@
 using namespace std;
 
 const string PinProfile::type_name[PinProfile::TYPE_SUM] = {"IndirectCall", "IndirectJump", "Ret"};
+const string PinProfile::unmatched_ss_name = "ShadowStackUnmatched";
+const string PinProfile::unaligned_ret_name = "UnalignedRet";
 
 PinProfile::PinProfile(const char *path) : _path(string(path))
 {
@@ -17,14 +19,28 @@ PinProfile::PinProfile(const char *path) : _path(string(path))
     //2. read image info
     read_image_info(ifs);
     map_modules();
+    string name;
+    INT32 instr_num = 0;
     //3. read indirect call info
-    read_indirect_branch_info(ifs, _indirect_call_maps, INDIRECT_CALL);
+    ifs>>hex>>name>>instr_num;     
+    ASSERTM(name.find(type_name[INDIRECT_CALL])!=string::npos, "type name unmatched!\n");   
+    read_indirect_branch_info(ifs, _indirect_call_maps, instr_num);
     //4. read indirect jump info
-    read_indirect_branch_info(ifs, _indirect_jump_maps, INDIRECT_JUMP);
+    ifs>>hex>>name>>instr_num;     
+    ASSERTM(name.find(type_name[INDIRECT_JUMP])!=string::npos, "type name unmatched!\n");   
+    read_indirect_branch_info(ifs, _indirect_jump_maps, instr_num);
     //5. read ret info
-    read_indirect_branch_info(ifs, _ret_maps, RET);
+    ifs>>hex>>name>>instr_num;     
+    ASSERTM(name.find(type_name[RET])!=string::npos, "type name unmatched!\n");  
+    read_indirect_branch_info(ifs, _ret_maps, instr_num);
     //6. read shadow stack unmatched info
-    read_ss_unmatched_info(ifs);
+    ifs>>hex>>name>>instr_num;     
+    ASSERTM(name.find(unmatched_ss_name)!=string::npos, "type name unmatched!\n");  
+    read_indirect_branch_info(ifs, _unmatched_ret, instr_num);
+    //7. read rsp is not 8bytes aligned
+    ifs>>hex>>name>>instr_num;     
+    ASSERTM(name.find(unaligned_ret_name)!=string::npos, "type name unmatched!\n");  
+    read_indirect_branch_info(ifs, _unaligned_ret, instr_num);
 }
 
 PinProfile::~PinProfile()
@@ -32,88 +48,6 @@ PinProfile::~PinProfile()
     delete []_module_maps;
     delete []_img_name;
     delete []_img_branch_targets;
-}
-
-void PinProfile::read_image_info(ifstream &ifs)
-{
-    //read image title
-    INT32 index = 0;
-    string image_path;
-    ifs>>hex>>image_path>>_img_num;
-    //init image
-    _img_name = new string[_img_num]();
-    _img_branch_targets = new set<F_SIZE>[_img_num]();
-    _module_maps = new Module*[_img_num]();
-    //read image list
-    for(INT32 idx=0; idx<_img_num; idx++){
-        ifs>>hex>>index>>image_path;
-        ASSERT(index==idx);
-        ASSERT(image_path.find_last_of("/") == string::npos);
-        _img_name[idx] = image_path;
-    }
-}
-
-BOOL operator< (const PinProfile::INST_POS left, const PinProfile::INST_POS right)
-{
-    if((left.instr_offset<right.instr_offset)&&(left.image_index<right.image_index))
-        return true;
-    else 
-        return false;
-}
-
-void PinProfile::read_indirect_branch_info(ifstream &ifs, multimap<INST_POS, INST_POS> &maps, INST_TYPE type)
-{
-    string padding;
-    UINT8 c;
-    INT32 instr_num = 0;
-    ifs>>hex>>padding>>instr_num;
-    ASSERTM(padding.find(PinProfile::type_name[type])!=string::npos, "type name unmatched!\n");        
-    for(INT32 idx=0; idx<instr_num; idx++){
-        //record branch information
-        F_SIZE src_offset, target_offset;
-        INT32 src_image_index, target_image_index;
-        ifs>>hex>>src_offset>>c>>src_image_index>>padding>>target_offset>>c>>target_image_index>>c;
-        INST_POS src = {src_offset, src_image_index};
-        INST_POS target = {target_offset, target_image_index};
-        maps.insert(make_pair(src, target));
-        //insert branch targets
-        _img_branch_targets[target_image_index].insert(target_offset);
-    }
-}
-
-void PinProfile::read_ss_unmatched_info(std::ifstream &ifs)
-{
-    string padding;
-    UINT8 c;
-    INT32 instr_num = 0;
-    ifs>>hex>>padding>>instr_num;
-    for(INT32 idx=0; idx<instr_num; idx++){
-        //record ret information
-        F_SIZE src_offset, target_offset;
-        INT32 src_image_index, target_image_index;
-        ifs>>hex>>src_offset>>c>>src_image_index>>padding>>target_offset>>c>>target_image_index>>c;
-        INST_POS src = {src_offset, src_image_index};
-        INST_POS target = {target_offset, target_image_index};
-        _unmatched_ret.insert(make_pair(src, target));
-        //insert branch targets
-        _img_branch_targets[target_image_index].insert(target_offset);
-    }    
-}
-
-void PinProfile::dump_profile_image_info() const
-{
-    for(INT32 idx = 0; idx<_img_num; idx++){
-        PRINT("%3d %s\n", idx, _img_name[idx].c_str());
-    }
-}
-
-INT32 PinProfile::get_img_index_by_name(string name) const
-{
-    for(INT32 idx=0; idx<_img_num; idx++){
-        if(_img_name[idx]==name)
-            return idx;
-    }
-    return -1;
 }
 
 static string get_real_path(const char *file_path)
@@ -147,19 +81,87 @@ static string get_real_path(const char *file_path)
     return string(path[CURR_IDX]); 
 }
 
+static string get_real_name_from_path(string path)
+{
+    string real_path = get_real_path(path.c_str());
+    UINT32 found = real_path.find_last_of("/");
+    string name;
+    if(found==string::npos)
+        name = real_path;
+    else
+        name = real_path.substr(found+1);
+
+    return name;
+}
+
+void PinProfile::read_image_info(ifstream &ifs)
+{
+    //read image title
+    INT32 index = 0;
+    string image_path;
+    ifs>>hex>>image_path>>_img_num;
+    //init image
+    _img_name = new string[_img_num]();
+    _img_branch_targets = new set<F_SIZE>[_img_num]();
+    _module_maps = new Module*[_img_num]();
+    //read image list
+    for(INT32 idx=0; idx<_img_num; idx++){
+        ifs>>hex>>index>>image_path;
+        string real_name = get_real_name_from_path(image_path);
+        ASSERT(index==idx);
+        _img_name[idx] = real_name;
+    }
+}
+
+BOOL operator< (const PinProfile::INST_POS left, const PinProfile::INST_POS right)
+{
+    if((left.instr_offset<right.instr_offset)&&(left.image_index<right.image_index))
+        return true;
+    else 
+        return false;
+}
+
+void PinProfile::read_indirect_branch_info(ifstream &ifs, multimap<INST_POS, INST_POS> &maps, INT32 instr_num)
+{
+    string padding;
+    UINT8 c;
+    for(INT32 idx=0; idx<instr_num; idx++){
+        //record branch information
+        F_SIZE src_offset, target_offset;
+        INT32 src_image_index, target_image_index;
+        ifs>>hex>>src_offset>>c>>src_image_index>>padding>>target_offset>>c>>target_image_index>>c;
+        INST_POS src = {src_offset, src_image_index};
+        INST_POS target = {target_offset, target_image_index};
+        maps.insert(make_pair(src, target));
+        //insert branch targets
+        _img_branch_targets[target_image_index].insert(target_offset);
+    }
+}
+
+void PinProfile::dump_profile_image_info() const
+{
+    for(INT32 idx = 0; idx<_img_num; idx++){
+        PRINT("%3d %s\n", idx, _img_name[idx].c_str());
+    }
+}
+
+INT32 PinProfile::get_img_index_by_name(string name) const
+{
+    for(INT32 idx=0; idx<_img_num; idx++){
+        if(_img_name[idx]==name)
+            return idx;
+    }
+    return -1;
+}
+
 void PinProfile::map_modules()
 {
     Module::MODULE_MAP_ITERATOR it = Module::_all_module_maps.begin();
     for(; it!=Module::_all_module_maps.end(); it++){
         // get real path
-        string str_path = get_real_path(it->second->get_path().c_str());
+        string real_path = get_real_path(it->second->get_path().c_str());
         // get name
-        UINT32 found = str_path.find_last_of("/");
-        string name;
-        if(found==string::npos)
-            name = str_path;
-        else
-            name = str_path.substr(found+1);
+        string name = get_real_name_from_path(real_path);
         // match _all_modules to _module_maps**;    
         INT32 index = get_img_index_by_name(name);
         FATAL(index==-1, "map failed!\n");

@@ -128,10 +128,14 @@ public:
 
 SS thread_ss;
 set<UINT64> ss_unmatched;
-
+set<UINT64> unaligned_ret;
 /*
     Hash Function to record Indirect Branch instructions' inst_addr and target_address
 */
+
+const string unmatched_ss_name = "ShadowStackUnmatched";
+const string unaligned_ret_name = "UnalignedRet";
+
 enum INDIRECT_BRANCH{
     INDIRECT_CALL = 0,
     INDIRECT_JUMP,
@@ -181,7 +185,7 @@ static inline UINT32 find_img_id(IMG img){
 	assert(it!=img_map.end());
 	UINT32 ret = it->second;
 	assert(image_vec[ret].valid==1);
-	return ret+1;
+	return ret;
 }
 
 VOID ImageUnload(IMG img, VOID *v)
@@ -200,8 +204,8 @@ VOID ImageUnload(IMG img, VOID *v)
 }
 
 VOID ImageLoad(IMG img, VOID *v)
-{
-	//cout << "Loading " << IMG_Name(img)<<" "<<IMG_Id(img) << ", Image addr=0x" <<hex<< IMG_LowAddress(img) <<"-0x"<<hex<< IMG_HighAddress (img)<<endl;
+{        
+    //cout << "Loading " << IMG_Name(img)<<" "<<IMG_Id(img) << ", Image addr=0x" <<hex<< IMG_LowAddress(img) <<"-0x"<<hex<< IMG_HighAddress (img)<<endl;
  	IMAG_ITEM new_item = {IMG_Name(img), IMG_Type(img), 1};
 	for(UINT32 idx=0; idx!=image_vec.size(); idx++){
 		IMAG_ITEM &exist_image = image_vec[idx];
@@ -240,23 +244,45 @@ VOID record_indirect_call_target(THREADID thread_id, ADDRINT fallthrough_address
     thread_ss.push(thread_id, rsp-8, fallthrough_address);
 	PIN_UnlockClient();
 }
+
 VOID record_direct_call_target(THREADID thread_id, ADDRINT fallthrough_address, ADDRINT rsp)
 {
 	PIN_LockClient();
     thread_ss.push(thread_id, rsp-8, fallthrough_address);
 	PIN_UnlockClient();
 }
+
 VOID record_indirect_jump_target(ADDRINT inst_address, ADDRINT inst_target)
 {
 	PIN_LockClient();
     record_target(INDIRECT_JUMP, inst_address, inst_target);
 	PIN_UnlockClient();
 }
+
+inline BOOL is_rsp_8byte_aligned(ADDRINT rsp)
+{
+    return (rsp&0x7)==0;
+}
+
 VOID record_ret_target(THREADID thread_id, ADDRINT rsp, ADDRINT inst_address, ADDRINT inst_target)
 {
 	PIN_LockClient();
     record_target(RET, inst_address, inst_target);
-    
+
+    if(!is_rsp_8byte_aligned(rsp)){
+        IMG src_image = IMG_FindByAddress(inst_address);
+        IMG target_image = IMG_FindByAddress(inst_target);
+        if(IMG_Valid(src_image) && IMG_Valid(target_image)){
+            ADDRINT src_addr = inst_address - IMG_LowAddress(src_image);
+            ADDRINT target_addr = inst_target - IMG_LowAddress(target_image);
+            UINT32 src_id = find_img_id(src_image);
+            UINT32 target_id = find_img_id(target_image);
+            unaligned_ret.insert(hash(src_addr, src_id, target_addr, target_id));
+            fprintf(stderr, COLOR_RED"[ERROR] Detected unaligned ret: 0x%lx(%s) ==> 0x%lx(%s) [RSP: 0x%lx]\n"COLOR_END, \
+                   src_addr, IMG_Name(src_image).c_str(), target_addr, IMG_Name(target_image).c_str(), rsp);
+        }
+    }
+        
     if(!thread_ss.check(thread_id, rsp, inst_target)){        
         IMG src_image = IMG_FindByAddress(inst_address);
         IMG target_image = IMG_FindByAddress(inst_target);
@@ -326,37 +352,29 @@ KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool",
 
 ofstream OutFile;
 
-static string get_real_path(const char *file_path)
+VOID dump_hash_info(ofstream &ofs, set<UINT64> &hash_set)
 {
-    #define PATH_LEN 1024
-    #define INCREASE_IDX ++idx;idx%=2
-    #define OTHER_IDX (idx==0 ? 1 : 0)
-    #define CURR_IDX idx
-    
-    char path[2][PATH_LEN];
-    for(INT32 i=0; i<2; i++)
-        memset(path[i], '\0', PATH_LEN);
-    INT32 idx = 0;
-    INT32 ret = 0;
-    struct stat statbuf;
-    //init
-    strcpy(path[CURR_IDX], file_path);
-    //loop to find real path
-    while(1){
-        ret = lstat(path[CURR_IDX], &statbuf);
-        if(ret!=0)//lstat failed
-            break;
-        if(S_ISLNK(statbuf.st_mode)){
-            ret = readlink(path[CURR_IDX], path[OTHER_IDX], PATH_LEN);
-            if(ret<=0)
-                cerr<<"readlink error!"<<endl;
-
-            INCREASE_IDX;
-        }else
-            break;
+    for(set<UINT64>::iterator iter = hash_set.begin(); iter!=hash_set.end(); iter++){
+        ADDRINT src_addr = 0;
+        ADDRINT target_addr = 0;
+        UINT32 src_id = 0;
+        UINT32 target_id = 0;
+        parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
+        ofs<<src_addr<<" ( "<<src_id<<" )--> "<<target_addr<<" ( "<<target_id<<" )"<<endl;
     }
-    
-    return string(path[CURR_IDX]); 
+}
+
+VOID read_instr_info(ifstream &ifs, set<UINT64> &hash_set, INT32 num)
+{
+    for(INT32 idx = 0; idx<num; idx++){
+        ADDRINT src_addr = 0;
+        ADDRINT target_addr = 0;
+        UINT32 src_id = 0;
+        UINT32 target_id = 0;
+        string padding;
+        ifs>>hex>>src_addr>>padding>>src_id>>padding>>target_addr>>padding>>target_id>>padding;
+        hash_set.insert(hash(src_addr, src_id, target_addr, target_id));
+    }
 }
 
 // This function is called when the application exits
@@ -368,36 +386,59 @@ VOID Fini(INT32 code, VOID *v)
 	OutFile<<"IMG_NUM= "<<image_vec.size()<<endl;
 	for(UINT32 idx=0; idx != image_vec.size(); idx++){
 		IMAG_ITEM &item = image_vec[idx];
-        string real_path = get_real_path(item.image_name.c_str());
-        UINT32 found = real_path.find_last_of("/");
-        string image_name;
-        if(found==string::npos)
-            image_name = real_path;
-        else
-            image_name = real_path.substr(found+1);
-        OutFile<<setw(2)<<idx<<" "<<image_name<<" "<<endl;
+        OutFile<<setw(2)<<idx<<" "<<item.image_name<<endl;
 	}
     for(UINT32 idx=0; idx != INDIRECT_BRANCH_SUM; idx++){
     	OutFile<<indirect_branch_type_to_name[idx]<<"_NUM= "<<indirect_inst_set[idx].size()<<endl;
-    	for(set<UINT64>::iterator iter = indirect_inst_set[idx].begin(); iter!=indirect_inst_set[idx].end(); iter++){
-    		ADDRINT src_addr = 0;
-    		ADDRINT target_addr = 0;
-    		UINT32 src_id = 0;
-    		UINT32 target_id = 0;
-    		parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
-    		OutFile<<src_addr<<" ( "<<(src_id-1)<<" )--> "<<target_addr<<" ( "<<(target_id-1)<<" )"<<endl;
-    	}
+        dump_hash_info(OutFile, indirect_inst_set[idx]);
     }
-    OutFile<<"ShadowStackUnmatchedNum= "<<ss_unmatched.size()<<endl;
-    for(set<UINT64>::iterator iter = ss_unmatched.begin(); iter!=ss_unmatched.end(); iter++){
-        ADDRINT src_addr = 0;
-        ADDRINT target_addr = 0;
-        UINT32 src_id = 0;
-        UINT32 target_id = 0;
-        parse_hash_value(*iter, src_addr, src_id, target_addr, target_id);
-        OutFile<<src_addr<<" ( "<<(src_id-1)<<" )--> "<<target_addr<<" ( "<<(target_id-1)<<" )"<<endl;
-    }
+    OutFile<<unmatched_ss_name<<"_Num= "<<ss_unmatched.size()<<endl;
+    dump_hash_info(OutFile, ss_unmatched);
+    OutFile<<unaligned_ret_name<<"_Num= "<<unaligned_ret.size()<<endl;
+    dump_hash_info(OutFile, unaligned_ret);
 	OutFile.close();
+}
+//init image information, indirect branch and shadow stack unmatch information
+VOID INIT()
+{
+    if(access(application_name, F_OK)==-1)
+        return ;
+    
+    ifstream ifs(application_name, ifstream::in);
+    //1. read iamge informations
+    //read image title
+    INT32 index = 0;
+    INT32 img_num;
+    string image_path;
+    ifs>>hex>>image_path>>img_num;
+    //read image list
+    for(INT32 idx=0; idx<img_num; idx++){
+        ifs>>hex>>index>>image_path;
+        assert(index==idx);
+        IMG_TYPE img_type = idx==0 ? IMG_TYPE_SHARED : IMG_TYPE_SHAREDLIB;    
+        IMAG_ITEM new_item = {image_path, img_type, 0};
+        image_vec.push_back(new_item);
+    }
+    //2. read indirect branch informations
+    for(UINT32 type_idx=0; type_idx < INDIRECT_BRANCH_SUM; type_idx++){
+        string branch_type;
+        INT32 branch_info_num;
+        ifs>>hex>>branch_type>>branch_info_num;
+        assert(branch_type.find(indirect_branch_type_to_name[type_idx])!=string::npos);
+        read_instr_info(ifs, indirect_inst_set[type_idx], branch_info_num);
+    }
+    //3. read unmatched shadow stack
+    string unmatched_str;
+    INT32 unmatched_num;
+    ifs>>hex>>unmatched_str>>unmatched_num;
+    assert(unmatched_str.find(unmatched_ss_name)!=string::npos);
+    read_instr_info(ifs, ss_unmatched, unmatched_num);
+    //4. read unaligned information
+    string unaligned_str;
+    INT32 unaligned_num;
+    ifs>>hex>>unaligned_str>>unaligned_num;
+    assert(unaligned_str.find(unaligned_ret_name)!=string::npos);
+    read_instr_info(ifs, unaligned_ret, unaligned_num);
 }
 
 /* ===================================================================== */
@@ -429,8 +470,8 @@ int main(int argc, char * argv[])
 		path_end++;
 	
 	sprintf(application_name, "/home/wangzhe/pprofile/%s.indirect.log", path_end);
+    INIT();
 	OutFile.open(application_name);
-	
 	// Register Instruction to be called to instrument instructions
 	INS_AddInstrumentFunction(Instruction, 0);
 

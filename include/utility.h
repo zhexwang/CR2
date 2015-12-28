@@ -13,7 +13,7 @@
 
 #define PRINT(format, ...) do{ fprintf(stderr, format, ##__VA_ARGS__);}while(0)
 
-#define INFO(format, ...) do{ fprintf(stderr,COLOR_GREEN format COLOR_END, ##__VA_ARGS__);}while(0)
+#define INFO(format, ...) do{ fprintf(stderr,COLOR_HIGH_GREEN format COLOR_END, ##__VA_ARGS__);}while(0)
 #define BLUE(format, ...) do{ fprintf(stderr,COLOR_BLUE format COLOR_END, ##__VA_ARGS__);}while(0)
 #define YELLOW(format, ...) do{ fprintf(stderr,COLOR_YELLOW format COLOR_END, ##__VA_ARGS__);}while(0)
 #define ERR(format, ...) do{ fprintf(stderr,COLOR_RED format COLOR_END, ##__VA_ARGS__);}while(0)

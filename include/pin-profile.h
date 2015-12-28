@@ -20,6 +20,8 @@ public:
 		TYPE_SUM,
 	};
 	static const std::string type_name[TYPE_SUM];
+	static const std::string unmatched_ss_name;
+	static const std::string unaligned_ret_name;
     typedef struct inst_pos{
         F_SIZE instr_offset;
         INT32 image_index;
@@ -40,10 +42,10 @@ private:
     INDIRECT_BRANCH_INFO _indirect_jump_maps;
     INDIRECT_BRANCH_INFO _ret_maps;
 	INDIRECT_BRANCH_INFO _unmatched_ret;//shadow stack
+	INDIRECT_BRANCH_INFO _unaligned_ret;//rsp is not 8byte aligned
 protected:
     void read_image_info(std::ifstream &ifs);
-    void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps, INST_TYPE type);
-	void read_ss_unmatched_info(std::ifstream &ifs);
+    void read_indirect_branch_info(std::ifstream &ifs, std::multimap<INST_POS, INST_POS> &maps, INT32 instr_num);
 public:
     PinProfile(const char *profile_path);
     ~PinProfile();

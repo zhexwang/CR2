@@ -233,7 +233,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
     UINT32 dinstcount = 0;
     if(code[0]==0xdf && code[1]==0xc0){//FFREEP ST0
         _dInst.size = 2;
-        _dInst.opcode = 0;
+        _dInst.opcode = I_UNDEFINED;
         _dInst.flags = 0;
         _dInst.meta &= (~0x7);//FC_NONE        
         _dInst.addr = instr_off;
@@ -290,7 +290,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                 BOOL search_rip_relative_instr = strstr(objdump_line_buf, "rip") ? true : false;
                 BOOL search_sib_relative_instr = strstr(objdump_line_buf, ")") ? true : false;
                 //generate new instruction
-                _dInst.opcode = 0;  
+                _dInst.opcode = I_UNDEFINED;  
                 _dInst.addr = instr_off;
                 _dInst.meta &= (~0x7);//FC_NONE      
                 if(search_rip_relative_instr){
