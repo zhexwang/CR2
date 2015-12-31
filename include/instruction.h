@@ -1,10 +1,11 @@
 #pragma once
 
 #include <string>
-
+#include <vector>
 #include "disasm_common.h"
 #include "type.h"
 #include "utility.h"
+#include "relocation.h"
 
 class Module;
 //TODO: lock prefix
@@ -281,11 +282,11 @@ public:
 				return false;
 		}
 	}
-	BOOL is_lea_rip(UINT8 dest_reg, F_SIZE &target)
+	BOOL is_lea_rip(UINT8 dest_reg, UINT64 &disp)
 	{
 		if((_dInst.opcode==I_LEA) && (_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_SMEM) \
 			&& (_dInst.ops[0].index==dest_reg) && (_dInst.ops[1].index==R_RIP)){
-			target = _dInst.disp + _dInst.addr + _dInst.size;
+			disp = _dInst.disp;
 			return true;
 		}else
 			return false;
@@ -302,6 +303,7 @@ public:
 	{
 		return _dInst.disp;
 	}
+	virtual std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const =0;
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;
@@ -346,6 +348,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class DirectCallInstr: public Instruction
@@ -383,6 +386,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class IndirectCallInstr: public Instruction
@@ -422,6 +426,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class DirectJumpInstr: public Instruction
@@ -461,6 +466,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class IndirectJumpInstr: public Instruction
@@ -502,6 +508,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class ConditionBrInstr: public Instruction
@@ -539,6 +546,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class RetInstr: public Instruction
@@ -580,6 +588,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class SysInstr: public Instruction
@@ -616,7 +625,8 @@ public:
 	BOOL is_ret() const {return false;}
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return true;}
-	BOOL is_cmov() const {return false;}
+	BOOL is_cmov() const {return false;}	
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class CmovInstr: public Instruction
@@ -654,6 +664,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return true;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 
 class IntInstr: public Instruction
@@ -691,5 +702,6 @@ public:
 	BOOL is_int() const {return true;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
 };
 

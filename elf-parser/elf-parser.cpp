@@ -15,7 +15,7 @@ UINT16 ElfParser::_machine;
 
 ElfParser::ElfParser(const char *elf_path): _sym_table(NULL), _symt_num(0), _dynsym_table(NULL), \
     _dynsymt_num(0), _rela_dyn(NULL), _rela_dyn_num(0), _rela_plt(NULL), _rela_plt_num(0), \
-    _str_table(NULL), _dynstr_table(NULL), _pt_load_base(0)
+    _str_table(NULL), _dynstr_table(NULL)
 {
     _elf_path = std::string(elf_path);
     ASSERT(!is_parsed(_elf_path));
@@ -33,11 +33,23 @@ ElfParser::ElfParser(const char *elf_path): _sym_table(NULL), _symt_num(0), _dyn
 		ASSERTM(0, "unkown elf type %d\n", elf_type);
     // 3.read program header
     Elf64_Phdr *Phdr = (Elf64_Phdr*)(_map_start + elf_header->e_phoff);
+    INT32 pt_load_num = 0;
     for(UINT16 idx=0; idx<elf_header->e_phnum; idx++){
-        if((Phdr[idx].p_type==PT_LOAD)&&(Phdr[idx].p_offset==0)){
-            _pt_load_base = Phdr[idx].p_vaddr;
+        if((Phdr[idx].p_type==PT_LOAD)){
+            if(BITS_ARE_SET(Phdr[idx].p_flags, PF_X)){
+                _pt_x_load_base = Phdr[idx].p_vaddr;
+                _pt_x_offset = 0;
+                _pt_x_filesz = Phdr[idx].p_filesz;
+                ASSERT(Phdr[idx].p_offset==0);
+            }else{
+                _pt_d_load_base = Phdr[idx].p_vaddr;
+                _pt_d_offset = Phdr[idx].p_offset;
+                _pt_d_filesz = Phdr[idx].p_filesz;
+            }
+            pt_load_num++;
         }
     }
+    ASSERT(pt_load_num==2);
 	// 4.read sections
 	Elf64_Shdr *SecHdr = (Elf64_Shdr *)(_map_start + elf_header->e_shoff);
 	char *SecHdrStrTab = (char *)(_map_start + SecHdr[elf_header->e_shstrndx].sh_offset);
@@ -180,7 +192,7 @@ void ElfParser::find_function_from_sym_table(const Elf64_Sym *sym_table, const I
             if(sym.st_value==0)
                 continue;
             
-            F_SIZE func_start = _is_so ? sym.st_value : sym.st_value-_pt_load_base;
+            F_SIZE func_start = _is_so ? sym.st_value : sym.st_value-_pt_x_load_base;
             F_SIZE func_end = sym.st_size + func_start;
             
             if(func_start==0 || (func_start>=plt_start && func_start<plt_end))

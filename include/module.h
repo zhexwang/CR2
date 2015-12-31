@@ -8,6 +8,7 @@
 #include "type.h"
 #include "elf-parser.h"
 
+class CodeVariantManager;
 class Instruction;
 class BasicBlock;
 
@@ -94,6 +95,8 @@ protected:
 	BBL_SET _fixed_bbls;
 	BBL_SET _movable_bbls;
 	static const std::string func_type_name[FUNC_TYPE_NUM];
+	//cvm
+	CodeVariantManager *_cvm;
 protected:
 	void split_bbl();
 	void analysis_indirect_jump_targets();
@@ -110,6 +113,8 @@ public:
 	static void split_all_modules_into_bbls();
 	static void analysis_all_modules_indirect_jump_targets();
 	static void separate_movable_bbls_from_all_modules();
+	static void generate_all_relocation_block();
+	static void init_cvm_from_modules();
 	//check functions
 	/*	@Arguments: none
 		@Return value: none
@@ -118,11 +123,14 @@ public:
 	void check_br_targets();
 	//set functions
 	void set_real_load_base(P_ADDRX load_base) {_real_load_base = load_base;}
+	void set_cvm(CodeVariantManager *cvm);
 	//get functions
 	std::string  get_path() const {return _elf->get_elf_path();}
 	std::string  get_name() const {return _elf->get_elf_name();}
 	std::string  get_sym_func_name(F_SIZE offset) const;
 	P_ADDRX      get_pt_load_base() const {return _elf->get_pt_load_base();}
+	P_ADDRX      get_pt_x_load_base() const {return _elf->get_pt_x_load_base();}
+	F_SIZE       convert_pt_addr_to_offset(const P_ADDRX addr) const {return _elf->convert_pt_addr_to_offset(addr);}
  	UINT8       *get_code_offset_ptr(const F_SIZE off) const {return _elf->get_code_offset_ptr(off);}
 	Instruction *get_instr_by_off(const F_SIZE off) const;
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
@@ -164,6 +172,7 @@ public:
 	{
 		return _elf->is_shared_object();
 	}
+	void generate_relocation_block();
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void insert_call_target(const F_SIZE target);

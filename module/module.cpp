@@ -2,6 +2,7 @@
 #include "elf-parser.h"
 #include "instruction.h"
 #include "basic-block.h"
+#include "code_variant_manager.h"
 
 Module::MODULE_MAP Module::_all_module_maps;
 const std::string Module::func_type_name[Module::FUNC_TYPE_NUM] = 
@@ -231,6 +232,51 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
     }
 }
 
+void Module::init_cvm_from_modules()
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+        Module *module = it->second;
+        CodeVariantManager *cvm = new CodeVariantManager(it->first, module->_elf->get_pt_x_size()*3);
+        it->second->set_cvm(cvm);
+    }
+}
+
+void Module::generate_relocation_block()
+{
+    //position fixed bbl
+    for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
+        BasicBlock *bbl = *iter;
+        std::vector<BBL_RELA> rela_info;
+        F_SIZE second;
+        F_SIZE bbl_offset = bbl->get_bbl_offset(second);
+        std::string bbl_template = bbl->generate_code_template(rela_info);
+        RandomBBL *rbbl = new RandomBBL(rela_info, bbl_template);
+        rela_info.clear();
+        _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
+    }
+    //position movable bbl
+    for(BBL_SET::const_iterator iter = _movable_bbls.begin(); iter!=_movable_bbls.end(); iter++){
+        BasicBlock *bbl = *iter;
+        std::vector<BBL_RELA> rela_info;
+        F_SIZE second;
+        F_SIZE bbl_offset = bbl->get_bbl_offset(second);
+        std::string bbl_template = bbl->generate_code_template(rela_info);
+        RandomBBL *rbbl = new RandomBBL(rela_info, bbl_template);
+        rela_info.clear();
+        _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
+    }
+}
+
+void Module::generate_all_relocation_block()
+{
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+        Module *module = it->second;
+        module->generate_relocation_block();
+    }
+}
+
 void Module::insert_bbl(BasicBlock *bbl)
 {
     F_SIZE second_offset = 0;
@@ -268,6 +314,11 @@ void Module::insert_indirect_jump(F_SIZE offset)
     info.table_offset = 0;
     info.table_size = 0;
     _indirect_jump_maps.insert(std::make_pair(offset, info));
+}
+
+void Module::set_cvm(CodeVariantManager *cvm)
+{
+    _cvm = cvm;
 }
 
 void Module::check_br_targets()
@@ -447,6 +498,7 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
 {
     UINT8 jump_dest_reg = R_NONE;
     F_SIZE memset_target = 0;
+    UINT64 disp = 0;
     F_SIZE table_target = 0;
     UINT8 src_reg = R_NONE;
     BOOL lea_dest_src_matched = false, movsx_matched = false, lea_src_imm_matched = false;
@@ -480,12 +532,14 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
                     }
                 }else{
                     if(!lea_src_imm_matched){
-                        if(instr->is_lea_rip(src_reg, table_target)){
+                        if(instr->is_lea_rip(src_reg, disp)){
+                            table_target = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                             lea_src_imm_matched = true;
                         }else
                             return false;
                     }else{
-                        if(instr->is_lea_rip(jump_dest_reg, memset_target)){
+                        if(instr->is_lea_rip(jump_dest_reg, disp)){
+                            memset_target = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                             break;
                         }else
                             return false;
@@ -656,7 +710,7 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
             iter--;
         }
     }
-    F_SIZE entry_offset = disp - get_pt_load_base();
+    F_SIZE entry_offset = convert_pt_addr_to_offset(disp);
     table_base = entry_offset;
     INT64 entry_data = read_8byte_data_in_off(entry_offset);
     do{
@@ -714,7 +768,8 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
         return false;
     UINT8 jump_reg = instr->get_dest_reg();
     iter--;
-    
+
+    UINT64 disp;
     UINT8 base_or_entry_reg1 = R_NONE, base_or_entry_reg2 = R_NONE;
     BOOL find_reg1_base = false, find_reg2_base = false;
     F_SIZE reg1_base = 0, reg2_base = 0;
@@ -744,7 +799,8 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
         }else{//add instr is matched
             if(!movsxd_instr_is_matched){
                 if(!find_reg1_base && instr->is_dest_reg(base_or_entry_reg1)){
-                    if(instr->is_lea_rip(base_or_entry_reg1, reg1_base)){
+                    if(instr->is_lea_rip(base_or_entry_reg1, disp)){
+                        reg1_base = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                         find_reg1_base = true;
                         add_base_reg = base_or_entry_reg1;
                         find_add_base_reg = true;
@@ -758,7 +814,8 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
                     }else
                         return false;
                 }else if(!find_reg2_base && instr->is_dest_reg(base_or_entry_reg2)){
-                    if(instr->is_lea_rip(base_or_entry_reg2, reg2_base)){
+                    if(instr->is_lea_rip(base_or_entry_reg2, disp)){
+                        reg2_base = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                         find_reg2_base = true;
                         add_base_reg = base_or_entry_reg2;
                         find_add_base_reg = true;
@@ -778,9 +835,10 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
             }else{
                 if(!find_add_base_reg){
                     if(instr->is_dest_reg(add_base_reg)){
-                        if(instr->is_lea_rip(add_base_reg, add_base))
+                        if(instr->is_lea_rip(add_base_reg, disp)){
+                            add_base = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                             find_add_base_reg = true;
-                        else if(fault_count<fault_tolerant)
+                        }else if(fault_count<fault_tolerant)
                             fault_count++;
                         else
                             return false;
@@ -788,9 +846,10 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
                 }
                 if(!find_movsxd_sib_base){
                     if(instr->is_dest_reg(movsxd_sib_base_reg)){
-                        if(instr->is_lea_rip(movsxd_sib_base_reg, movsxd_sib_base))
+                        if(instr->is_lea_rip(movsxd_sib_base_reg, disp)){
+                            movsxd_sib_base = convert_pt_addr_to_offset(instr->get_next_paddr(get_pt_x_load_base())+disp);
                             find_movsxd_sib_base = true;
-                        else if(fault_count<fault_tolerant)
+                        }else if(fault_count<fault_tolerant)
                             fault_count++;
                         else
                             return false;
@@ -935,8 +994,8 @@ void Module::dump_bbl_movable_info() const
                     little_gadget++;
             }
         }
-
     }
+    
     INT32 movable_bbl_num = (INT32)_movable_bbls.size();
     INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
     INT32 sum = fixed_bbl_num + movable_bbl_num;

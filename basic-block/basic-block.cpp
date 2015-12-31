@@ -71,6 +71,19 @@ SequenceBBL::~SequenceBBL()
     ;
 }
 
+std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    std::vector<INSTR_RELA> instr_reloc_vec;
+    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++){
+        Instruction *instr = iter->second;
+        std::string instr_template = instr->generate_instr_template(instr_reloc_vec);
+        //relocation
+        
+    }
+    return std::string("badbeef");
+}
+
 RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
@@ -82,6 +95,12 @@ RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 RetBBL::~RetBBL()
 {
     ;
+}
+
+std::string RetBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
 }
 
 DirectCallBBL::DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
@@ -97,6 +116,12 @@ DirectCallBBL::~DirectCallBBL()
     ;
 }
 
+std::string DirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
+}
+
 IndirectCallBBL::IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
@@ -108,6 +133,12 @@ IndirectCallBBL::IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_ca
 IndirectCallBBL::~IndirectCallBBL()
 {
     ;
+}
+
+std::string IndirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
 }
 
 DirectJumpBBL::DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
@@ -123,6 +154,12 @@ DirectJumpBBL::~DirectJumpBBL()
     ;
 }
 
+std::string DirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
+}
+
 IndirectJumpBBL::IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
 	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
 	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
@@ -134,6 +171,12 @@ IndirectJumpBBL::IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_ca
 IndirectJumpBBL::~IndirectJumpBBL()
 {
     ;
+}
+
+std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
 }
 
 ConditionBrBBL::ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
@@ -148,3 +191,10 @@ ConditionBrBBL::~ConditionBrBBL()
 {
     ;
 }
+
+std::string ConditionBrBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    NOT_IMPLEMENTED(wangzhe);
+    return std::string("badbeaf");
+}
+

@@ -59,7 +59,7 @@ void Disassembler::disassemble_module(Module *module)
         // 4.2 get instruction offset
         P_ADDRX instr_addr;
         sscanf(line_buf, "%lx\n", &instr_addr);
-        F_SIZE instr_off = instr_addr - module->get_pt_load_base();
+        F_SIZE instr_off = module->convert_pt_addr_to_offset(instr_addr);
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
         // 4.4 record instruction

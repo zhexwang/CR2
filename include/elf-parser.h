@@ -68,7 +68,12 @@ private:
 	// 5.X sections
 	std::vector<SECTION_REGION> _x_sections;
 	// 6.load
-	P_ADDRX _pt_load_base;
+	P_ADDRX _pt_x_load_base;
+	P_ADDRX _pt_d_load_base;
+	F_SIZE _pt_x_offset;
+	F_SIZE _pt_d_offset;
+	SIZE _pt_x_filesz;
+	SIZE _pt_d_filesz;
 	// 7.dependence elf
 	std::vector<ElfParser*> _dependence_elfs;
 	//legal args
@@ -163,8 +168,27 @@ public:
 		return it->second;
 	}
 	P_ADDRX get_pt_load_base() const
+	{//x load base is elf load base
+		return _pt_x_load_base;
+	}
+	P_ADDRX get_pt_x_load_base() const
 	{
-		return _pt_load_base;
+		return _pt_x_load_base;
+	}
+	F_SIZE convert_pt_addr_to_offset(P_ADDRX addr) const
+	{
+		if(addr>=_pt_x_load_base && addr<(_pt_x_load_base+_pt_x_filesz))
+			return addr - _pt_x_load_base + _pt_x_offset;
+		else if (addr>=_pt_d_load_base && addr<(_pt_d_load_base+_pt_d_filesz))
+			return addr - _pt_d_load_base + _pt_d_offset;
+		else{
+			ASSERTM(0, "Pt addr is not in elf\n");
+			return 0;
+		}
+	}
+	SIZE get_pt_x_size() const
+	{
+		return _pt_x_filesz;
 	}
 	UINT8 *get_code_offset_ptr(const F_SIZE off) const
 	{

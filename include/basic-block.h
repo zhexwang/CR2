@@ -5,7 +5,7 @@
 #include "type.h"
 #include "utility.h"
 #include "instruction.h"
-
+#include "relocation.h"
 
 class BasicBlock
 {
@@ -76,6 +76,7 @@ public:
 	virtual BOOL is_indirect_jump() const =0;
 	virtual BOOL is_condition_branch() const =0;
 	virtual BOOL is_ret() const =0;
+	virtual std::string generate_code_template(std::vector<BBL_RELA> &rela) const =0;
 };
 
 class SequenceBBL : public BasicBlock
@@ -94,6 +95,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class RetBBL : public BasicBlock
@@ -112,6 +114,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return true;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class DirectCallBBL : public BasicBlock
@@ -130,6 +133,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class IndirectCallBBL : public BasicBlock
@@ -148,6 +152,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class DirectJumpBBL : public BasicBlock
@@ -166,6 +171,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class IndirectJumpBBL : public BasicBlock
@@ -184,6 +190,7 @@ public:
 	BOOL is_indirect_jump() const {return true;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 class ConditionBrBBL : public BasicBlock
@@ -202,6 +209,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return true;}
 	BOOL is_ret() const {return false;}
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
 };
 
 
