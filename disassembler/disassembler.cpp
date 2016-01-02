@@ -329,3 +329,18 @@ void Disassembler::dump_file_inst(const Instruction *instr)
 {
     dump_pinst(instr, 0);
 }
+
+void Disassembler::dump_string(const std::string str, P_ADDRX load_base)
+{
+    SIZE disasm_block_size = str.length();
+    _DecodedInst  *disassembled = new _DecodedInst[disasm_block_size];
+    UINT32 decodedInstsCount = 0;
+    distorm_decode(load_base, (const UINT8*)str.c_str(), disasm_block_size, Decode64Bits, \
+        disassembled, disasm_block_size, &decodedInstsCount);
+    for(UINT32 i=0; i<decodedInstsCount; i++){
+     PRINT("%12lx (%02d) %-24s  %s%s%s\n", disassembled[i].offset, disassembled[i].size, disassembled[i].instructionHex.p,\
+         (char*)disassembled[i].mnemonic.p, disassembled[i].operands.length != 0 ? " " : "", (char*)disassembled[i].operands.p);
+    }
+    delete [] disassembled;
+}
+

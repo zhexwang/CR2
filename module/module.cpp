@@ -61,6 +61,15 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
+std::set<F_SIZE> Module::get_indirect_jump_targets() const
+{
+    JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.begin();
+    if(it!=_indirect_jump_maps.end())
+        return it->second.targets;
+    else
+        return std::set<F_SIZE>();
+}
+
 BasicBlock *Module::get_bbl_by_va(const P_ADDRX addr) const
 {
     ASSERTM(_real_load_base!=0, "Forgot setting real load base of module(%s)\n", get_name().c_str());

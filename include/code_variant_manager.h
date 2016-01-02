@@ -6,7 +6,8 @@
 
 #include "relocation.h"
 
-class CodeVariantManager{
+class CodeVariantManager
+{
 public:
 	typedef std::map<F_SIZE, RandomBBL*> RAND_BBL_MAPS;
 	typedef std::map<std::string, CodeVariantManager*> CVM_MAPS;

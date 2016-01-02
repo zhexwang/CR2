@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include "type.h"
 #include "utility.h"
 #include "disasm_common.h"
@@ -40,5 +41,6 @@ public:
 	static void disassemble_all_modules();
 	static void dump_pinst(const Instruction *instr, const P_ADDRX load_base);
 	static void dump_file_inst(const Instruction *instr);
+	static void dump_string(const std::string str, P_ADDRX load_base);
 };
 

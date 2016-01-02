@@ -1,3 +1,4 @@
+#include <limits.h>
 #include "basic-block.h"
 #include "module.h"
 
@@ -175,8 +176,57 @@ IndirectJumpBBL::~IndirectJumpBBL()
 
 std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
 {
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
+    INSTR_RELA_VEC instr_reloc_vec;
+    std::string bbl_template;
+    UINT16 curr_pc_pos = 0;
+    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++){
+        Instruction *instr = iter->second;
+        curr_pc_pos += instr->get_instr_size();
+        SIZE curr_bbl_template_len = bbl_template.length();
+        ASSERTM(curr_bbl_template_len < USHRT_MAX, "bbl template should be not larger than USHRT_MAX\n");
+        std::string instr_template = instr->generate_instr_template(instr_reloc_vec);
+        //normalize the instruction relocations into bbl start relocation
+        for(INSTR_RELA_VEC_ITER it = instr_reloc_vec.begin(); it!=instr_reloc_vec.end(); it++){
+            INSTR_RELA &rela = *it;
+            switch(rela.r_type){
+                case RIP_RELA_TYPE:
+                    {
+                        UINT16 r_addend = curr_pc_pos - rela.r_base_pos - (UINT16)curr_bbl_template_len;
+                        UINT64 r_value = rela.r_value;
+                        UINT16 r_byte_pos = rela.r_byte_pos + (UINT16)curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        BBL_RELA bbl_rela = {RIP_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                case BRANCH_RELA_TYPE:
+                    {
+                        NOT_IMPLEMENTED(wangzhe);
+                    }
+                    break;
+                case SS_RELA_TYPE:
+                    {
+                        NOT_IMPLEMENTED(wangzhe);
+                    }
+                    break;
+                case CC_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + (UINT16)curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, 4, 0, 0};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                default:
+                    ASSERTM(0, "unkown instruction relocation type (%d)!\n", rela.r_type);
+            };
+        }
+        //merge the new instruction template
+        bbl_template += instr_template;
+        //clear the instr_reloc_vec
+        instr_reloc_vec.clear();
+    }
+
+    return bbl_template;
 }
 
 ConditionBrBBL::ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \

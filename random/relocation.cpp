@@ -2,7 +2,7 @@
 #include "utility.h"
 
 RandomBBL::RandomBBL(std::vector<BBL_RELA> reloc_info, std::string random_template)
-    : _reloc_info(reloc_info), _random_template(random_template)
+    : _reloc_table(reloc_info), _random_template(random_template)
 {
     ;
 }

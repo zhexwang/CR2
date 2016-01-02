@@ -12,7 +12,8 @@ class CodeVariantManager;
 class Instruction;
 class BasicBlock;
 
-class Module{
+class Module
+{
     friend class PinProfile;
 	friend class Disassembler;
 public:
@@ -61,7 +62,8 @@ public:
 		std::set<F_SIZE> targets;
 	}JUMPIN_INFO;
 	typedef std::map<F_SIZE, JUMPIN_INFO> JUMPIN_MAP;
-	typedef JUMPIN_MAP::iterator JUMPIN_MAP_ITER;
+	typedef JUMPIN_MAP::iterator JUMPIN_MAP_ITER;	
+	typedef JUMPIN_MAP::const_iterator JUMPIN_MAP_CONST_ITER;
 	//typedef mapping module name to Module* 
 	typedef std::map<std::string, Module*> MODULE_MAP;
 	typedef MODULE_MAP::iterator MODULE_MAP_ITERATOR;
@@ -136,6 +138,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
+	std::set<F_SIZE> get_indirect_jump_targets() const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_instr_cover_offset(F_SIZE offset) const;
