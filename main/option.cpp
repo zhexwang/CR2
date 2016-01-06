@@ -11,6 +11,7 @@ BOOL Options::_has_output_db_file = false;
 BOOL Options::_has_shuffle_img = false;
 BOOL Options::_has_cc_offset = false;
 BOOL Options::_has_ss_offset = false;
+PID Options::_protected_pid = 0;
 
 SIZE Options::_cc_offset = 0;
 SIZE Options::_ss_offset = 0;
@@ -51,6 +52,7 @@ void Options::print_usage(char *cr2)
     PRINT(" -I /path/elf                   Handle elf binary file and its all dependence library.\n");
     PRINT(" -o /path/*.cr2.rela.db         Output relocation block to db file used for shuffle code at runtime.\n");
     PRINT(" -O /path/elf_name.sf.img       Output shuffle code images that contained the shuffle code variants.\n");
+    PRINT(" -P pid                         Specified the protected process id.\n");
     PRINT(" -s $offset                     Specified the shadow stack offset (If you do not specified, the code variant will use gs!).\n");
     PRINT(" -S                             Static Analysis (Disassemble/Recognize IndirectJump Targets/Split BBLs/Classify BBLs).\n");
     PRINT(" -v                             Display version information.\n");
@@ -83,20 +85,24 @@ void Options::check(char *cr2)
             PRINT("%s: invalid option -- when using dynamic shuffle, you should specified the code cache offset (Forget -c)\n", cr2);
             exit(-1);
         }
+        if(_protected_pid==0){
+            PRINT("%s: invalid option -- when using dynamic shuffle, you should specified the protected process id (Forget -P)\n", cr2);
+            exit(-1);
+        }
     }
 }
 
-inline SIZE convert_str_to_num(std::string str)
+inline INT64 convert_str_to_num(std::string str)
 {
     char *stopstring;
-    SIZE offset = (SIZE)strtol(str.c_str(), &stopstring, 0);
+    INT64 offset = strtol(str.c_str(), &stopstring, 0);
     return offset;
 }
 
 void Options::parse(int argc, char** argv)
 {
     //1. process cr2 options
-    const char *opt_string = "Ac:C:Dhi:I:o:O:s:Sv";
+    const char *opt_string = "Ac:C:Dhi:I:o:O:P:s:Sv";
     INT32 ret;
     while((ret = getopt(argc, argv, opt_string))!=-1){
         switch (ret){
@@ -106,7 +112,7 @@ void Options::parse(int argc, char** argv)
                 break;
             case 'c':
                 _has_cc_offset = true;
-                _cc_offset = convert_str_to_num(optarg);
+                _cc_offset = (SIZE)convert_str_to_num(optarg);
                 break;
             case 'C':
                 _need_check_static_analysis = true;
@@ -135,6 +141,9 @@ void Options::parse(int argc, char** argv)
             case 'O':
                 _has_shuffle_img = true;
                 _shuffle_img_path = std::string(optarg);
+                break;
+            case 'P':
+                _protected_pid = (PID)convert_str_to_num(optarg);
                 break;
             case 's':
                 _has_ss_offset = true;

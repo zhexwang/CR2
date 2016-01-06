@@ -42,7 +42,8 @@ int main(int argc, char **argv)
         }
         //generate code variant
         CodeVariantManager::init_code_variant_image(Options::_shuffle_img_path);
-        CodeVariantManager::init_protected_proc_info(0, Options::_cc_offset, Options::_ss_offset);
+        CodeVariantManager::init_protected_proc_info(Options::_protected_pid, Options::_cc_offset, Options::_ss_offset);
+        CodeVariantManager::set_all_real_load_base_to_cvms();
     }
     
     

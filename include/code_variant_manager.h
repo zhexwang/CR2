@@ -2,11 +2,9 @@
 
 #include <map>
 #include <set>
-#include <sys/types.h>
 
 #include "type.h"
 #include "utility.h"
-
 #include "relocation.h"
 
 class CodeVariantManager
@@ -22,28 +20,33 @@ protected:
 	RAND_BBL_MAPS _postion_fixed_rbbl_maps;
 	RAND_BBL_MAPS _movable_rbbl_maps;
 	JMPIN_TARGETS_MAPS _jmpin_rbbl_maps;
-	std::string _elf_path;
+	std::string _elf_real_name;
 	S_ADDRX _cc_start1;
 	S_ADDRX _cc_start2;
 	SIZE _cc_size;
+	P_ADDRX _load_base;
 	//static vars
 	static CVM_MAPS _all_cvm_maps;
 	static std::string _code_variant_img_path;
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
-	static pid_t _protected_proc_pid;
+	static PID _protected_proc_pid;
 public:
-	static void init_protected_proc_info(pid_t proc_pid, SIZE cc_offset, SIZE ss_offset)
+	static void init_protected_proc_info(PID proc_pid, SIZE cc_offset, SIZE ss_offset)
 	{
 		FATAL(ss_offset==0, "Current version only support shadow stack based on offset without gs segmentation!\n");
 		_cc_offset = cc_offset;
 		_ss_offset = ss_offset;
 		_protected_proc_pid = proc_pid;
 	}
-	static void init_code_variant_image(std::string variant_img_path)
+	static void init_code_variant_image(std::string variant_img_path);
+	static void add_cvm(CodeVariantManager *cvm)
 	{
-		_code_variant_img_path = variant_img_path;
+		_all_cvm_maps.insert(std::make_pair(cvm->get_name(), cvm));
 	}
+	//set functions
+	static void set_all_real_load_base_to_cvms();
+	//get functions
 	CodeVariantManager(std::string module_path, SIZE cc_size);
 	~CodeVariantManager();
 	//insert functions
@@ -69,6 +72,18 @@ public:
 	void insert_jmpin_rbbl(F_SIZE src_bbl_offset, TARGET_SET targets)
 	{
 		_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
+	}
+	void set_load_base(P_ADDRX load_base)
+	{
+		_load_base = load_base;
+	}
+	std::string get_name()
+	{
+		return _elf_real_name;
+	}
+	SIZE get_cc_size()
+	{
+		return _cc_size;
 	}
 };
 

@@ -21,6 +21,7 @@ public:
 	static std::string _input_db_file_path;
 	static std::string _output_db_file_path;
 	static std::string _shuffle_img_path;
+	static PID _protected_pid;
 	static void check(char *cr2);
 	static void parse(int argc, char** argv);
 	static void show_system();

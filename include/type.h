@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 typedef bool BOOL;
 typedef char INT8;
@@ -12,6 +13,7 @@ typedef int INT32;
 typedef unsigned int UINT32;
 typedef long long INT64;
 typedef unsigned long long UINT64;
+typedef pid_t PID;
 //define ptr 
 typedef unsigned long S_ADDRX;//shuffle process's address space
 typedef unsigned long P_ADDRX;//protected process's address space
