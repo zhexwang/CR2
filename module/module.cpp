@@ -61,9 +61,9 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets() const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset) const
 {
-    JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.begin();
+    JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
     if(it!=_indirect_jump_maps.end())
         return it->second.targets;
     else
@@ -85,7 +85,7 @@ BOOL Module::is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_pre
         if(consider_prefix){
             ret = _instr_maps.find(target_offset-1);
             if(ret!=_instr_maps.end())
-                return ret->second->has_prefix();
+                return ret->second->has_lock_and_repeat_prefix();
             else
                 return false;
         }else
@@ -102,7 +102,7 @@ BOOL Module::is_bbl_entry_in_off(const F_SIZE target_offset, BOOL consider_prefi
         if(consider_prefix){
             ret = _bbl_maps.find(target_offset-1);
             if(ret != _bbl_maps.end())
-                return ret->second->has_prefix();
+                return ret->second->has_lock_and_repeat_prefix();
             else
                 return false;
         }else
@@ -165,8 +165,17 @@ void Module::erase_instr(Instruction *instr)
     FATAL(erased_num==0, "erase instruction error!\n");
     //erase jmpin
     _indirect_jump_maps.erase(instr_offset);
+    //erase gs segmentation
+    if(instr->has_gs_seg())
+        erase_gs_seg(instr_offset);
     delete instr;
     //TODO:pattern should be maintance!
+}
+
+void Module::erase_gs_seg(F_SIZE instr_offset)
+{
+    ASSERT(_gs_set.find(instr_offset)!=_gs_set.end());
+    _gs_set.erase(instr_offset);
 }
 
 void Module::erase_br_target(const F_SIZE target, const F_SIZE src)
@@ -241,12 +250,12 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
     }
 }
 
-void Module::init_cvm_from_modules()
+void Module::init_cvm_from_modules(UINT8 cc_mulriple)
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
         Module *module = it->second;
-        CodeVariantManager *cvm = new CodeVariantManager(it->first, module->_elf->get_pt_x_size()*3);
+        CodeVariantManager *cvm = new CodeVariantManager(it->first, module->_elf->get_pt_x_size()*cc_mulriple);
         it->second->set_cvm(cvm);
     }
 }
@@ -259,8 +268,15 @@ void Module::generate_relocation_block()
         std::vector<BBL_RELA> rela_info;
         F_SIZE second;
         F_SIZE bbl_offset = bbl->get_bbl_offset(second);
+        F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
+        BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         std::string bbl_template = bbl->generate_code_template(rela_info);
-        RandomBBL *rbbl = new RandomBBL(rela_info, bbl_template);
+        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
+        if(!is_in_plt_in_off(bbl_offset) && bbl->is_indirect_call()){
+            //bbl->dump_in_va(0);
+            //rbbl->dump_template(0);
+            //rbbl->dump_relocation();
+        }
         rela_info.clear();
         _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
     }
@@ -270,10 +286,27 @@ void Module::generate_relocation_block()
         std::vector<BBL_RELA> rela_info;
         F_SIZE second;
         F_SIZE bbl_offset = bbl->get_bbl_offset(second);
+        F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
+        BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         std::string bbl_template = bbl->generate_code_template(rela_info);
-        RandomBBL *rbbl = new RandomBBL(rela_info, bbl_template);
+        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
+        if(!is_in_plt_in_off(bbl_offset) && bbl->is_indirect_call()){
+            //bbl->dump_in_va(0);
+            //rbbl->dump_template(0);
+            //rbbl->dump_relocation();
+        }
         rela_info.clear();
         _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
+    }
+    // recognized indirect jump targets should have trampoline
+    for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
+        JUMPIN_INFO &info = iter->second;
+        F_SIZE jump_offset = iter->first;
+        BasicBlock *src_bbl = find_bbl_cover_offset(jump_offset);
+        F_SIZE second;
+        F_SIZE src_bbl_offset = src_bbl->get_bbl_offset(second);
+        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP)//analysis other
+            _cvm->insert_jmpin_rbbl(src_bbl_offset, info.targets);
     }
 }
 
@@ -325,6 +358,16 @@ void Module::insert_indirect_jump(F_SIZE offset)
     _indirect_jump_maps.insert(std::make_pair(offset, info));
 }
 
+void Module::insert_gs_instr_offset(F_SIZE offset)
+{
+    _gs_set.insert(offset);
+}
+
+BOOL Module::is_gs_used()
+{
+    return _gs_set.size()!=0;
+}
+
 void Module::set_cvm(CodeVariantManager *cvm)
 {
     _cvm = cvm;
@@ -349,24 +392,24 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
     F_SIZE bbl_end = last_instr->get_next_offset();
     SIZE bbl_size = bbl_end - bbl_start;
 
-    BOOL has_prefix = first_instr->has_prefix();    
+    BOOL has_lock_and_repeat_prefix = first_instr->has_lock_and_repeat_prefix();    
     BasicBlock *generated_bbl = NULL;
     
     
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
-        generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_direct_call())
-        generated_bbl = new DirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new DirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_indirect_call())
-        generated_bbl = new IndirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new IndirectCallBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_direct_jump())
-        generated_bbl = new DirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new DirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_indirect_jump())
-        generated_bbl = new IndirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new IndirectJumpBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_condition_branch())
-        generated_bbl = new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new ConditionBrBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_ret())
-        generated_bbl = new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_prefix, instr_maps);
+        generated_bbl = new RetBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else
         ASSERTM(generated_bbl, "unkown instruction list!\n");
     //judge is function entry or not, ignore plt
@@ -436,7 +479,7 @@ void Module::split_bbl()
             /*these two instructions are sequence */
             // 1. find bbl entry (consider prefix instruction and align entries)
             if(is_rela_target(curr_instr_offset) || is_sym_func_entry(curr_instr_offset)|| is_br_target(curr_instr_offset) \
-                || is_aligned || (instr->has_prefix() && (is_br_target(curr_instr_offset+1) \
+                || is_aligned || (instr->has_lock_and_repeat_prefix() && (is_br_target(curr_instr_offset+1) \
                 || is_align_entry(curr_instr_offset+1)))){
                 /* curr instruction is bbl entry, so last instr is bbl exit */
                 // <bbl_entry, last_iterator> is a bbl
@@ -612,7 +655,7 @@ void Module::separate_movable_bbls()
             else
                 _fixed_bbls.insert(bbl); 
         }
-    } 
+    }
 }
 
 void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
@@ -664,15 +707,26 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
         JUMPIN_INFO &info = iter->second;
         
         if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP){
+            BOOL has_movable_bbl = false;
             for(std::set<F_SIZE>::iterator target_iter = info.targets.begin(); target_iter!=info.targets.end(); target_iter++){
-                BasicBlock *target_bbl = find_bbl_by_offset(*target_iter, true);
+                BasicBlock *target_bbl = find_bbl_by_offset(*target_iter, false);
                 ASSERT(target_bbl);
+                if(!is_fixed_bbl(target_bbl))
+                    has_movable_bbl = true;
+                
                 if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
                     continue ;
                 else{
                     _movable_bbls.insert(target_bbl);
                     recursive_to_find_movable_bbls(target_bbl);
                 }
+            }
+
+            if(!has_movable_bbl){//the indirect jump is tail-call!
+                info.type = UNKNOW;
+                info.table_offset = 0;
+                info.table_size = 0;
+                info.targets.clear();
             }
         }else
             ASSERT(info.type!=PLT_JMP);
@@ -725,7 +779,7 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
     do{
         F_SIZE target_instr = entry_data - get_pt_load_base();
         //record jump targets
-        if(is_instr_entry_in_off(target_instr, true)){//makae sure that is real jump target!
+        if(is_instr_entry_in_off(target_instr, false)){//makae sure that is real jump target!
             insert_br_target(target_instr, jump_offset);
             targets.insert(target_instr);
         }else{
@@ -883,16 +937,19 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
         F_SIZE entry_offset = table_base;
         INT32 entry_data = read_4byte_data_in_off(entry_offset);
         F_SIZE first_entry_instr = entry_data + table_base;
-        if(!is_instr_entry_in_off(first_entry_instr, true))//makae sure that is real jump table!
+        if(!is_instr_entry_in_off(first_entry_instr, false))//makae sure that is real jump table!
             return false;
         //calculate jump table size
         do{
             //record jump targets
             F_SIZE target_offset = table_base+entry_data;
-            if(is_instr_entry_in_off(target_offset, true)){
+            if(is_instr_entry_in_off(target_offset, false)){
                 insert_br_target(target_offset, jump_offset);
                 targets.insert(target_offset);
-            }
+            }else{
+                entry_offset -= 4;//Warnning 
+                break;
+            }
             entry_offset += 4;
             entry_data = read_4byte_data_in_off(entry_offset);
         }while(entry_data!=0);
@@ -1030,7 +1087,7 @@ BasicBlock *Module::find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) cons
     else{
         if(consider_prefix){
             it = _bbl_maps.find(offset-1);
-            if(it!=_bbl_maps.end() && it->second->has_prefix())
+            if(it!=_bbl_maps.end() && it->second->has_lock_and_repeat_prefix())
                 return it->second;
             else
                 return NULL;
@@ -1085,7 +1142,7 @@ Instruction *Module::find_instr_by_off(F_SIZE offset, BOOL consider_prefix) cons
     if(instr_it == _instr_maps.end()){
         if(consider_prefix){
             instr_it = _instr_maps.find(offset-1);
-            if(instr_it!=_instr_maps.end() && instr_it->second->has_prefix())
+            if(instr_it!=_instr_maps.end() && instr_it->second->has_lock_and_repeat_prefix())
                 return instr_it->second;
             else
                 return NULL;

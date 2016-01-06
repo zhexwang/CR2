@@ -201,7 +201,7 @@ void PinProfile::check_func_safe() const
         Module *target_module = _module_maps[target.image_index];
         F_SIZE target_offset = target.instr_offset;
         BasicBlock *src_bbl = src_module->find_bbl_cover_offset(src_offset);
-        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, true);
+        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, false);
         ASSERT(src_bbl && target_bbl);
         BOOL is_fixed  = target_module->is_fixed_bbl(target_bbl);
         if(!is_fixed){
@@ -222,7 +222,7 @@ void PinProfile::check_func_safe() const
         Module *target_module = _module_maps[target.image_index];
         F_SIZE target_offset = target.instr_offset;
         BasicBlock *src_bbl = src_module->find_bbl_cover_offset(src_offset);
-        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, true);
+        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, false);
         ASSERT(src_bbl && target_bbl);
         
         if(src_module->is_in_plt_in_off(src_offset)){

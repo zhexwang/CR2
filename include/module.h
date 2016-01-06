@@ -31,6 +31,8 @@ public:
 	typedef BR_TARGETS::iterator BR_TARGETS_ITERATOR;
 	typedef BR_TARGETS::const_iterator BR_TARGETS_CONST_ITER;
 	typedef std::set<F_SIZE> CALL_TARGETS;
+	//gs segmenatation record
+	typedef std::set<F_SIZE> GS_RECORD;
 	//typedef aligned entry
 	typedef std::set<F_SIZE> ALIGN_ENTRY;
 	//typedef likey function entry
@@ -99,6 +101,8 @@ protected:
 	static const std::string func_type_name[FUNC_TYPE_NUM];
 	//cvm
 	CodeVariantManager *_cvm;
+	//record instruction with gs segmentation, because we may use the shadow stack with gs segmentation
+	GS_RECORD _gs_set;
 protected:
 	void split_bbl();
 	void analysis_indirect_jump_targets();
@@ -116,7 +120,7 @@ public:
 	static void analysis_all_modules_indirect_jump_targets();
 	static void separate_movable_bbls_from_all_modules();
 	static void generate_all_relocation_block();
-	static void init_cvm_from_modules();
+	static void init_cvm_from_modules(UINT8 cc_mulriple);
 	//check functions
 	/*	@Arguments: none
 		@Return value: none
@@ -138,7 +142,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets() const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_instr_cover_offset(F_SIZE offset) const;
@@ -175,6 +179,7 @@ public:
 	{
 		return _elf->is_shared_object();
 	}
+	BOOL is_gs_used();
 	void generate_relocation_block();
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
@@ -183,10 +188,12 @@ public:
 	void insert_bbl(BasicBlock *bbl);
 	void insert_align_entry(F_SIZE offset);
 	void insert_indirect_jump(F_SIZE offset);
+	void insert_gs_instr_offset(F_SIZE offset);
 	//erase functions
 	void erase_instr(Instruction *instr);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
+	void erase_gs_seg(F_SIZE instr_offset);
 	//read functions
 	UINT8 read_1byte_code_in_off(const F_SIZE read_offset) const
 	{

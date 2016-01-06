@@ -1,6 +1,8 @@
 #include <limits.h>
 #include "basic-block.h"
 #include "module.h"
+#include "instr_generator.h"
+#include "disassembler.h"
 
 const std::string SequenceBBL::_bbl_type = "SequenceBBL";
 const std::string RetBBL::_bbl_type = "RetBBL";
@@ -11,9 +13,9 @@ const std::string DirectJumpBBL::_bbl_type = "DirectJumpBBL";
 const std::string IndirectJumpBBL::_bbl_type = "IndirectJumpBBL";
 const std::string ConditionBrBBL::_bbl_type = "ConditionBrBBL";
 
-BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps)
-    : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _has_prefix(has_prefix),\
+    : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _has_lock_and_repeat_prefix(has_lock_and_repeat_prefix),\
         _instr_maps(instr_maps)
 {
     _is_nop = true;
@@ -59,127 +61,12 @@ void BasicBlock::dump_in_off() const
     }
 }
 
-SequenceBBL::SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = 0;
-    _fallthrough = start+size;
-}
-
-SequenceBBL::~SequenceBBL()
-{
-    ;
-}
-
-std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
-{
-    NOT_IMPLEMENTED(wangzhe);
-    std::vector<INSTR_RELA> instr_reloc_vec;
-    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++){
-        Instruction *instr = iter->second;
-        std::string instr_template = instr->generate_instr_template(instr_reloc_vec);
-        //relocation
-        
-    }
-    return std::string("badbeef");
-}
-
-RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = 0;
-    _fallthrough = 0;
-}
-
-RetBBL::~RetBBL()
-{
-    ;
-}
-
-std::string RetBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
-{
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
-}
-
-DirectCallBBL::DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = instr_maps.rbegin()->second->get_target_offset();
-    _fallthrough = start+size;
-}
-    
-DirectCallBBL::~DirectCallBBL()
-{
-    ;
-}
-
-std::string DirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
-{
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
-}
-
-IndirectCallBBL::IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = 0;
-    _fallthrough = start+size;
-}
-    
-IndirectCallBBL::~IndirectCallBBL()
-{
-    ;
-}
-
-std::string IndirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
-{
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
-}
-
-DirectJumpBBL::DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = instr_maps.rbegin()->second->get_target_offset();
-    _fallthrough = 0;
-}
-
-DirectJumpBBL::~DirectJumpBBL()
-{
-    ;
-}
-
-std::string DirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
-{
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
-}
-
-IndirectJumpBBL::IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
-{
-    _target = 0;
-    _fallthrough = 0;
-}
-
-IndirectJumpBBL::~IndirectJumpBBL()
-{
-    ;
-}
-
-std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, BasicBlock::INSTR_MAPS &instr_maps)
 {
     INSTR_RELA_VEC instr_reloc_vec;
     std::string bbl_template;
     UINT16 curr_pc_pos = 0;
-    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++){
+    for(BasicBlock::INSTR_MAPS_ITERATOR iter = instr_maps.begin(); iter!=instr_maps.end(); iter++){
         Instruction *instr = iter->second;
         curr_pc_pos += instr->get_instr_size();
         SIZE curr_bbl_template_len = bbl_template.length();
@@ -191,9 +78,9 @@ std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc
             switch(rela.r_type){
                 case RIP_RELA_TYPE:
                     {
-                        UINT16 r_addend = curr_pc_pos - rela.r_base_pos - (UINT16)curr_bbl_template_len;
-                        UINT64 r_value = rela.r_value;
-                        UINT16 r_byte_pos = rela.r_byte_pos + (UINT16)curr_bbl_template_len;
+                        INT16 r_addend = (INT16)curr_pc_pos - (INT16)(rela.r_base_pos + curr_bbl_template_len);
+                        INT64 r_value = rela.r_value;
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         BBL_RELA bbl_rela = {RIP_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
                         reloc_vec.push_back(bbl_rela);
@@ -201,18 +88,65 @@ std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc
                     break;
                 case BRANCH_RELA_TYPE:
                     {
-                        NOT_IMPLEMENTED(wangzhe);
+                        INT16 r_addend = 0 - (INT16)(rela.r_base_pos + curr_bbl_template_len);
+                        INT64 r_value = rela.r_value;
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        BBL_RELA bbl_rela = {BRANCH_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
+                        reloc_vec.push_back(bbl_rela);
                     }
                     break;
                 case SS_RELA_TYPE:
                     {
-                        NOT_IMPLEMENTED(wangzhe);
+                        INT16 r_addend = (INT16)rela.r_value;
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        BBL_RELA bbl_rela = {SS_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
+                        reloc_vec.push_back(bbl_rela);
                     }
                     break;
                 case CC_RELA_TYPE:
                     {
-                        UINT16 r_byte_pos = rela.r_byte_pos + (UINT16)curr_bbl_template_len;
-                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, 4, 0, 0};
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT16 r_addend = (INT16)rela.r_value;
+                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                case LOW32_CC_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT64 r_value = rela.r_value;
+                        BBL_RELA bbl_rela = {LOW32_CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                case HIGH32_CC_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT64 r_value = rela.r_value;
+                        BBL_RELA bbl_rela = {HIGH32_CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                case LOW32_ORG_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT64 r_value = rela.r_value;
+                        BBL_RELA bbl_rela = {LOW32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;
+                case TRAMPOLINE_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT16 r_addend = (INT16)rela.r_value;
+                        BBL_RELA bbl_rela = {TRAMPOLINE_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -229,9 +163,133 @@ std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc
     return bbl_template;
 }
 
+SequenceBBL::SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = 0;
+    _fallthrough = start+size;
+}
+
+SequenceBBL::~SequenceBBL()
+{
+    ;
+}
+
+std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps);
+    SIZE curr_bbl_template_len = bbl_template.length();
+    
+    UINT16 rela_jump_pos;
+    std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(rela_jump_pos, 0);
+    
+    UINT16 r_byte_pos = curr_bbl_template_len + rela_jump_pos;
+    bbl_template += jmp_rel32_template;
+    
+    UINT16 jump_next_pos = bbl_template.length();
+    INT16 r_addend = 0 - (INT16)jump_next_pos;
+    INT64 r_value = (INT64)get_fallthrough_offset();
+    
+    BBL_RELA rela = {BRANCH_RELA_TYPE, r_byte_pos, 4, r_addend, r_value};
+    reloc_vec.push_back(rela);
+    
+    return bbl_template;
+}
+
+RetBBL::RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = 0;
+    _fallthrough = 0;
+}
+
+RetBBL::~RetBBL()
+{
+    ;
+}
+
+std::string RetBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    return generate_instr_templates(reloc_vec, _instr_maps);    
+}
+
+DirectCallBBL::DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = instr_maps.rbegin()->second->get_target_offset();
+    _fallthrough = start+size;
+}
+    
+DirectCallBBL::~DirectCallBBL()
+{
+    ;
+}
+
+std::string DirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    return generate_instr_templates(reloc_vec, _instr_maps);
+}
+
+IndirectCallBBL::IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = 0;
+    _fallthrough = start+size;
+}
+    
+IndirectCallBBL::~IndirectCallBBL()
+{
+    ;
+}
+
+std::string IndirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    return generate_instr_templates(reloc_vec, _instr_maps);    
+}
+
+DirectJumpBBL::DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = instr_maps.rbegin()->second->get_target_offset();
+    _fallthrough = 0;
+}
+
+DirectJumpBBL::~DirectJumpBBL()
+{
+    ;
+}
+
+std::string DirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    return generate_instr_templates(reloc_vec, _instr_maps);
+}
+
+IndirectJumpBBL::IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
+{
+    _target = 0;
+    _fallthrough = 0;
+}
+
+IndirectJumpBBL::~IndirectJumpBBL()
+{
+    ;
+}
+
+std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+{
+    return generate_instr_templates(reloc_vec, _instr_maps);    
+}
+
 ConditionBrBBL::ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, \
-	BOOL has_prefix, BasicBlock::INSTR_MAPS &instr_maps)
-	: BasicBlock(start, size, is_call_proceeded, has_prefix, instr_maps)
+	BOOL has_lock_and_repeat_prefix, BasicBlock::INSTR_MAPS &instr_maps)
+	: BasicBlock(start, size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps)
 {
     _target = instr_maps.rbegin()->second->get_target_offset();
     _fallthrough = start+size;
@@ -244,7 +302,6 @@ ConditionBrBBL::~ConditionBrBBL()
 
 std::string ConditionBrBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
 {
-    NOT_IMPLEMENTED(wangzhe);
-    return std::string("badbeaf");
+    return generate_instr_templates(reloc_vec, _instr_maps);    
 }
 

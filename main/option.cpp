@@ -47,9 +47,9 @@ void Options::print_usage(char *cr2)
     PRINT(" -C /path/*.cr2.indirect.log    Input indirect log file to check static analysis.\n");
     PRINT(" -D                             Dynamic Shuffle (Generate the shuffle code variants).\n");
     PRINT(" -h                             Display help information.\n");
-    PRINT(" -i /path/*.cr2.sa.db           Input the db file of static analysis result.\n");
+    PRINT(" -i /path/*.cr2.rela.db         Input the db file of relocation block.\n");
     PRINT(" -I /path/elf                   Handle elf binary file and its all dependence library.\n");
-    PRINT(" -o /path/*.cr2.sa.db           Output Static Analysis Result to sdb file used for shuffle code at runtime.\n");
+    PRINT(" -o /path/*.cr2.rela.db         Output relocation block to db file used for shuffle code at runtime.\n");
     PRINT(" -O /path/elf_name.sf.img       Output shuffle code images that contained the shuffle code variants.\n");
     PRINT(" -s $offset                     Specified the shadow stack offset (If you do not specified, the code variant will use gs!).\n");
     PRINT(" -S                             Static Analysis (Disassemble/Recognize IndirectJump Targets/Split BBLs/Classify BBLs).\n");
@@ -96,7 +96,7 @@ inline SIZE convert_str_to_num(std::string str)
 void Options::parse(int argc, char** argv)
 {
     //1. process cr2 options
-    const char *opt_string = "Ac:C:Dhi:I:o:O:s:S:v";
+    const char *opt_string = "Ac:C:Dhi:I:o:O:s:Sv";
     INT32 ret;
     while((ret = getopt(argc, argv, opt_string))!=-1){
         switch (ret){

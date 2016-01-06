@@ -5,6 +5,7 @@
 #include "option.h"
 #include "code_variant_manager.h"
 
+UINT8 CodeCacheSizeMulriple = 4;
 int main(int argc, char **argv)
 {
     Options::parse(argc, argv);
@@ -26,22 +27,22 @@ int main(int argc, char **argv)
             profile->check_bbl_safe();
             profile->check_func_safe();
         }
+        //Module::dump_all_indirect_jump_result();
+        //Module::dump_all_bbl_movable_info();
         // 6. generate bbl template
-        // 7. output static analysis dbs 
-        
+        Module::init_cvm_from_modules(CodeCacheSizeMulriple);
+        Module::generate_all_relocation_block();
+        // 7. output static analysis dbs    
     }
 
     if(Options::_dynamic_shuffle){
         if(!Options::_static_analysis){
-            //read input static dbs
+            //read input relocation dbs
             NOT_IMPLEMENTED(wangzhe);
-        }else{
-            //generate code variant
-            Module::init_cvm_from_modules();
-            CodeVariantManager::init_code_variant_image(Options::_shuffle_img_path);
-            CodeVariantManager::init_protected_proc_info(Options::_cc_offset, Options::_ss_offset);
-            Module::generate_all_relocation_block();
         }
+        //generate code variant
+        CodeVariantManager::init_code_variant_image(Options::_shuffle_img_path);
+        CodeVariantManager::init_protected_proc_info(0, Options::_cc_offset, Options::_ss_offset);
     }
     
     

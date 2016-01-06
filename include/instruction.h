@@ -178,9 +178,13 @@ public:
 	{
 		return FLAG_GET_PREFIX(_dInst.flags)==FLAG_REP;
 	}
-	BOOL has_prefix() const
+	BOOL has_lock_and_repeat_prefix() const
 	{
 		return has_lock_prefix()||has_repnz_prefix()||has_rep_prefix();
+	}
+	BOOL has_gs_seg() const
+	{
+		return SEGMENT_GET(_dInst.segment)==R_GS;
 	}
 	// used for match switch jump
 	BOOL is_movsxd_sib_to_reg(UINT8 &sib_base_reg, UINT8 &dest_reg) const

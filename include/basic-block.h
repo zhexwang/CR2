@@ -16,19 +16,19 @@ protected:
 	const F_SIZE _start;
 	const SIZE _size;
 	const BOOL _is_call_proceeded;
-	const BOOL _has_prefix;
+	const BOOL _has_lock_and_repeat_prefix;
 	INSTR_MAPS _instr_maps;
 	BOOL _is_nop;
 	F_SIZE _target;
 	F_SIZE _fallthrough;
 public:
-	BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	virtual ~BasicBlock();
 	//get functions
 	F_SIZE get_bbl_offset(F_SIZE &second_offset) const 
 	{
-		if(_has_prefix)
+		if(_has_lock_and_repeat_prefix)
 			second_offset = _start+1;
 		else
 			second_offset = 0;
@@ -46,7 +46,7 @@ public:
 	INT32 get_instr_num() const {return (INT32)_instr_maps.size();}
 	P_ADDRX get_bbl_paddr(const P_ADDRX load_base, F_SIZE &second_addrx) const 
 	{
-		if(_has_prefix)
+		if(_has_lock_and_repeat_prefix)
 			second_addrx = _start + load_base +1;
 		else
 			second_addrx = 0;
@@ -58,7 +58,7 @@ public:
 	virtual const std::string get_type() const =0;
 	F_SIZE get_target_offset() const {return _target;};
 	F_SIZE get_fallthrough_offset() const {return _fallthrough;};
-	BOOL has_prefix() const {return _has_prefix;}
+	BOOL has_lock_and_repeat_prefix() const {return _has_lock_and_repeat_prefix;}
 	//dump functions
 	void dump_in_va(const P_ADDRX load_base) const;
 	void dump_in_off() const;
@@ -84,7 +84,7 @@ class SequenceBBL : public BasicBlock
 protected:	
 	const static std::string _bbl_type;
 public:
-	SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	SequenceBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~SequenceBBL();
@@ -103,7 +103,7 @@ class RetBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	RetBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~RetBBL();
@@ -122,7 +122,7 @@ class DirectCallBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	DirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~DirectCallBBL();
@@ -141,7 +141,7 @@ class IndirectCallBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	IndirectCallBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~IndirectCallBBL();
@@ -160,7 +160,7 @@ class DirectJumpBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	DirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~DirectJumpBBL();
@@ -179,7 +179,7 @@ class IndirectJumpBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	IndirectJumpBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~IndirectJumpBBL();
@@ -198,7 +198,7 @@ class ConditionBrBBL : public BasicBlock
 protected:
 	const static std::string _bbl_type;
 public:
-	ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_prefix,\
+	ConditionBrBBL(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
 	const std::string get_type() const {return _bbl_type;}
 	~ConditionBrBBL();

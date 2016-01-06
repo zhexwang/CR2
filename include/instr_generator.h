@@ -13,8 +13,29 @@ public:
 	static std::string gen_addq_imm32_to_rsp_mem_instr(UINT16 &imm_pos, INT32 imm32);
 	//retq
 	static std::string gen_retq_instr();
+	//movl disp32(%rsp), $imm32
+	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
+	//movl (%rsp), $imm32
+	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32);
+	//movq disp32(%rsp), $imm32
+	static std::string gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
+	//jmpq disp32(%rsp)
+	static std::string gen_jmpq_rsp_smem(UINT16 &disp32_pos, INT32 disp32);
+	//jmp rel32
+	static std::string gen_jump_rel32_instr(UINT16 &rel32_pos, INT32 rel32);
+	//callnext
+	static std::string gen_call_next();
+	//addq %rsp, $imm8
+	static std::string gen_addq_imm8_to_rsp_instr(UINT16 &imm8_pos, INT8 imm8);
+	//pushq imm32
+	static std::string gen_pushq_imm32_instr(UINT16 &imm32_pos, INT32 imm32);
 	//convert functions
 	static std::string convert_jumpin_mem_to_push_mem(const UINT8 *instcode, UINT32 instsize);
-	
-	
+	static std::string convert_jumpin_reg_to_push_reg(const UINT8 *instcode, UINT32 instsize);
+	static std::string convert_callin_reg_to_push_reg(const UINT8 *instcode, UINT32 instsize);
+	static std::string convert_callin_mem_to_push_mem(const UINT8 *instcode, UINT32 instsize);
+	static std::string convert_cond_br_relx_to_rel32(const UINT8 *instcode, UINT32 inst_size, UINT16 &rel32_pos, INT32 rel32);
+	static std::string convert_cond_br_relx_to_rel8(const UINT8 *instcode, UINT32 inst_size, UINT16 &rel8_pos, INT8 rel8);
+	//modify functions
+	static std::string modify_disp_of_pushq_rsp_mem(std::string src_template, INT8 addend);
 };

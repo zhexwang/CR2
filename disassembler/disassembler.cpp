@@ -88,6 +88,11 @@ void Disassembler::disassemble_module(Module *module)
             // 4.4.5 record direct call target(maybe function)
             if(instr->is_direct_call())
                 module->insert_call_target(instr->get_target_offset());
+            // 4.4.6 record gs segmentation
+            if(instr->has_gs_seg()){
+                module->insert_gs_instr_offset(instr_off);
+                ASSERTM(0, "find the instruction (%lx) with gs segmenation in module %s\n", instr_off, module->get_path().c_str());
+            }
         }
     }
     free(line_buf);
@@ -133,6 +138,11 @@ void Disassembler::disassemble_module(Module *module)
                     new_generated_align_instrs.push_back(new_instr->get_instr_offset());
                 has_nop_instrs = false;
             }
+            // record gs segmentation
+            if(instr->has_gs_seg()){
+                module->insert_gs_instr_offset(erase_end);
+                ASSERTM(0, "find the instruction (%lx) with gs segmenation in module %s\n", erase_end, module->get_path().c_str());
+            }
         };
         if(has_nop_instrs){
             new_generated_align_instrs.push_back(new_instr->get_next_offset());
@@ -175,7 +185,7 @@ fix_again:
             target_offset -= 1;
             Instruction *instr = module->get_instr_by_off(target_offset);
             
-            if(!(instr && instr->has_prefix())){
+            if(!(instr && instr->has_lock_and_repeat_prefix())){
                 target_offset ++;
                 // fix objdump error!
                 std::vector<Instruction *> new_generated_instr;
@@ -296,6 +306,14 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                 if(search_rip_relative_instr){
                     _dInst.size = 10;
                     _dInst.flags = FLAG_RIP_RELATIVE;
+                    _dInst.ops[0].type = O_SMEM;
+                    const char *disp = strstr(objdump_line_buf, "0x");
+                    ASSERT(disp);
+                    char *stopstring;
+                    INT64 disp64 = strtol(disp, &stopstring, 0);
+                    ASSERT(((disp64 > 0 ? disp64 : -disp64) > 0x7f));//dispSize==32
+                    _dInst.dispSize = 32;
+                    _dInst.disp = (UINT64)disp64;
                 }else{
                     _dInst.size = search_sib_relative_instr ? 7 : 6;
                     _dInst.flags = 0;
