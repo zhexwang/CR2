@@ -123,12 +123,23 @@ std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, 
     return std::string((const INT8*)array, 11);
 }
 
+std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
+    UINT16 &disp8_pos, INT8 disp8)
+{
+    UINT8 array[8] = {0xc7, 0x44, 0x24, disp8, imm32&0xff, (imm32>>8)&0xff, (imm32>>16)&0xff, (imm32>>24)&0xff};
+    imm32_pos = 4;
+    disp8_pos = 3;
+    return std::string((const INT8*)array, 8);
+}
+
 std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32)
 {
     UINT8 array[7] = {0xc7, 0x04, 0x24, imm32&0xff, (imm32>>8)&0xff, (imm32>>16)&0xff, (imm32>>24)&0xff};
     imm32_pos = 3;
     return std::string((const INT8*)array, 7);
 }
+
+
 
 std::string InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
     UINT16 &disp32_pos, INT32 disp32)

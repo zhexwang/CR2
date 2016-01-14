@@ -141,6 +141,15 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
+                case HIGH32_ORG_RELA_TYPE:
+                    {
+                        UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
+                        UINT16 r_byte_size = rela.r_byte_size;
+                        INT64 r_value = rela.r_value;
+                        BBL_RELA bbl_rela = {HIGH32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        reloc_vec.push_back(bbl_rela);
+                    }
+                    break;    
                 case TRAMPOLINE_RELA_TYPE:
                     {
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;

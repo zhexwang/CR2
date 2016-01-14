@@ -17,6 +17,8 @@ public:
 	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
 	//movl (%rsp), $imm32
 	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32);
+	//movl disp8(%rsp), $imm32
+	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp8_pos, INT8 disp8);
 	//movq disp32(%rsp), $imm32
 	static std::string gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
 	//jmpq disp32(%rsp)

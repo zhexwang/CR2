@@ -125,8 +125,8 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         /* @Shared Object Address is higher than 32bit
             movl ($ss_offset-0x4)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address
             movl ($ss_offset-0x8)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address  
-            call next                                                           //call next to obtain current return address and sub rsp
-            movl (%rsp), fallthrough_addr_in_origin_code&0xffffffff             //add offset to obtain the original return address
+            pushq fallthrough_addr_in_origin_code&0xffffffff                    //push low32 bits real return address 
+            movl 0x4(%rsp), (fallthrough_addr_in_origin_code>>32)&0xffffffff    //push high32 bits real return address
             jmp  rel32                                                          //jump to the target function
         */
         UINT16 disp32_rela_pos;
@@ -162,22 +162,27 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         instr_template += movl_rra_h32_template;
         //3. third template  
           //3.1 generate the template
-        std::string call_next_template    = InstrGenerator::gen_call_next();
+        std::string pushq_template = InstrGenerator::gen_pushq_imm32_instr(imm32_rela_pos, 0); 
           //3.2 calculate the base pc
-        curr_pc += call_next_template.length();
-          //3.3 merge
-        instr_template += call_next_template;
-        //4. fouth template  
-          //4.1 generate the template
-        std::string movl_ora_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0);
-          //4.2 calculate the base pc
-        curr_pc += movl_ora_l32_template.length();
+        curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
-          //4.3 push relocation information
+          //3.3 push relocation information
         INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
         reloc_vec.push_back(ora_l32_rela_imm32);
+          //3.4 merge
+        instr_template += pushq_template;
+        //4. fouth template  
+          //4.1 generate the template
+        UINT16 disp8_pos;
+        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, 4);
+          //4.2 calculate the base pc
+        curr_pc += movl_ora_h32_template.length();
+        imm32_rela_pos += instr_template.length();
+          //4.3 push relocation information
+        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        reloc_vec.push_back(ora_h32_rela_imm32);
           //4.4 merge
-        instr_template += movl_ora_l32_template;
+        instr_template += movl_ora_h32_template;
     }else{
         /* @Executable Address is lower than 32bit, so we can optimze the code
             movq ($ss_offset-0x8)(%rsp), fallthrough_addr_in_cc&0xffffffff   //shadow stack push real return address
@@ -250,8 +255,8 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         /* @Shared Object Address is higher than 32bit
             movl ($ss_offset-0x4)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address
             movl ($ss_offset-0x8)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address  
-            call next                                                           //call next to obtain current return address and sub rsp
-            movl (%rsp), fallthrough_addr_in_origin_code&0xffffffff             //add offset to obtain the original return address
+            pushq fallthrough_addr_in_origin_code&0xffffffff                    //push low32 bits real return address 
+            movl 0x4(%rsp), (fallthrough_addr_in_origin_code>>32)&0xffffffff    //push high32 bits real return address
             pushq mem                                                           (take care of the base register is rsp)
             addq mem, $cc_offset
             ret
@@ -288,22 +293,27 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         instr_template += movl_rra_h32_template;
         //3. third template  
           //3.1 generate the template
-        std::string call_next_template    = InstrGenerator::gen_call_next();
+        std::string pushq_template = InstrGenerator::gen_pushq_imm32_instr(imm32_rela_pos, 0); 
           //3.2 calculate the base pc
-        curr_pc += call_next_template.length();
-          //3.3 merge
-        instr_template += call_next_template;
-        //4. fouth template  
-          //4.1 generate the template
-        std::string movl_ora_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0);
-          //4.2 calculate the base pc
-        curr_pc += movl_ora_l32_template.length();
+        curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
-          //4.3 push relocation information
+          //3.3 push relocation information
         INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
         reloc_vec.push_back(ora_l32_rela_imm32);
+          //3.4 merge
+        instr_template += pushq_template;
+        //4. fouth template  
+          //4.1 generate the template
+        UINT16 disp8_pos;
+        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, 4);
+          //4.2 calculate the base pc
+        curr_pc += movl_ora_h32_template.length();
+        imm32_rela_pos += instr_template.length();
+          //4.3 push relocation information
+        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        reloc_vec.push_back(ora_h32_rela_imm32);
           //4.4 merge
-        instr_template += movl_ora_l32_template;
+        instr_template += movl_ora_h32_template;
     }else{
         /* @Executable Address is lower than 32bit, so we can optimze the code
             movq ($ss_offset-0x8)(%rsp), fallthrough_addr_in_cc&0xffffffff   //shadow stack push real return address

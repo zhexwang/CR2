@@ -1,0 +1,4 @@
+#!/bin/bash
+/home/wangzhe/pin-2.14/pin  -t /home/wangzhe/pin-2.14/source/tools/profile_indirect/obj-intel64/indirect.so -- \
+$*
+rm -rf pin.log

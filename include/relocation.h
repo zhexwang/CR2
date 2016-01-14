@@ -11,6 +11,7 @@ enum RELA_TYPE{
 	CC_RELA_TYPE,        //indirect jump/indirect call instructions will jump to code cache (+offset)
 	HIGH32_CC_RELA_TYPE, //the direct addreess of the high 32 bits in code cache
 	LOW32_CC_RELA_TYPE,  //the direct address of the low 32 bits in code cache
+	HIGH32_ORG_RELA_TYPE,//the direct address of the high 32 bits in orign code region
 	LOW32_ORG_RELA_TYPE, //the direct address of the low 32 bits in origin code region
 	TRAMPOLINE_RELA_TYPE,//recognized jmpin instructions will jump to their own trampolines 
 	INSTR_RELA_TYPE_NUM,
