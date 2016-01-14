@@ -8,6 +8,8 @@ SRC_DIR := include main elf-parser disassembler module basic-block instruction m
 DISASM_DIR := distorm3
 DISASM_AR := distorm3.a
 
+# kernel module
+MODULE_DIR := kernel-module
 # pin tools
 PIN_DIR := pin-tools
 PIN_SCRIPT := ppin
@@ -53,17 +55,20 @@ DEBUG_DEP += $(foreach d,${SRC_DIR},$(addprefix $(BUILD_DIR)/${DEBUG_DIR}/,$(not
 
 
 PIN_SRC := $(foreach d,${PIN_DIR},$(wildcard ${d}/*.cpp))
-#add include and pin-tools
+MODULE_SRC := $(foreach d,${MODULE_DIR}/src,$(wildcard ${d}/*.c)) 
+MODULE_SRC += $(foreach d,${MODULE_DIR}/src,$(wildcard ${d}/*.h)) 
+#add include pin module 
 EDIT_FILES := $(foreach d,${SRC_DIR},$(wildcard ${d}/*.h))
 EDIT_FILES += ${SRC}
 EDIT_FILES += ${PIN_SRC}
+EDIT_FILES += ${MODULE_SRC}
 
 .PHONY: all clean 
 
 vpath %.cpp $(SRC_DIR)
 vpath %.c $(SRC_DIR)
 
-all: lines disasm pin $(RELEASE_OBJ) ${DEBUG_OBJ}
+all: lines disasm pin lkm $(RELEASE_OBJ) ${DEBUG_OBJ}
 	@mkdir -p ${BIN_DIR}/${RELEASE_DIR} ${BIN_DIR}/${DEBUG_DIR};
 	@if \
 	$(CXX) $(RELEASE_OBJ) $(DISASM_DIR)/$(DISASM_AR)  $(LDFLAGS) -o ${BIN_DIR}/${RELEASE_DIR}/$(BIN)-release $(LIBS);\
@@ -74,6 +79,8 @@ all: lines disasm pin $(RELEASE_OBJ) ${DEBUG_OBJ}
 	then echo -e "[\e[34;1mLINK\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)-debug\e[m"; \
 	else echo -e "[\e[31mFAIL\e[m] \e[33m$(DISASM_DIR)/$(DISASM_AR) $(DEBUG_OBJ)\e[m \e[36m->\e[m \e[32;1m${BIN_DIR}/${DEBUG_DIR}/$(BIN)-debug\e[m"; exit -1; fi;
 
+lkm:
+	@make -s -C $(MODULE_DIR)
 
 disasm:
 	@make -s -C $(DISASM_DIR)
@@ -84,6 +91,8 @@ clean:
 	@make clean -s -C $(DISASM_DIR)
 	@echo -e "[\e[34;1mCLEAN\e[m] \e[33mpin.log $(PIN_LIB) $(PIN_PATH)/obj-intel64/ \e[m"
 	@make clean -s -C ${PIN_PATH} 
+	@echo -e "[\e[34;1mCLEAN\e[m] \e[33mkernel module objects \e[m"
+	@make clean -s -C $(MODULE_DIR)
 
 lines: 
 	@echo -e "[\e[34;1mECHO\e[m] \e[32;1mUntil\e[m \e[37;1m`date`\e[m\e[32;1m, you have already edited\e[m \e[37;1m`cat ${EDIT_FILES} | wc -l`\e[m \e[32;1mlines!\e[m"

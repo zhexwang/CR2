@@ -142,7 +142,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -4};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movl_rra_l32_template;
@@ -156,7 +156,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
           //2.3 push relocation information
         INSTR_RELA rra_h32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_h32_rela_disp32);
-        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_h32_rela_imm32);
           //2.4 merge
         instr_template += movl_rra_h32_template;
@@ -167,7 +167,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
           //3.3 push relocation information
-        INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(ora_l32_rela_imm32);
           //3.4 merge
         instr_template += pushq_template;
@@ -179,7 +179,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         curr_pc += movl_ora_h32_template.length();
         imm32_rela_pos += instr_template.length();
           //4.3 push relocation information
-        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(ora_h32_rela_imm32);
           //4.4 merge
         instr_template += movl_ora_h32_template;
@@ -202,7 +202,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movq_rra_l32_template;
@@ -213,7 +213,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
           //2.3 push relocation information
-        INSTR_RELA pushq_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA pushq_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(pushq_rela_imm32);
           //2.4 merge the template
         instr_template += pushq_template;
@@ -226,7 +226,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
     UINT16 base_pc = instr_template.length() + jmp_rel32_template.length();
     rel32_rela_pos += instr_template.length();
     //3. push relocation information
-    INSTR_RELA jmp_rel32_rela_rel32 = {BRANCH_RELA_TYPE, rel32_rela_pos, 4, base_pc, target_addr}; 
+    INSTR_RELA jmp_rel32_rela_rel32 = {BRANCH_RELA_TYPE, rel32_rela_pos, 4, base_pc, (INT64)target_addr}; 
     reloc_vec.push_back(jmp_rel32_rela_rel32);
     //4. merge
     instr_template += jmp_rel32_template;
@@ -273,7 +273,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -4};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movl_rra_l32_template;
@@ -287,7 +287,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //2.3 push relocation information
         INSTR_RELA rra_h32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_h32_rela_disp32);
-        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_h32_rela_imm32);
           //2.4 merge
         instr_template += movl_rra_h32_template;
@@ -298,7 +298,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
           //3.3 push relocation information
-        INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA ora_l32_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(ora_l32_rela_imm32);
           //3.4 merge
         instr_template += pushq_template;
@@ -310,7 +310,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         curr_pc += movl_ora_h32_template.length();
         imm32_rela_pos += instr_template.length();
           //4.3 push relocation information
-        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA ora_h32_rela_imm32 = {HIGH32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(ora_h32_rela_imm32);
           //4.4 merge
         instr_template += movl_ora_h32_template;
@@ -334,7 +334,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movq_rra_l32_template;
@@ -345,7 +345,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         curr_pc += pushq_template.length();
         imm32_rela_pos += instr_template.length();
           //2.3 push relocation information
-        INSTR_RELA pushq_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, fallthrough_addr};
+        INSTR_RELA pushq_rela_imm32 = {LOW32_ORG_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(pushq_rela_imm32);
           //2.4 merge the template
         instr_template += pushq_template;
@@ -513,7 +513,7 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
                 curr_pc += cbr_template.length();
                 cbr_rel32_rela_pos += instr_template.length();
                 
-                INSTR_RELA cbr_rela = {BRANCH_RELA_TYPE, cbr_rel32_rela_pos, 4, curr_pc, target_offset};
+                INSTR_RELA cbr_rela = {BRANCH_RELA_TYPE, cbr_rel32_rela_pos, 4, curr_pc, (INT64)target_offset};
                 reloc_vec.push_back(cbr_rela);
                 
                 instr_template += cbr_template;
@@ -527,7 +527,7 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
                 curr_pc += cbr_template.length();
                 cbr_rel8_rela_pos += instr_template.length();
 
-                INSTR_RELA cbr_rela = {BRANCH_RELA_TYPE, cbr_rel8_rela_pos, 1, curr_pc, target_offset};
+                INSTR_RELA cbr_rela = {BRANCH_RELA_TYPE, cbr_rel8_rela_pos, 1, curr_pc, (INT64)target_offset};
                 reloc_vec.push_back(cbr_rela);
 
                 instr_template += cbr_template;
@@ -545,7 +545,7 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
     curr_pc += jmp_rel32_template.length();
     jmp_rel32_rela_pos += instr_template.length();
     
-    INSTR_RELA rela = {BRANCH_RELA_TYPE, jmp_rel32_rela_pos, 4, curr_pc, fallthrough_offset};
+    INSTR_RELA rela = {BRANCH_RELA_TYPE, jmp_rel32_rela_pos, 4, curr_pc, (INT64)fallthrough_offset};
     reloc_vec.push_back(rela);
 
     instr_template += jmp_rel32_template;
