@@ -2,6 +2,8 @@
 #include <linux/mman.h>
 #include <asm/uaccess.h>       /* for get_user and put_user */
 #include <linux/sched.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 
 #include "lkm-config.h"
 #include "lkm-utility.h"

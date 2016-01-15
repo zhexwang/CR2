@@ -1,4 +1,5 @@
 #include <linux/unistd.h>
+#include <linux/module.h>
 
 #include "lkm-config.h"
 #include "lkm-hook.h"
