@@ -26,6 +26,17 @@ CXX := g++
 CC := gcc
 EXTRA_FLAGS := -D_GNU_SOURCE 
 
+OS_VERSION = $(shell uname -a)
+ifneq (, $(findstring ${OS_VERSION},"3.13.0-32-generic"))
+  EXTRA_FLAGS += -D_VM
+else
+  ifneq (, $(findstring ${OS_VERSION},"3.2.0-24-generic"))
+    EXTRA_FLAGS += -D_C10
+  else
+    EXTRA_FLAGS += -D_UNK
+  endif
+endif
+
 # release
 RELEASE_FLAGS := -O3 -Wall $(EXTRA_FLAGS)
 RELEASE_DIR := release

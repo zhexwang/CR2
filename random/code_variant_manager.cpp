@@ -11,7 +11,6 @@ CodeVariantManager::CVM_MAPS CodeVariantManager::_all_cvm_maps;
 std::string CodeVariantManager::_code_variant_img_path;
 SIZE CodeVariantManager::_cc_offset = 0;
 SIZE CodeVariantManager::_ss_offset = 0;
-pid_t CodeVariantManager::_protected_proc_pid = 0;
 
 static std::string get_real_path(const char *file_path)
 {
@@ -88,11 +87,11 @@ inline BOOL is_executable(const MapsFileItem *item_ptr)
 }
 
 extern UINT8 CodeCacheSizeMulriple;
-void CodeVariantManager::set_all_real_load_base_to_cvms()
+void CodeVariantManager::parse_proc_maps(PID protected_pid)
 {
     //1.open maps file
     char maps_path[100];
-    sprintf(maps_path, "/proc/%d/maps", _protected_proc_pid);
+    sprintf(maps_path, "/proc/%d/maps", protected_pid);
     FILE *maps_file = fopen(maps_path, "r"); 
     ASSERT(maps_file!=NULL);
     //2.read maps file, line by line
@@ -127,12 +126,11 @@ void CodeVariantManager::set_all_real_load_base_to_cvms()
     fclose(maps_file);
     return ;
 }
-    
-void CodeVariantManager::init_code_variant_image(std::string variant_img_path)
+
+S_ADDRX CodeVariantManager::generate_code_variant(S_ADDRX curr_pc)
 {
-    // 1. set shuffle image path 
-    _code_variant_img_path = variant_img_path;
-    // 2. new the shuffle image file
     
+
+    return curr_pc;
 }
 

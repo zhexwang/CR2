@@ -1,9 +1,7 @@
 #include "lkm-utility.h"
 #include "lkm-monitor.h"
 #include "lkm-hook.h"
-
-extern void init_netlink(void);
-extern void exit_netlink(void);
+#include "lkm-netlink.h"
 
 static int __init cr2_module_init(void)
 {

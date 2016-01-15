@@ -4,14 +4,11 @@
 #include <linux/skbuff.h>
 
 #include "lkm-utility.h"
+#include "lkm-netlink.h"
 
 #define NETLINK_USER 31
 
 struct sock *nl_sk = NULL;
-
-typedef struct{
-	char mesg[256];
-}MESG_BAG;
 
 void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
 {
@@ -19,7 +16,7 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
     struct sk_buff *skb_out;
     int res;
 
-    printk(KERN_INFO "Entering: %s\n", __FUNCTION__);
+    PRINTK("Entering: %s\n", __FUNCTION__);
 
     skb_out = nlmsg_new(sizeof(MESG_BAG), 0);
     if (!skb_out) {
@@ -33,24 +30,33 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
 
     res = nlmsg_unicast(nl_sk, skb_out, target_pid);
     if (res < 0)
-        PRINTK("Error while sending bak to user in %s\n", __FUNCTION__);
+        PRINTK("Error while sending to user in %s\n", __FUNCTION__);
 	else
 		PRINTK("Send mesg to %d\n", target_pid);
 
 }
+
+extern char start_flag;
+long connect_with_shuffle_process = 0;
+int shuffle_process_pid = 0;
+long new_ip = 0;
 
 void nl_recv_msg(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh;
     int pid;
 
-    printk(KERN_INFO "Entering: %s\n", __FUNCTION__);
+    PRINTK("Entering: %s\n", __FUNCTION__);
 
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid; /*pid of sending process */
-    printk(KERN_INFO "Netlink received msg payload from %d\n", pid);
+    PRINTK("Netlink received msg payload from %d\n", pid);
+	shuffle_process_pid = pid;
+	PRINTK("recieve mesg from user: %s\n", ((MESG_BAG*)nlmsg_data(nlh))->mesg);
+	start_flag = 0;
+	new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
+	connect_with_shuffle_process = ((MESG_BAG*)nlmsg_data(nlh))->connect;
 
-	//return *(MESG_BAG*)nlmsg_data(nlh);
 	return ;
 }
 
@@ -68,7 +74,6 @@ void init_netlink(void)
 
 void exit_netlink(void)
 {
-    printk(KERN_INFO "exiting hello module\n");
     netlink_kernel_release(nl_sk);
 }
 

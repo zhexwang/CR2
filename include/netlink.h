@@ -3,7 +3,12 @@
 #include <sys/socket.h>
 #include <linux/netlink.h>
 
+#include "type.h"
+
 typedef struct{
+	int connect;
+	int proctected_procid;
+	long new_ip;
 	char mesg[256];
 }MESG_BAG;
 
@@ -17,9 +22,10 @@ protected:
 	static int sock_fd;
 	static struct msghdr msg;
 public:
-	static void init();
+	static void connect_with_lkm();
 	static void send_mesg(MESG_BAG mesg);
 	static MESG_BAG recv_mesg();
-	static void exit();
+	static void recv_mesg(PID &protected_id, S_ADDRX &curr_pc);
+	static void disconnect_with_lkm();
 };
 

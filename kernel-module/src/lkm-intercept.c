@@ -8,9 +8,10 @@
 #include "lkm-hook.h"
 #include "lkm-monitor.h"
 #include "lkm-cc-ss.h"
+#include "lkm-netlink.h"
 
 char *get_start_encode_and_set_entry(struct task_struct *ts, long program_entry);
-
+volatile char start_flag = 0;
 /*
 	push %rax
 	mov %eax, $231//exit_group
@@ -33,6 +34,24 @@ void set_checkpoint(struct task_struct *ts, long program_entry, long x_region_st
 		put_user(check_instr_encode[index], target_encode+index);
 }
 
+extern int shuffle_process_pid;
+extern long new_ip;
+extern long connect_with_shuffle_process;
+long send_mesg_to_shuffle_process(long curr_ip, int curr_pid)
+{
+	MESG_BAG msg = {1, curr_pid, curr_ip, "set_program_start!"};
+
+	if(connect_with_shuffle_process!=0){
+		nl_send_msg(shuffle_process_pid, msg);
+		start_flag = 1;
+		while(start_flag){
+			schedule();
+		}
+		return new_ip;
+	}else
+		return curr_ip;
+}
+
 //set checkpoint to check the program is begin to execute __start function
 long set_program_start(struct task_struct *ts, char *orig_encode)
 {
@@ -42,6 +61,7 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	long *curr_rsp = (long*)regs->sp;
 	long orig_rax = 0;
 	long curr_ip = regs->ip - 8;
+	long newip = 0;
 	//rewrite the checkpoint encode
 	for(index=0; index<8; index++)
 		put_user(orig_encode[index], target_encode+index);
@@ -51,9 +71,9 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	//protect the origin x region
 
 	//send msg to generate the cc and get the pc
-
+	newip = send_mesg_to_shuffle_process(curr_ip, ts->pid);
 	//set rip according to the rerandomizaton result
-	regs->ip = curr_ip;
+	regs->ip = newip;
 	
 	return orig_rax;
 }

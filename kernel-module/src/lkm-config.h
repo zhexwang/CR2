@@ -9,9 +9,19 @@
 #define SS_MULTIPULE (15)
 
 /*********When you change machine, you should modify the below info ***********/
-const static ulong orig_sys_call_table = (0xffffffff81801400);		// the system call table
+#ifdef _VM
+	const static ulong orig_sys_call_table = (0xffffffff81801400);		// the system call table
+	#define LD_NAME "ld-2.19.so"
+#else
+	#ifdef _C10
+		const static ulong orig_sys_call_table = (0xffffffff81801300);		// the system call table
+		#define LD_NAME "ld-2.15.so"
+	#else
+		#error unkown os version
+	#endif
+#endif
 
-#define LD_NAME "ld-2.19.so"
+
 
 #define MAX_APP_LIST_NUM 10
 //we only support run less than 4 same protected application at the same time

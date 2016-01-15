@@ -4,6 +4,7 @@
 #include "pin-profile.h"
 #include "option.h"
 #include "code_variant_manager.h"
+#include "netlink.h"
 
 UINT8 CodeCacheSizeMulriple = 4;
 int main(int argc, char **argv)
@@ -40,10 +41,16 @@ int main(int argc, char **argv)
             //read input relocation dbs
             NOT_IMPLEMENTED(wangzhe);
         }
+        NetLink::connect_with_lkm();
+        PID proc_id = 0;
+        S_ADDRX curr_pc = 0;
+        NetLink::recv_mesg(proc_id, curr_pc);
         //generate code variant
-        CodeVariantManager::init_code_variant_image(Options::_shuffle_img_path);
-        CodeVariantManager::init_protected_proc_info(Options::_protected_pid, Options::_cc_offset, Options::_ss_offset);
-        CodeVariantManager::set_all_real_load_base_to_cvms();
+        CodeVariantManager::init_protected_proc_info(proc_id, Options::_cc_offset, Options::_ss_offset);
+        S_ADDRX new_pc = CodeVariantManager::generate_code_variant(curr_pc);
+        MESG_BAG msg_content = {1, 0, (long)new_pc, "Generate the code variant!"};
+        NetLink::send_mesg(msg_content);
+        NetLink::disconnect_with_lkm();
     }
     
     

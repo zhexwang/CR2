@@ -17,7 +17,7 @@ struct iovec NetLink::iov = {0};
 int NetLink::sock_fd = -1;
 struct msghdr NetLink::msg = {0};
 
-void NetLink::init()
+void NetLink::connect_with_lkm()
 {
 	// 1.open socket
     sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
@@ -45,6 +45,9 @@ void NetLink::init()
     msg.msg_namelen = sizeof(dest_addr);
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
+    // 6.connect with lkm
+    MESG_BAG mesg = {1, 0, 0, "Shuffle process is ready!"};
+    NetLink::send_mesg(mesg);
 }
 
 void NetLink::send_mesg(MESG_BAG mesg)
@@ -61,8 +64,20 @@ MESG_BAG NetLink::recv_mesg()
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }
 
-void NetLink::exit()
+void NetLink::recv_mesg(PID &protected_id, S_ADDRX &curr_pc)
 {
+	BLUE("Waiting for message from kernel\n");
+    recvmsg(sock_fd, &msg, 0);
+    MESG_BAG mesg = *(MESG_BAG*)NLMSG_DATA(nlh);
+    protected_id = (PID)mesg.proctected_procid;
+    curr_pc = (S_ADDRX)mesg.new_ip;
+    return ;
+}
+
+void NetLink::disconnect_with_lkm()
+{
+    MESG_BAG out_mesg = {0, 0, 0, "Shuffle process is exit!"};
+    send_mesg(out_mesg);
 	free(nlh);
     close(sock_fd);
 }

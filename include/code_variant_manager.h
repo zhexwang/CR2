@@ -30,22 +30,21 @@ protected:
 	static std::string _code_variant_img_path;
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
-	static PID _protected_proc_pid;
 public:
-	static void init_protected_proc_info(PID proc_pid, SIZE cc_offset, SIZE ss_offset)
+	static void init_protected_proc_info(SIZE cc_offset, SIZE ss_offset, PID protected_pid)
 	{
 		FATAL(ss_offset==0, "Current version only support shadow stack based on offset without gs segmentation!\n");
 		_cc_offset = cc_offset;
 		_ss_offset = ss_offset;
-		_protected_proc_pid = proc_pid;
+		parse_proc_maps(protected_pid);
 	}
-	static void init_code_variant_image(std::string variant_img_path);
 	static void add_cvm(CodeVariantManager *cvm)
 	{
 		_all_cvm_maps.insert(std::make_pair(cvm->get_name(), cvm));
 	}
 	//set functions
-	static void set_all_real_load_base_to_cvms();
+	static void parse_proc_maps(PID protected_pid);
+	static S_ADDRX generate_code_variant(S_ADDRX curr_pc);
 	//get functions
 	CodeVariantManager(std::string module_path, SIZE cc_size);
 	~CodeVariantManager();
