@@ -13,6 +13,7 @@ void *orig_stub_execve = NULL;
 CLOSE_FUNC_TYPE orig_close = NULL;
 EXIT_GROUP_FUNC_TYPE orig_exit_group = NULL;
 MPROTECT_FUNC_TYPE orig_mprotect = NULL;
+MUNMAP_FUNC_TYPE orig_munmap = NULL;
 
 //real IO pair syscall
 READ_FUNC_TYPE orig_read = NULL;
@@ -214,6 +215,7 @@ void init_orig_syscall(void)
 	orig_close = get_orig_syscall_addr(__NR_close);
 	orig_exit_group = get_orig_syscall_addr(__NR_exit_group);
 	orig_mprotect = get_orig_syscall_addr(__NR_mprotect);
+	orig_munmap = get_orig_syscall_addr(__NR_munmap);
 	//IO pair
 	orig_read = get_orig_syscall_addr(__NR_read);	
 	orig_write = get_orig_syscall_addr(__NR_write);

@@ -15,6 +15,7 @@ typedef asmlinkage long (*ARCH_PRCTL_FUNC_TYPE)(int code, unsigned long addr);
 typedef asmlinkage long (*CLOSE_FUNC_TYPE)(unsigned int fd);
 typedef asmlinkage long (*EXIT_GROUP_FUNC_TYPE)(ulong error);
 typedef asmlinkage long (*MPROTECT_FUNC_TYPE)(unsigned long start, size_t len, unsigned long prot);
+typedef asmlinkage long (*MUNMAP_FUNC_TYPE)(unsigned long addr, size_t len);
 
 extern MMAP_FUNC_TYPE orig_mmap;
 extern OPEN_FUNC_TYPE orig_open;
@@ -25,6 +26,7 @@ extern void *orig_stub_execve;
 extern CLOSE_FUNC_TYPE orig_close;
 extern EXIT_GROUP_FUNC_TYPE orig_exit_group;
 extern MPROTECT_FUNC_TYPE orig_mprotect;
+extern MUNMAP_FUNC_TYPE orig_munmap;
 
 // ---------------IO pair syscall-----------------------//
 typedef asmlinkage long (*READ_FUNC_TYPE)(unsigned int fd, char __user *buf, size_t count);
