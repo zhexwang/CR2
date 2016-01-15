@@ -4,6 +4,7 @@
 #include "lkm-config.h"
 #include "lkm-hook.h"
 #include "lkm-intercept.h"
+#include "lkm-utility.h"
 
 MMAP_FUNC_TYPE orig_mmap = NULL;
 OPEN_FUNC_TYPE orig_open = NULL;
@@ -74,23 +75,28 @@ static inline void *get_orig_syscall_addr(ulong index)
 }
 //-----------Sys stub execve special handling---------------------//
 static long call_proceeded_addr = 0;
+#ifdef _C10
+	int call_proceded_encode = 0x249c8b4c;//mov 0x98(%rsp),%r11
+#else
+	int call_proceded_encode = 0x24448948;//movq %rax, RAX(%rsp)
+#endif
 
 static void *get_orig_execve_from_stub_execve(void *stub_execve) 
 {
 	int call_offset = 0;
 	
 	char *pos = (char*)stub_execve;
-	//int count = 0;(use to dump stub_execve)
-	//printk(KERN_EMERG  "0x%lx\n", *(long*)pos);
-	while(*(int*)pos!=0x24448948){//movq %rax, RAX(%rsp)
+	//int count = 0;//(use to dump stub_execve)
+	//PRINTK("0x%lx\n", *(long*)pos);
+	while(*(int*)pos!=call_proceded_encode){
 		pos++;
 		//count++;
 		//if(count==8){
-		//	printk(KERN_EMERG  "0x%lx\n", *(long*)pos);
+		//	PRINTK("0x%lx\n", *(long*)pos);
 		//	count=0;
 		//}
 	}
-	//printk(KERN_EMERG  "0x%lx, %d\n", *(long*)((long)pos-count), count);
+	//PRINTK("0x%lx, %d\n", *(long*)((long)pos-count), count);
 	call_proceeded_addr = (long)pos;
 	call_offset = *(int*)(call_proceeded_addr-4);
 	
@@ -113,13 +119,20 @@ void hook_execve_template(void)
 			"movq    %%r13,0x10(%%rsp) \n\t"
 			"movq    %%r14,0x8(%%rsp) \n\t"
 			"movq    %%r15,(%%rsp) \n\t"
+#ifdef _C10
+			"movq    %%gs:0xbf00,%%r11 \n\t"
+#else
 			"movq    %%gs:0xbfc0,%%r11 \n\t"
+#endif			
 			"movq    %%r11,0x98(%%rsp) \n\t"
 			"movq    $0x2b,0xa0(%%rsp) \n\t"
 			"movq    $0x33,0x88(%%rsp) \n\t"
 			"movq    $0xffffffffffffffff,0x58(%%rsp) \n\t"
 			"movq    0x30(%%rsp),%%r11 \n\t"
 			"movq    %%r11,0x90(%%rsp) \n\t"
+#ifdef _C10
+			"movq    %%rsp,%%rcx \n\t"
+#endif
 			"callq   *%0 \n\t"
 			"jmpq    *%1 \n\t"
 			:
@@ -233,29 +246,30 @@ void init_orig_syscall(void)
 	orig_mq_timedreceive = get_orig_syscall_addr(__NR_mq_timedreceive);
 	orig_mq_timedsend = get_orig_syscall_addr(__NR_mq_timedsend);
 	/*
-    printk(KERN_EMERG  "Origin SyS_mmap: %p\n", orig_mmap);	
-    printk(KERN_EMERG  "Origin SyS_open: %p\n", orig_open);
-    printk(KERN_EMERG  "Origin stub_execve: %p\n", orig_stub_execve);
-	printk(KERN_EMERG  "Origin SyS_execve: %p\n", orig_execve);	
-	printk(KERN_EMERG  "Origin SyS_close: %p\n", orig_close);	
-	printk(KERN_EMERG  "Origin SyS_exit_group: %p\n", orig_exit_group);	
-	printk(KERN_EMERG  "Origin SyS_mprotect: %p\n", orig_mprotect);	
-	printk(KERN_EMERG  "Origin SyS_ftruncate: %p\n", orig_ftruncate);
-	printk(KERN_EMERG  "Origin SyS_arch_prctl: %p\n", orig_arch_prctl);
-    printk(KERN_EMERG  "Origin SyS_read: %p\n", orig_read);	
-	printk(KERN_EMERG  "Origin SyS_write: %p\n", orig_write); 
-	printk(KERN_EMERG  "Origin SyS_pread64: %p\n", orig_pread64);	
-	printk(KERN_EMERG  "Origin SyS_pwrite64: %p\n", orig_pwrite64);	
-	printk(KERN_EMERG  "Origin SyS_readv: %p\n", orig_readv);	
-	printk(KERN_EMERG  "Origin SyS_writev: %p\n", orig_writev);	
-	printk(KERN_EMERG  "Origin SyS_ecvfrom: %p\n", orig_recvfrom);	
-	printk(KERN_EMERG  "Origin SyS_sendto: %p\n", orig_sendto);	
-	printk(KERN_EMERG  "Origin SyS_recvmsg: %p\n", orig_recvmsg);	
-	printk(KERN_EMERG  "Origin SyS_sendmsg: %p\n", orig_sendmsg);	
-	printk(KERN_EMERG  "Origin SyS_preadv: %p\n", orig_preadv);	
-	printk(KERN_EMERG  "Origin SyS_pwritev: %p\n", orig_pwritev);	
-	printk(KERN_EMERG  "Origin SyS_mq_timedreceive: %p\n", orig_mq_timedreceive);	
-	printk(KERN_EMERG  "Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);	*/
+    PRINTK("Origin SyS_mmap: %p\n", orig_mmap);	
+	PRINTK("Origin SyS_munmap: %p\n", orig_munmap);	
+    PRINTK("Origin SyS_open: %p\n", orig_open);
+    PRINTK("Origin stub_execve: %p\n", orig_stub_execve);
+	PRINTK("Origin SyS_execve: %p\n", orig_execve);	
+	PRINTK("Origin SyS_close: %p\n", orig_close);	
+	PRINTK("Origin SyS_exit_group: %p\n", orig_exit_group);	
+	PRINTK("Origin SyS_mprotect: %p\n", orig_mprotect);	
+	PRINTK("Origin SyS_ftruncate: %p\n", orig_ftruncate);
+	PRINTK("Origin SyS_arch_prctl: %p\n", orig_arch_prctl);
+    PRINTK("Origin SyS_read: %p\n", orig_read);	
+	PRINTK("Origin SyS_write: %p\n", orig_write); 
+	PRINTK("Origin SyS_pread64: %p\n", orig_pread64);	
+	PRINTK("Origin SyS_pwrite64: %p\n", orig_pwrite64);	
+	PRINTK("Origin SyS_readv: %p\n", orig_readv);	
+	PRINTK("Origin SyS_writev: %p\n", orig_writev);	
+	PRINTK("Origin SyS_ecvfrom: %p\n", orig_recvfrom);	
+	PRINTK("Origin SyS_sendto: %p\n", orig_sendto);	
+	PRINTK("Origin SyS_recvmsg: %p\n", orig_recvmsg);	
+	PRINTK("Origin SyS_sendmsg: %p\n", orig_sendmsg);	
+	PRINTK("Origin SyS_preadv: %p\n", orig_preadv);	
+	PRINTK("Origin SyS_pwritev: %p\n", orig_pwritev);	
+	PRINTK("Origin SyS_mq_timedreceive: %p\n", orig_mq_timedreceive);	
+	PRINTK("Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);	*/
 
 }
 

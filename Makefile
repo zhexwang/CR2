@@ -26,11 +26,14 @@ CXX := g++
 CC := gcc
 EXTRA_FLAGS := -D_GNU_SOURCE 
 
-OS_VERSION = $(shell uname -a)
-ifneq (, $(findstring ${OS_VERSION},"3.13.0-32-generic"))
+OS_VERSION = $(shell uname -r)
+VM_VERSION = 3.13.0-32-generic
+C10_VERSION = 3.2.0-24-generic
+                                                                                                                                                                         
+ifneq (, $(findstring ${VM_VERSION}, ${OS_VERSION}))
   EXTRA_FLAGS += -D_VM
 else
-  ifneq (, $(findstring ${OS_VERSION},"3.2.0-24-generic"))
+  ifneq (, $(findstring ${C10_VERSION}, ${OS_VERSION}))
     EXTRA_FLAGS += -D_C10
   else
     EXTRA_FLAGS += -D_UNK
