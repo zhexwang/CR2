@@ -62,8 +62,12 @@ void nl_recv_msg(struct sk_buff *skb)
 
 void init_netlink(void)
 {
-	struct netlink_kernel_cfg cfg = { .input  = nl_recv_msg};
+#ifdef _C10
+	nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, 0, nl_recv_msg, NULL, THIS_MODULE);
+#else
+	struct netlink_kernel_cfg cfg = { .input = nl_recv_msg};
     nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, &cfg);
+#endif
     if (!nl_sk) {
         PRINTK("Error creating socket in %s\n", __FUNCTION__);
         return ;

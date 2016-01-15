@@ -1,4 +1,5 @@
 #include <linux/string.h>
+#include <asm/uaccess.h>
 #include <linux/sched.h>
 #include <linux/mman.h>
 #include <linux/fs.h>
