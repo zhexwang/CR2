@@ -11,10 +11,6 @@ public:
 	static BOOL _has_elf_path;
 	static BOOL _has_input_db_file;
 	static BOOL _has_output_db_file;
-	static BOOL _has_cc_offset;
-	static BOOL _has_ss_offset;
-	static SIZE _cc_offset;
-	static SIZE _ss_offset;
 	static std::string _check_file;
 	static std::string _elf_path;
 	static std::string _input_db_file_path;

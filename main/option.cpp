@@ -2,21 +2,12 @@
 #include<stdlib.h>
 #include "option.h"
 
-/***************CR2 args******************/
-#define CC_OFFSET (1ul<<30)
-#define SS_OFFSET (1ul<<30)
-
 BOOL Options::_static_analysis = false;
 BOOL Options::_dynamic_shuffle = false;
 BOOL Options::_need_check_static_analysis = false;
 BOOL Options::_has_elf_path = false;
 BOOL Options::_has_input_db_file = false;
 BOOL Options::_has_output_db_file = false;
-BOOL Options::_has_cc_offset = true;
-BOOL Options::_has_ss_offset = true;
-
-SIZE Options::_cc_offset = CC_OFFSET;
-SIZE Options::_ss_offset = SS_OFFSET;
 
 std::string Options::_check_file;
 std::string Options::_elf_path;
@@ -45,14 +36,12 @@ void Options::print_usage(char *cr2)
     PRINT("Usage: %s, Copyright WangZhe | ICT\n", cr2);
     PRINT("Option list (alphabetical order):\n");
     PRINT(" -A                             Static Analysis and Dynamic Shuffle code.\n");
-    PRINT(" -c $offset                     Specified the code cache offset.\n");
     PRINT(" -C /path/*.cr2.indirect.log    Input indirect log file to check static analysis.\n");
     PRINT(" -D                             Dynamic Shuffle (Generate the shuffle code variants).\n");
     PRINT(" -h                             Display help information.\n");
     PRINT(" -i /path/*.cr2.rela.db         Input the db file of relocation block.\n");
     PRINT(" -I /path/elf                   Handle elf binary file and its all dependence library.\n");
     PRINT(" -o /path/*.cr2.rela.db         Output relocation block to db file used for shuffle code at runtime.\n");
-    PRINT(" -s $offset                     Specified the shadow stack offset (If you do not specified, the code variant will use gs!).\n");
     PRINT(" -S                             Static Analysis (Disassemble/Recognize IndirectJump Targets/Split BBLs/Classify BBLs).\n");
     PRINT(" -v                             Display version information.\n");
 }
@@ -76,10 +65,6 @@ void Options::check(char *cr2)
                 exit(-1);
             }
         }
-        if(!_has_cc_offset){
-            PRINT("%s: invalid option -- when using dynamic shuffle, you should specified the code cache offset (Forget -c)\n", cr2);
-            exit(-1);
-        }
     }
 }
 
@@ -100,10 +85,6 @@ void Options::parse(int argc, char** argv)
             case 'A':
                 _static_analysis = true;
                 _dynamic_shuffle = true;
-                break;
-            case 'c':
-                _has_cc_offset = true;
-                _cc_offset = (SIZE)convert_str_to_num(optarg);
                 break;
             case 'C':
                 _need_check_static_analysis = true;
@@ -128,10 +109,6 @@ void Options::parse(int argc, char** argv)
             case 'o':
                 _has_output_db_file = true;
                 _output_db_file_path = std::string(optarg);
-                break;
-            case 's':
-                _has_ss_offset = true;
-                _ss_offset = convert_str_to_num(optarg);
                 break;
             case 'S':
                 _static_analysis = true;

@@ -6,7 +6,10 @@
 #include "code_variant_manager.h"
 #include "netlink.h"
 
-UINT8 CodeCacheSizeMulriple = 4;
+/***************CR2 args******************/
+#define CC_OFFSET (1ul<<30)
+#define SS_OFFSET (1ul<<30)
+
 int main(int argc, char **argv)
 {
     Options::parse(argc, argv);
@@ -28,10 +31,10 @@ int main(int argc, char **argv)
             profile->check_bbl_safe();
             profile->check_func_safe();
         }
-        //Module::dump_all_indirect_jump_result();
-        //Module::dump_all_bbl_movable_info();
+        Module::dump_all_indirect_jump_result();
+        Module::dump_all_bbl_movable_info();
         // 6. generate bbl template
-        Module::init_cvm_from_modules(CodeCacheSizeMulriple);
+        Module::init_cvm_from_modules();
         Module::generate_all_relocation_block();
         // 7. output static analysis dbs    
     }
@@ -46,7 +49,7 @@ int main(int argc, char **argv)
         S_ADDRX curr_pc = 0;
         NetLink::recv_mesg(proc_id, curr_pc);
         //generate code variant
-        CodeVariantManager::init_protected_proc_info(proc_id, Options::_cc_offset, Options::_ss_offset);
+        CodeVariantManager::init_protected_proc_info(proc_id, CC_OFFSET, SS_OFFSET);
         S_ADDRX new_pc = CodeVariantManager::generate_code_variant(curr_pc);
         MESG_BAG msg_content = {1, 0, (long)new_pc, "Generate the code variant!"};
         NetLink::send_mesg(msg_content);

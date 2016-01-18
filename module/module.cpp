@@ -250,13 +250,12 @@ void Module::erase_instr_range(F_SIZE target_offset, F_SIZE next_offset_of_targe
     }
 }
 
-void Module::init_cvm_from_modules(UINT8 cc_mulriple)
+void Module::init_cvm_from_modules()
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
         Module *module = it->second;
-        CodeVariantManager *cvm = new CodeVariantManager(module->get_path(), \
-            X86_PAGE_ALIGN_CEIL(module->_elf->get_pt_x_size())*cc_mulriple);
+        CodeVariantManager *cvm = new CodeVariantManager(module->get_path());
         it->second->set_cvm(cvm);
     }
 }
@@ -273,6 +272,9 @@ void Module::generate_relocation_block()
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         std::string bbl_template = bbl->generate_code_template(rela_info);
         RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
+        bbl->dump_in_off();
+        rbbl->dump_template(bbl_offset);
+        rbbl->dump_relocation();
         rela_info.clear();
         _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
     }

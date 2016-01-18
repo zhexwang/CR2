@@ -120,7 +120,7 @@ public:
 	static void analysis_all_modules_indirect_jump_targets();
 	static void separate_movable_bbls_from_all_modules();
 	static void generate_all_relocation_block();
-	static void init_cvm_from_modules(UINT8 cc_mulriple);
+	static void init_cvm_from_modules();
 	//check functions
 	/*	@Arguments: none
 		@Return value: none

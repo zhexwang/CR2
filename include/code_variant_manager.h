@@ -46,7 +46,7 @@ public:
 	static void parse_proc_maps(PID protected_pid);
 	static S_ADDRX generate_code_variant(S_ADDRX curr_pc);
 	//get functions
-	CodeVariantManager(std::string module_path, SIZE cc_size);
+	CodeVariantManager(std::string module_path);
 	~CodeVariantManager();
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)

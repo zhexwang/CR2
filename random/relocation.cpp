@@ -34,7 +34,10 @@ static std::string type_to_string[] = {
 	TO_STRING_INTERNAL(CC_RELA_TYPE),       //indirect jump/indirect call instructions will jump to code cache (+offset)
 	TO_STRING_INTERNAL(HIGH32_CC_RELA_TYPE),//the direct addreess of the high 32 bits in code cache
 	TO_STRING_INTERNAL(LOW32_CC_RELA_TYPE), //the direct address of the low 32 bits in code cache
-	TO_STRING_INTERNAL(LOW32_ORG_RELA_TYPE),//the direct address of the low 32 bits in origin code region
+    TO_STRING_INTERNAL(HIGH32_ORG_RELA_TYPE),//the direct address of the high 32 bits in orign code region
+    TO_STRING_INTERNAL(LOW32_ORG_RELA_TYPE), //the direct address of the low 32 bits in origin code region
+    TO_STRING_INTERNAL(TRAMPOLINE_RELA_TYPE),//recognized jmpin instructions will jump to their own trampolines 
+
 };
 void RandomBBL::dump_relocation()
 {

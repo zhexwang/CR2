@@ -149,7 +149,7 @@ void remmap_interp_and_allocate_cc(void)
 				main_file_sec_no++;
 			}
 		}
-		
+
 		if(ptr->vm_start==ld_bss_start){
 			ld_regions[ld_region_num].region_start = ptr->vm_start;
 			ld_regions[ld_region_num].region_end = ptr->vm_end;					

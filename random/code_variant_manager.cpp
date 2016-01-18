@@ -56,8 +56,7 @@ static std::string get_real_name_from_path(std::string path)
     return name;
 }
 
-CodeVariantManager::CodeVariantManager(std::string module_path, SIZE cc_size)
-    :  _cc_size(cc_size)
+CodeVariantManager::CodeVariantManager(std::string module_path)
 {
     _elf_real_name = get_real_name_from_path(get_real_path(module_path.c_str()));
     add_cvm(this);
@@ -86,7 +85,6 @@ inline BOOL is_executable(const MapsFileItem *item_ptr)
 		return false;
 }
 
-extern UINT8 CodeCacheSizeMulriple;
 void CodeVariantManager::parse_proc_maps(PID protected_pid)
 {
     //1.open maps file
@@ -113,7 +111,6 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
             CVM_MAPS::iterator iter = _all_cvm_maps.find(maps_record_name);
             ASSERT(iter!=_all_cvm_maps.end());
             iter->second->set_load_base(currentRow->start);
-            ASSERT((currentRow->end - currentRow->start)*CodeCacheSizeMulriple == iter->second->get_cc_size());
         }
         
         //calculate the row number

@@ -9,14 +9,14 @@ static int __init cr2_module_init(void)
 	init_netlink();
 	init_monitor_app_list();
 	init_orig_syscall();
-	//hook_systable();
+	hook_systable();
     return 0;
 }
 
 static void __exit cr2_module_exit(void)
 {
 	exit_netlink();
-	//stop_hook();
+	stop_hook();
     PRINTK("CR2 Kernel Module Uninstall\n");
 }
 
