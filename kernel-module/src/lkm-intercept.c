@@ -120,7 +120,7 @@ void remmap_interp_and_allocate_cc(void)
 	long program_entry = 0;
 	long *program_entry_addr = NULL;
 	int main_file_sec_no = 0;
-#ifdef _C10	
+#ifdef _C10
 	char buf[256];
 	char *ld_path = NULL;
 	int ld_fd = 0;
@@ -188,12 +188,12 @@ void remmap_interp_and_allocate_cc(void)
 		ld_offset = ld_regions[0].region_start - (cc_ret-CC_OFFSET);
 	}else
 		PRINTK("ld.so code cache find failed!\n");
-#ifdef _C10	
+#ifdef _C10
 	//remap the ld.so
 	ld_path = dentry_path_raw(ld_regions[index].file_ptr->f_path.dentry, buf, 256);
 #endif	
 	for(index=0; index<ld_region_num; index++){
-#ifdef _C10		
+#ifdef _C10
 		ld_fd = open_elf(ld_path);
 		map_addr = orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_end-ld_regions[index].region_start,\
 			ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
