@@ -65,7 +65,7 @@ typedef struct{
 	long program_entry;
 	char executed_start;
 	char app_name[256];
-	char start_instr_encode[8];
+	char start_instr_encode[7];
 	IO_MONITOR im;//use to monitor  
 	X_REGION xr[15];
 	STACK_REGION sr[15];	
@@ -173,7 +173,7 @@ char *is_checkpoint(struct task_struct *ts)
 	// 1.find the  encode
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==ts->tgid){
-			if(app_slot_list[index].program_entry == (curr_rip-8))
+			if(app_slot_list[index].program_entry == (curr_rip-CHECK_ENCODE_LEN))
 				return app_slot_list[index].start_instr_encode;
 			else
 				return NULL;

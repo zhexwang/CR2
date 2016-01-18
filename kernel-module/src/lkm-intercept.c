@@ -16,11 +16,10 @@
 char *get_start_encode_and_set_entry(struct task_struct *ts, long program_entry);
 volatile char start_flag = 0;
 /*
-	push %rax
 	mov %eax, $231//exit_group
 	syscall
 */
-char check_instr_encode[8] = {0x50, 0xb8, 0xe7, 0x00, 0x00, 0x00, 0x0f, 0x05};
+char check_instr_encode[CHECK_ENCODE_LEN] = {0xb8, 0xe7, 0x00, 0x00, 0x00, 0x0f, 0x05};
 
 //set checkpoint to check the program is begin to execute __start function
 void set_checkpoint(struct task_struct *ts, long program_entry, long x_region_start, long x_region_end)
@@ -30,10 +29,10 @@ void set_checkpoint(struct task_struct *ts, long program_entry, long x_region_st
 	char *target_encode = (char*)program_entry;
 	orig_mprotect(x_region_start, x_region_end - x_region_start, PROT_READ|PROT_WRITE|PROT_EXEC);
 	//record the original encode
-	for(index=0; index<8; index++)
+	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		get_user(record_encode[index], target_encode+index);
 	//rewrite the checkpoint encode
-	for(index=0; index<8; index++)
+	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(check_instr_encode[index], target_encode+index);
 }
 
@@ -61,16 +60,11 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	int index;
 	char *target_encode = (char*)set_app_start(ts);
 	struct pt_regs *regs = task_pt_regs(ts);
-	long *curr_rsp = (long*)regs->sp;
-	long orig_rax = 0;
-	long curr_ip = regs->ip - 8;
+	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
 	long newip = 0;
 	//rewrite the checkpoint encode
-	for(index=0; index<8; index++)
+	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
-	//pop rax
-	regs->sp += 8;	
-	get_user(orig_rax, curr_rsp);
 	//protect the origin x region
 
 	//send msg to generate the cc and get the pc
@@ -78,7 +72,7 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	//set rip according to the rerandomizaton result
 	regs->ip = newip;
 	
-	return orig_rax;
+	return _START_RAX;
 }
 
 void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struct task_struct *ts)
@@ -154,7 +148,7 @@ void remmap_interp_and_allocate_cc(void)
 				
 				ld_bss_start = ptr->vm_end;
 			}
-
+			
 			if(name && is_monitor_app(name) && ptr->vm_pgoff==0){//main file executable region
 				if(main_file_sec_no==0){
 					cc_ret = allocate_cc_fixed(ptr->vm_start, ptr->vm_end, name);
@@ -162,7 +156,7 @@ void remmap_interp_and_allocate_cc(void)
 					program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
 					get_user(program_entry, program_entry_addr);
 					PRINTK("[LKM:%d]entry=0x%lx\n", current->pid, program_entry);
-					//set_checkpoint(current, program_entry, ptr->vm_start, ptr->vm_end);
+					set_checkpoint(current, program_entry, ptr->vm_start, ptr->vm_end);
 				}
 				main_file_sec_no++;
 			}
