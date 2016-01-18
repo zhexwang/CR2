@@ -81,6 +81,25 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	return orig_rax;
 }
 
+void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struct task_struct *ts)
+{
+	ulong *elf_info = ts->mm->saved_auxv;
+	ulong interp_base = 0;
+	struct pt_regs *regs = task_pt_regs(ts);
+	ulong *auxv_rsp = (long*)regs->sp;
+	while(*elf_info!=orig_interp_base){
+		elf_info++;
+	}
+	*elf_info = new_interp_base;
+
+	while(interp_base!=orig_interp_base){
+		get_user(interp_base, auxv_rsp);
+		auxv_rsp++;
+	}
+	auxv_rsp--;
+	put_user(new_interp_base, auxv_rsp);
+}
+
 //when gdb debug the program, the ld.so is loaded at the very high address, there is no space to allocate the memory
 //so we remap the interpreter and allocate the code cache for main and ld.so by the way
 void remmap_interp_and_allocate_cc(void)
@@ -111,7 +130,6 @@ void remmap_interp_and_allocate_cc(void)
 	char buf[256];
 	char *ld_path = NULL;
 	int ld_fd = 0;
-	ulong off = 0;
 #endif
 
 	do{
@@ -144,7 +162,7 @@ void remmap_interp_and_allocate_cc(void)
 					program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
 					get_user(program_entry, program_entry_addr);
 					PRINTK("[LKM:%d]entry=0x%lx\n", current->pid, program_entry);
-					set_checkpoint(current, program_entry, ptr->vm_start, ptr->vm_end);
+					//set_checkpoint(current, program_entry, ptr->vm_start, ptr->vm_end);
 				}
 				main_file_sec_no++;
 			}
@@ -183,10 +201,8 @@ void remmap_interp_and_allocate_cc(void)
 	for(index=0; index<ld_region_num; index++){
 #ifdef _C10		
 		ld_fd = open_elf(ld_path);
-		off = ld_regions[index].off>0x23000 ? 0x23000 : ld_regions[index].off;
-		
 		map_addr = orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_end-ld_regions[index].region_start,\
-			ld_regions[index].prot, ld_regions[index].flags, ld_fd, off);
+			ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
 		close_elf(ld_fd);
 		orig_munmap(ld_regions[index].region_start, ld_regions[index].region_end-ld_regions[index].region_start);
 #else
@@ -197,6 +213,8 @@ void remmap_interp_and_allocate_cc(void)
 #endif
 		
 	}
+	//scan the aux in the stack and replace the base of interpreter
+	replace_at_base_in_aux(ld_regions[0].region_start, ld_regions[index].region_start-ld_offset, current);
 	
 	regs->ip -= ld_offset;
 }

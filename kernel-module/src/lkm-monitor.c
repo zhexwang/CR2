@@ -32,7 +32,7 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	monitor_app_list[0] = "a.out";
+	monitor_app_list[0] = "libquantum_base.cr2";
 }
 
 //-------------APP slot----------------------//
