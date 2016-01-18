@@ -103,8 +103,12 @@ static void *get_orig_execve_from_stub_execve(void *stub_execve)
 	return (void*)(call_proceeded_addr+(long)call_offset);
 }
 
+#ifdef _C10
+static long intercept_execve_addr = (long)intercept_execve;
+#else
 //the first instruction of hook_execve is callnext, we should cross this instruction!
 static long intercept_execve_addr = (long)intercept_execve+5;
+#endif
 extern void intercept_stub_execve(void); 
 void hook_execve_template(void)
 {
@@ -317,7 +321,7 @@ void stop_hook(void)
 	rewrite_systable_entry(__NR_preadv, (void*)orig_preadv);
 	rewrite_systable_entry(__NR_pwritev, (void*)orig_pwritev);	
 	rewrite_systable_entry(__NR_mq_timedreceive, (void*)orig_mq_timedreceive);	
-	rewrite_systable_entry(__NR_mq_timedsend, (void*)orig_mq_timedsend);	
+	rewrite_systable_entry(__NR_mq_timedsend, (void*)orig_mq_timedsend);
 	
 	return ;	
 }
