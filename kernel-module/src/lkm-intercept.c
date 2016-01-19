@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/file.h>
+#include <linux/vmalloc.h>
 
 #include "lkm-config.h"
 #include "lkm-utility.h"
@@ -81,11 +82,12 @@ void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struc
 	ulong interp_base = 0;
 	struct pt_regs *regs = task_pt_regs(ts);
 	ulong *auxv_rsp = (long*)regs->sp;
+	//interp_base in saved_auxv
 	while(*elf_info!=orig_interp_base){
 		elf_info++;
 	}
 	*elf_info = new_interp_base;
-
+	//interp_base in stack 
 	while(interp_base!=orig_interp_base){
 		get_user(interp_base, auxv_rsp);
 		auxv_rsp++;
@@ -100,7 +102,7 @@ void remmap_interp_and_allocate_cc(void)
 {
 	typedef struct {
 		ulong region_start;
-		ulong region_end;
+		ulong region_len;
 		ulong prot;
 		ulong flags;
 		ulong off;
@@ -114,17 +116,16 @@ void remmap_interp_and_allocate_cc(void)
 	struct vm_area_struct *list = mm->mmap, *ptr = list;
 	struct pt_regs *regs = task_pt_regs(current);
 	long ld_bss_start = 0;
+	void *bk_buf = NULL;
 	long map_addr = 0;
 	long cc_ret = 0;
 	long ld_offset = 0;//ld-linux.so fixed offset
 	long program_entry = 0;
 	long *program_entry_addr = NULL;
 	int main_file_sec_no = 0;
-#ifdef _C10
 	char buf[256];
 	char *ld_path = NULL;
 	int ld_fd = 0;
-#endif
 
 	do{
 		struct file *fil = ptr->vm_file;
@@ -132,7 +133,7 @@ void remmap_interp_and_allocate_cc(void)
 			char* name = fil->f_path.dentry->d_iname;
 			if(name && strcmp(name, LD_NAME)==0){
 				ld_regions[ld_region_num].region_start = ptr->vm_start;
-				ld_regions[ld_region_num].region_end = ptr->vm_end;					
+				ld_regions[ld_region_num].region_len = ptr->vm_end - ptr->vm_start;					
 
 				if(ld_region_num==0)
 					ld_regions[ld_region_num].prot = PROT_READ|PROT_EXEC;
@@ -145,10 +146,9 @@ void remmap_interp_and_allocate_cc(void)
 				ld_regions[ld_region_num].off = ptr->vm_pgoff<<PAGE_SHIFT;
 				ld_regions[ld_region_num].file_ptr = fil;
 				ld_region_num++;
-				
 				ld_bss_start = ptr->vm_end;
 			}
-			
+
 			if(name && is_monitor_app(name) && ptr->vm_pgoff==0){//main file executable region
 				if(main_file_sec_no==0){
 					cc_ret = allocate_cc_fixed(ptr->vm_start, ptr->vm_end, name);
@@ -164,15 +164,13 @@ void remmap_interp_and_allocate_cc(void)
 
 		if(ptr->vm_start==ld_bss_start){
 			ld_regions[ld_region_num].region_start = ptr->vm_start;
-			ld_regions[ld_region_num].region_end = ptr->vm_end;					
+			ld_regions[ld_region_num].region_len = ptr->vm_end - ptr->vm_start;					
 			ld_regions[ld_region_num].prot = PROT_READ|PROT_WRITE;
-			
 			ld_regions[ld_region_num].flags = MAP_PRIVATE|MAP_DENYWRITE|MAP_FIXED;
-			ld_regions[ld_region_num].off = ptr->vm_pgoff<<PAGE_SHIFT;
-			ld_regions[ld_region_num].file_ptr = fil;
+			ld_regions[ld_region_num].off = 0;
+			ld_regions[ld_region_num].file_ptr = NULL;
 			ld_region_num++;
 		}
-
 		//find stack
 		if((ptr->vm_flags&VM_STACK_FLAGS) == VM_STACK_FLAGS){
 			map_addr = allocate_ss_fixed(ptr->vm_start, ptr->vm_end);
@@ -184,34 +182,47 @@ void remmap_interp_and_allocate_cc(void)
 	//unmap all ld.so
 	//code cache map
 	if(ld_regions[0].prot&PROT_EXEC){
-		cc_ret = allocate_cc(ld_regions[0].region_end-ld_regions[0].region_start, LD_NAME);
+		cc_ret = allocate_cc(ld_regions[0].region_len, LD_NAME);
 		ld_offset = ld_regions[0].region_start - (cc_ret-CC_OFFSET);
 	}else
 		PRINTK("ld.so code cache find failed!\n");
-#ifdef _C10
 	//remap the ld.so
 	ld_path = dentry_path_raw(ld_regions[index].file_ptr->f_path.dentry, buf, 256);
-#endif	
 	for(index=0; index<ld_region_num; index++){
-#ifdef _C10
-		ld_fd = open_elf(ld_path);
-		map_addr = orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_end-ld_regions[index].region_start,\
-			ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
-		close_elf(ld_fd);
-		orig_munmap(ld_regions[index].region_start, ld_regions[index].region_end-ld_regions[index].region_start);
+#if 1
+		if(ld_regions[index].file_ptr){
+			ld_fd = open_elf(ld_path);
+			orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_len,\
+				ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
+			close_elf(ld_fd);
+		}else{
+			orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_len, \
+				ld_regions[index].prot, ld_regions[index].flags, -1, 0);
+		}
+
+		if(ld_regions[index].prot&PROT_WRITE){
+			bk_buf = vmalloc(ld_regions[index].region_len);
+			if(!bk_buf)
+				PRINTK("error! failed to allocate memory!\n");
+			copy_from_user(bk_buf, (void*)ld_regions[index].region_start, ld_regions[index].region_len);
+			copy_to_user((void*)(ld_regions[index].region_start-ld_offset), bk_buf, ld_regions[index].region_len);
+			vfree(bk_buf);
+		}
+
+		orig_munmap(ld_regions[index].region_start, ld_regions[index].region_len);
 #else
 		map_addr = vm_mmap(ld_regions[index].file_ptr, ld_regions[index].region_start-ld_offset,
-			ld_regions[index].region_end-ld_regions[index].region_start, ld_regions[index].prot,
+			ld_regions[index].region_len, ld_regions[index].prot,
 				ld_regions[index].flags, ld_regions[index].off);
-		vm_munmap(ld_regions[index].region_start, ld_regions[index].region_end-ld_regions[index].region_start);
-#endif
-		
+		vm_munmap(ld_regions[index].region_start, ld_regions[index].region_len);
+#endif	
 	}
 	//scan the aux in the stack and replace the base of interpreter
 	replace_at_base_in_aux(ld_regions[0].region_start, ld_regions[index].region_start-ld_offset, current);
 	
 	regs->ip -= ld_offset;
 }
+
 
 asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff){
 	long ret = 0;
