@@ -67,7 +67,7 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
 	//protect the origin x region
-
+	PRINTK("Need protect origin x region! not implemented %s\n", __FUNCTION__);
 	//send msg to generate the cc and get the pc
 	newip = send_mesg_to_shuffle_process(curr_ip, ts->pid);
 	//set rip according to the rerandomizaton result
@@ -115,18 +115,21 @@ void remmap_interp_and_allocate_cc(void)
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *list = mm->mmap, *ptr = list;
 	struct pt_regs *regs = task_pt_regs(current);
+#ifdef _VM	
 	long ld_bss_start = 0;
-	void *bk_buf = NULL;
+#endif
 	long map_addr = 0;
 	long cc_ret = 0;
 	long ld_offset = 0;//ld-linux.so fixed offset
 	long program_entry = 0;
 	long *program_entry_addr = NULL;
 	int main_file_sec_no = 0;
+#ifdef _C10	
 	char buf[256];
 	char *ld_path = NULL;
 	int ld_fd = 0;
-
+	void *bk_buf = NULL;
+#endif
 	do{
 		struct file *fil = ptr->vm_file;
 		if(fil != NULL){
@@ -161,7 +164,7 @@ void remmap_interp_and_allocate_cc(void)
 				main_file_sec_no++;
 			}
 		}
-
+#ifdef _VM
 		if(ptr->vm_start==ld_bss_start){
 			ld_regions[ld_region_num].region_start = ptr->vm_start;
 			ld_regions[ld_region_num].region_len = ptr->vm_end - ptr->vm_start;					
@@ -171,6 +174,7 @@ void remmap_interp_and_allocate_cc(void)
 			ld_regions[ld_region_num].file_ptr = NULL;
 			ld_region_num++;
 		}
+#endif
 		//find stack
 		if((ptr->vm_flags&VM_STACK_FLAGS) == VM_STACK_FLAGS){
 			map_addr = allocate_ss_fixed(ptr->vm_start, ptr->vm_end);
@@ -185,20 +189,17 @@ void remmap_interp_and_allocate_cc(void)
 		cc_ret = allocate_cc(ld_regions[0].region_len, LD_NAME);
 		ld_offset = ld_regions[0].region_start - (cc_ret-CC_OFFSET);
 	}else
-		PRINTK("ld.so code cache find failed!\n");
+		PRINTK("ld.so code cache find failed!\n");	
 	//remap the ld.so
-	ld_path = dentry_path_raw(ld_regions[index].file_ptr->f_path.dentry, buf, 256);
+#ifdef _C10	
+	ld_path = dentry_path_raw(ld_regions[0].file_ptr->f_path.dentry, buf, 256);
+#endif
 	for(index=0; index<ld_region_num; index++){
-#if 1
-		if(ld_regions[index].file_ptr){
-			ld_fd = open_elf(ld_path);
-			orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_len,\
-				ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
-			close_elf(ld_fd);
-		}else{
-			orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_len, \
-				ld_regions[index].prot, ld_regions[index].flags, -1, 0);
-		}
+#ifdef _C10
+		ld_fd = open_elf(ld_path);
+		map_addr = orig_mmap(ld_regions[index].region_start-ld_offset, ld_regions[index].region_len,\
+			ld_regions[index].prot, ld_regions[index].flags, ld_fd, ld_regions[index].off);
+		close_elf(ld_fd);
 
 		if(ld_regions[index].prot&PROT_WRITE){
 			bk_buf = vmalloc(ld_regions[index].region_len);

@@ -32,19 +32,19 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	monitor_app_list[0] = "ls";
+	monitor_app_list[0] = "a.out";
 }
 
 //-------------APP slot----------------------//
 
 typedef struct{
-	char has_read;
-	char has_pread64;
-	char has_readv;
-	char has_recvfrom;
-	char has_recvmsg;
-	char has_preadv;
-	char has_mq_timedreceive;
+	char has_write;
+	char has_pwrite64;
+	char has_writev;
+	char has_sendto;
+	char has_sendmsg;
+	char has_pwritev;
+	char has_mq_timedsend;
 }IO_MONITOR;
 
 typedef struct{
@@ -111,13 +111,13 @@ void set_io_in(struct task_struct *ts, int sys_no, char value)
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==ts->tgid){
 			switch(sys_no){
-				case __NR_read: app_slot_list[index].im.has_read = value; return;
-				case __NR_pread64: app_slot_list[index].im.has_pread64 = value; return;
-				case __NR_readv: app_slot_list[index].im.has_readv = value; return;
-				case __NR_recvfrom: app_slot_list[index].im.has_recvfrom = value; return;
-				case __NR_recvmsg: app_slot_list[index].im.has_recvmsg = value; return;
-				case __NR_preadv: app_slot_list[index].im.has_preadv = value; return;
-				case __NR_mq_timedreceive: app_slot_list[index].im.has_mq_timedreceive = value; return;
+				case __NR_write: app_slot_list[index].im.has_write = value; return;
+				case __NR_pwrite64: app_slot_list[index].im.has_pwrite64 = value; return;
+				case __NR_writev: app_slot_list[index].im.has_writev = value; return;
+				case __NR_sendto: app_slot_list[index].im.has_sendto = value; return;
+				case __NR_sendmsg: app_slot_list[index].im.has_sendmsg = value; return;
+				case __NR_pwritev: app_slot_list[index].im.has_pwritev = value; return;
+				case __NR_mq_timedsend: app_slot_list[index].im.has_mq_timedsend = value; return;
 				default:
 					break;
 			}
@@ -134,13 +134,13 @@ char has_io_in(struct task_struct *ts, int sys_no)
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==ts->tgid){
 			switch(sys_no){
-				case __NR_read: return app_slot_list[index].im.has_read;
-				case __NR_pread64: return app_slot_list[index].im.has_pread64;
-				case __NR_readv: return app_slot_list[index].im.has_readv;
-				case __NR_recvfrom: return app_slot_list[index].im.has_recvfrom;
-				case __NR_recvmsg: return app_slot_list[index].im.has_recvmsg;
-				case __NR_preadv: return app_slot_list[index].im.has_preadv;
-				case __NR_mq_timedreceive: return app_slot_list[index].im.has_mq_timedreceive;
+				case __NR_write: return app_slot_list[index].im.has_write;
+				case __NR_pwrite64: return app_slot_list[index].im.has_pwrite64;
+				case __NR_writev: return app_slot_list[index].im.has_writev;
+				case __NR_sendto: return app_slot_list[index].im.has_sendto;
+				case __NR_sendmsg: return app_slot_list[index].im.has_sendmsg;
+				case __NR_pwritev: return app_slot_list[index].im.has_pwritev;
+				case __NR_mq_timedsend: return app_slot_list[index].im.has_mq_timedsend;
 				default:
 					break;
 			}
@@ -268,8 +268,9 @@ void rerandomization(struct task_struct *ts)
 		}
 	}
 	// 2.send msg to shuffle process
-
+	//TODO:
+	PRINTK("Rerandomization need send msg to shuffle process! not implemented!\n");
 	// 3.get msg of shuffle process
-
+	PRINTK("Rerandomization need recieve msg from shuffle process! not implemented!\n");
 }
 
