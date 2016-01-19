@@ -149,7 +149,9 @@ void remmap_interp_and_allocate_cc(void)
 				ld_regions[ld_region_num].off = ptr->vm_pgoff<<PAGE_SHIFT;
 				ld_regions[ld_region_num].file_ptr = fil;
 				ld_region_num++;
+#ifdef _VM				
 				ld_bss_start = ptr->vm_end;
+#endif
 			}
 
 			if(name && is_monitor_app(name) && ptr->vm_pgoff==0){//main file executable region
