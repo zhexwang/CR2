@@ -46,37 +46,42 @@ void NetLink::connect_with_lkm()
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
     // 6.connect with lkm
-    MESG_BAG mesg = {1, 0, 0, "Shuffle process is ready!"};
+    MESG_BAG mesg = {1, 0, 0, 0, 0, "Shuffle process is ready!"};
     NetLink::send_mesg(mesg);
 }
 
 void NetLink::send_mesg(MESG_BAG mesg)
 {
     memcpy(NLMSG_DATA(nlh), &mesg, sizeof(MESG_BAG));
-    BLUE("Sending message to kernel\n");
+    nlh->nlmsg_pid = getpid();
+    BLUE("Sending message to kernel: %s\n", mesg.mesg);
     sendmsg(sock_fd, &msg, 0);
 }
 
 MESG_BAG NetLink::recv_mesg()
 {
-	BLUE("Waiting for message from kernel\n");
+	BLUE("Waiting for message from kernel: ");
     recvmsg(sock_fd, &msg, 0);
+    BLUE("%s\n", (*(MESG_BAG*)NLMSG_DATA(nlh)).mesg);
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }
 
-void NetLink::recv_mesg(PID &protected_id, S_ADDRX &curr_pc)
+void NetLink::recv_mesg(PID &protected_id, S_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset)
 {
-	BLUE("Waiting for message from kernel\n");
+	BLUE("Waiting for message from kernel: ");
     recvmsg(sock_fd, &msg, 0);
     MESG_BAG mesg = *(MESG_BAG*)NLMSG_DATA(nlh);
     protected_id = (PID)mesg.proctected_procid;
     curr_pc = (S_ADDRX)mesg.new_ip;
+    cc_offset = mesg.cc_offset;
+    ss_offset = mesg.ss_offset;
+    BLUE("%s\n", mesg.mesg);
     return ;
 }
 
 void NetLink::disconnect_with_lkm()
 {
-    MESG_BAG out_mesg = {0, 0, 0, "Shuffle process is exit!"};
+    MESG_BAG out_mesg = {0, 0, 0, 0, 0, "Shuffle process is exit!"};
     send_mesg(out_mesg);
 	free(nlh);
     close(sock_fd);

@@ -20,4 +20,6 @@ typedef unsigned long P_ADDRX;//protected process's address space
 //define size
 typedef size_t SIZE;
 typedef size_t F_SIZE;//file size
+typedef size_t S_SIZE;
+typedef size_t P_SIZE;
 

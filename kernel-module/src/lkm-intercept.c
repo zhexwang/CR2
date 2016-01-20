@@ -42,7 +42,7 @@ extern long new_ip;
 extern long connect_with_shuffle_process;
 long send_mesg_to_shuffle_process(long curr_ip, int curr_pid)
 {
-	MESG_BAG msg = {1, curr_pid, curr_ip, "set_program_start!"};
+	MESG_BAG msg = {1, curr_pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and generate code variant!"};
 
 	if(connect_with_shuffle_process!=0){
 		nl_send_msg(shuffle_process_pid, msg);

@@ -21,7 +21,7 @@ INCLUDE := -I./include -I./${DISASM_DIR}/include
 
 # compiler and flags
 LDFLAGS := 
-LIBS := 
+LIBS := -lrt
 CXX := g++ 
 CC := gcc
 EXTRA_FLAGS := -D_GNU_SOURCE 

@@ -96,8 +96,8 @@ protected:
 	//special handling 
 	F_SIZE _setjmp_plt;
 	//bbl's entry must be fixed
-	BBL_SET _fixed_bbls;
-	BBL_SET _movable_bbls;
+	BBL_SET _pos_fixed_bbls;
+	BBL_SET _pos_movable_bbls;
 	static const std::string func_type_name[FUNC_TYPE_NUM];
 	//cvm
 	CodeVariantManager *_cvm;
@@ -189,6 +189,8 @@ public:
 	void insert_align_entry(F_SIZE offset);
 	void insert_indirect_jump(F_SIZE offset);
 	void insert_gs_instr_offset(F_SIZE offset);
+	void insert_fixed_bbl(BasicBlock *bbl);
+	void insert_movable_bbl(BasicBlock *bbl);
 	//erase functions
 	void erase_instr(Instruction *instr);
 	void erase_br_target(const F_SIZE target, const F_SIZE src);

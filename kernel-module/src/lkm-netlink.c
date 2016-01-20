@@ -16,8 +16,6 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
     struct sk_buff *skb_out;
     int res;
 
-    PRINTK("Entering: %s\n", __FUNCTION__);
-
     skb_out = nlmsg_new(sizeof(MESG_BAG), 0);
     if (!skb_out) {
         PRINTK("Failed to allocate new skb in %s\n", __FUNCTION__);
@@ -32,8 +30,7 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
     if (res < 0)
         PRINTK("Error while sending to user in %s\n", __FUNCTION__);
 	else
-		PRINTK("Send mesg to %d\n", target_pid);
-
+		PRINTK("Send mesg to user(%d): %s\n", target_pid, mesg_bag.mesg);
 }
 
 extern char start_flag;
@@ -45,14 +42,10 @@ void nl_recv_msg(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh;
     int pid;
-
-    PRINTK("Entering: %s\n", __FUNCTION__);
-
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid; /*pid of sending process */
-    PRINTK("Netlink received msg payload from %d\n", pid);
 	shuffle_process_pid = pid;
-	PRINTK("recieve mesg from user: %s\n", ((MESG_BAG*)nlmsg_data(nlh))->mesg);
+	PRINTK("Recieve mesg from user(%d): %s\n", pid, ((MESG_BAG*)nlmsg_data(nlh))->mesg);
 	start_flag = 0;
 	new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
 	connect_with_shuffle_process = ((MESG_BAG*)nlmsg_data(nlh))->connect;

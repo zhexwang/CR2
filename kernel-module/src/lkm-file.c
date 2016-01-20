@@ -22,7 +22,7 @@ int open_shm_file(const char *shm_path)
 	//open file
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
-	shm_fd = orig_open(shm_path, O_RDWR|O_CREAT, 0644);
+	shm_fd = orig_open(shm_path, O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0644);
 	set_fs(oldfs);
 	//printk(KERN_EMERG "[LKM]open_shm:fd=%d %s\n", shm_fd, shm_path);
 	return shm_fd;

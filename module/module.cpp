@@ -263,7 +263,7 @@ void Module::init_cvm_from_modules()
 void Module::generate_relocation_block()
 {
     //position fixed bbl
-    for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
+    for(BBL_SET::const_iterator iter = _pos_fixed_bbls.begin(); iter!=_pos_fixed_bbls.end(); iter++){
         BasicBlock *bbl = *iter;
         std::vector<BBL_RELA> rela_info;
         F_SIZE second;
@@ -272,14 +272,11 @@ void Module::generate_relocation_block()
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         std::string bbl_template = bbl->generate_code_template(rela_info);
         RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
-        bbl->dump_in_off();
-        rbbl->dump_template(bbl_offset);
-        rbbl->dump_relocation();
         rela_info.clear();
         _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
     }
     //position movable bbl
-    for(BBL_SET::const_iterator iter = _movable_bbls.begin(); iter!=_movable_bbls.end(); iter++){
+    for(BBL_SET::const_iterator iter = _pos_movable_bbls.begin(); iter!=_pos_movable_bbls.end(); iter++){
         BasicBlock *bbl = *iter;
         std::vector<BBL_RELA> rela_info;
         F_SIZE second;
@@ -289,7 +286,7 @@ void Module::generate_relocation_block()
         std::string bbl_template = bbl->generate_code_template(rela_info);
         RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
         rela_info.clear();
-        _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
+        _cvm->insert_movable_random_bbl(bbl_offset, rbbl);
     }
     // recognized indirect jump targets should have trampoline
     for(JUMPIN_MAP_ITER iter = _indirect_jump_maps.begin(); iter!=_indirect_jump_maps.end(); iter++){
@@ -356,6 +353,16 @@ void Module::insert_gs_instr_offset(F_SIZE offset)
     _gs_set.insert(offset);
 }
 
+void Module::insert_fixed_bbl(BasicBlock *bbl)
+{
+    _pos_fixed_bbls.insert(bbl);
+}
+
+void Module::insert_movable_bbl(BasicBlock *bbl)
+{
+    _pos_movable_bbls.insert(bbl);
+}
+
 BOOL Module::is_gs_used()
 {
     return _gs_set.size()!=0;
@@ -388,7 +395,6 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
     BOOL has_lock_and_repeat_prefix = first_instr->has_lock_and_repeat_prefix();    
     BasicBlock *generated_bbl = NULL;
     
-    
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
         generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_direct_call())
@@ -407,20 +413,20 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
         ASSERTM(generated_bbl, "unkown instruction list!\n");
     //judge is function entry or not, ignore plt
     if(is_in_plt_in_off(bbl_start)){
-        _fixed_bbls.insert(generated_bbl);
+        insert_fixed_bbl(generated_bbl);
     }else if(is_call_setjmp_proceeded){//setjmp proceeded must be fixed
         ASSERT(is_call_proceeded);
         _maybe_func_entry.insert(std::make_pair(generated_bbl, RELA_TARGET));
-        _fixed_bbls.insert(generated_bbl);
+        insert_fixed_bbl(generated_bbl);
     }else if(is_sym_func_entry(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, SYM_RECORD));
-        _fixed_bbls.insert(generated_bbl);
+        insert_fixed_bbl(generated_bbl);
     }else if(is_call_target(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, CALL_TARGET));
-        _fixed_bbls.insert(generated_bbl);
+        insert_fixed_bbl(generated_bbl);
     }else if(is_rela_target(bbl_start)){
         _maybe_func_entry.insert(std::make_pair(generated_bbl, RELA_TARGET));
-        _fixed_bbls.insert(generated_bbl);
+        insert_fixed_bbl(generated_bbl);
     }else{
         INT32 push_reg_instr_num = 0;
         INT32 decrease_rsp_instr_num = 0;
@@ -441,7 +447,7 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
 
         if(!has_pop_before_push && !increase_rsp && (push_reg_instr_num>0 || decrease_rsp_instr_num>0)){
             _maybe_func_entry.insert(std::make_pair(generated_bbl, PROLOG_MATCH));
-            _fixed_bbls.insert(generated_bbl);
+            insert_fixed_bbl(generated_bbl);
         }
     }
 
@@ -630,7 +636,7 @@ void Module::separate_movable_bbls()
         F_SIZE second_entry;
         F_SIZE bbl_entry = bbl->get_bbl_offset(second_entry);
         if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl) && ((bbl_entry&0xf)==0)){
-            _fixed_bbls.insert(bbl);
+            insert_fixed_bbl(bbl);
             //find maybe aligned function
             _maybe_func_entry.insert(std::make_pair(bbl, ALIGNED_ENTRY));
             fixed_aligned_bbl.push_back(bbl);
@@ -644,9 +650,10 @@ void Module::separate_movable_bbls()
         BasicBlock *bbl = iter->second;
         if(!is_movable_bbl(bbl) && !is_fixed_bbl(bbl)){
             if(bbl->is_nop())
-                _movable_bbls.insert(bbl);
-            else
-                _fixed_bbls.insert(bbl); 
+                insert_movable_bbl(bbl);
+            else{
+                insert_fixed_bbl(bbl); 
+            }
         }
     }
 }
@@ -664,7 +671,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
             return ;
         }
         if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
-            _movable_bbls.insert(fallthrough_bbl);
+            insert_movable_bbl(fallthrough_bbl);
             recursive_to_find_movable_bbls(fallthrough_bbl);
         }
     }else if(bbl->is_condition_branch()){
@@ -672,7 +679,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
         BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
         ASSERT(target_bbl);
         if(!is_movable_bbl(target_bbl) && !is_fixed_bbl(target_bbl)){
-            _movable_bbls.insert(target_bbl);
+            insert_movable_bbl(target_bbl);
             recursive_to_find_movable_bbls(target_bbl);
         }
         //find fallthrough movable bbls
@@ -682,7 +689,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
             return ;
         }
         if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
-            _movable_bbls.insert(fallthrough_bbl);
+            insert_movable_bbl(fallthrough_bbl);
             recursive_to_find_movable_bbls(fallthrough_bbl);
         }
     }else if(bbl->is_direct_jump()){
@@ -690,7 +697,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
         BasicBlock *target_bbl = find_bbl_by_offset(target_offset, true);
         ASSERT(target_bbl);
         if(!is_movable_bbl(target_bbl) && !is_fixed_bbl(target_bbl)){
-            _movable_bbls.insert(target_bbl);
+            insert_movable_bbl(target_bbl);
             recursive_to_find_movable_bbls(target_bbl);
         }
     }else if(bbl->is_indirect_jump()){
@@ -710,7 +717,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
                 if(is_movable_bbl(target_bbl) || is_fixed_bbl(target_bbl))
                     continue ;
                 else{
-                    _movable_bbls.insert(target_bbl);
+                    insert_movable_bbl(target_bbl);
                     recursive_to_find_movable_bbls(target_bbl);
                 }
             }
@@ -730,12 +737,12 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
 
 BOOL Module::is_movable_bbl(BasicBlock *bbl)
 {
-    return _movable_bbls.find(bbl)!=_movable_bbls.end();
+    return _pos_movable_bbls.find(bbl)!=_pos_movable_bbls.end();
 }
 
 BOOL Module::is_fixed_bbl(BasicBlock *bbl)
 {
-    return _fixed_bbls.find(bbl)!=_fixed_bbls.end();
+    return _pos_fixed_bbls.find(bbl)!=_pos_fixed_bbls.end();
 }
 
 BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets)
@@ -1040,7 +1047,7 @@ void Module::dump_bbl_movable_info() const
     INT32 gadget_num = 0;
     INT32 little_gadget = 0;
     INT32 plt_num = 0;
-    for(BBL_SET::const_iterator iter = _fixed_bbls.begin(); iter!=_fixed_bbls.end(); iter++){
+    for(BBL_SET::const_iterator iter = _pos_fixed_bbls.begin(); iter!=_pos_fixed_bbls.end(); iter++){
         F_SIZE second;
         F_SIZE target = (*iter)->get_bbl_offset(second);
         if(is_in_plt_in_off(target))
@@ -1055,8 +1062,8 @@ void Module::dump_bbl_movable_info() const
         }
     }
     
-    INT32 movable_bbl_num = (INT32)_movable_bbls.size();
-    INT32 fixed_bbl_num = (INT32)_fixed_bbls.size();
+    INT32 movable_bbl_num = (INT32)_pos_movable_bbls.size();
+    INT32 fixed_bbl_num = (INT32)_pos_fixed_bbls.size();
     INT32 sum = fixed_bbl_num + movable_bbl_num;
     INT32 fixed_bbl_wo_plt = fixed_bbl_num - plt_num;
     PRINT("%20s: Fixed bbls [without plt] (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 

@@ -5,6 +5,8 @@ typedef struct{
 	int connect;
 	int proctected_procid;
 	long new_ip;
+	long cc_offset;
+	long ss_offset;
 	char mesg[256];
 }MESG_BAG;
 
