@@ -25,6 +25,8 @@ public:
 	static std::string gen_jmpq_rsp_smem(UINT16 &disp32_pos, INT32 disp32);
 	//jmp rel32
 	static std::string gen_jump_rel32_instr(UINT16 &rel32_pos, INT32 rel32);
+	//jmp rel8
+	static std::string gen_jump_rel8_instr(UINT16 &rel8_pos, INT8 rel8);
 	//callnext
 	static std::string gen_call_next();
 	//addq %rsp, $imm8

@@ -113,6 +113,13 @@ std::string InstrGenerator::gen_jump_rel32_instr(UINT16 &rel32_pos, INT32 rel32)
     return std::string((const INT8*)array, 5);
 }
 
+std::string InstrGenerator::gen_jump_rel8_instr(UINT16 &rel8_pos, INT8 rel8)
+{
+    UINT8 array[2] = {0xeb, (UINT8)rel8};
+    rel8_pos = 1;
+    return std::string((const INT8*)array, 2);
+}
+
 std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
     UINT16 &disp32_pos, INT32 disp32)
 {

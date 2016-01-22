@@ -295,8 +295,9 @@ void Module::generate_relocation_block()
         BasicBlock *src_bbl = find_bbl_cover_offset(jump_offset);
         F_SIZE second;
         F_SIZE src_bbl_offset = src_bbl->get_bbl_offset(second);
-        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP)//analysis other
-            _cvm->insert_jmpin_rbbl(src_bbl_offset, info.targets);
+        TODO:memset use hash!!!!
+        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE)
+            _cvm->insert_switch_case_jmpin_rbbl(src_bbl_offset, info.targets);
     }
 }
 
@@ -607,8 +608,11 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
         //record jump targets
         F_SIZE memset_entry_target = memset_target + entry_data;
         if(is_instr_entry_in_off(memset_entry_target, true)){
-            insert_br_target(memset_entry_target, jump_offset);
-            targets.insert(memset_entry_target);
+            Instruction *inst = find_instr_by_off(memset_entry_target, true);
+            if(!inst->is_ret()){
+                insert_br_target(memset_entry_target, jump_offset);
+                targets.insert(memset_entry_target);
+            }
         }
         entry_offset += 2;
         entry_data = read_2byte_data_in_off(entry_offset);
@@ -780,8 +784,11 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
         F_SIZE target_instr = entry_data - get_pt_load_base();
         //record jump targets
         if(is_instr_entry_in_off(target_instr, false)){//makae sure that is real jump target!
-            insert_br_target(target_instr, jump_offset);
-            targets.insert(target_instr);
+            Instruction *inst = find_instr_by_off(target_instr, false);
+            if(!inst->is_ret()){
+                insert_br_target(target_instr, jump_offset);
+                targets.insert(target_instr);
+            }
         }else{
             entry_offset -=8;
             break;
@@ -944,8 +951,11 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
             //record jump targets
             F_SIZE target_offset = table_base+entry_data;
             if(is_instr_entry_in_off(target_offset, false)){
-                insert_br_target(target_offset, jump_offset);
-                targets.insert(target_offset);
+                Instruction *inst = find_instr_by_off(target_offset, false);
+                if(!inst->is_ret()){
+                    insert_br_target(target_offset, jump_offset);
+                    targets.insert(target_offset);
+                }
             }else{
                 entry_offset -= 4;//Warnning 
                 break;
@@ -1098,42 +1108,30 @@ BasicBlock *Module::find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) cons
 
 BasicBlock *Module::find_bbl_cover_offset(F_SIZE offset) const
 {
-    BBL_MAP_ITERATOR it = _bbl_maps.find(offset);
-    while(it==_bbl_maps.end()){
-        if(is_in_x_section_in_off(offset))
-            it = _bbl_maps.find(--offset);
-        else
-            return NULL;
-    }
-    BasicBlock *ret = it->second;
-    return ret->is_in_bbl(offset) ? ret : NULL;
+    BBL_MAP_ITERATOR iter = _bbl_maps.upper_bound(offset);
+    if(iter!=_bbl_maps.end() && (--iter)->second->is_in_bbl(offset))
+        return iter->second;
+    else
+        return NULL;
 }
 
 BasicBlock *Module::find_bbl_cover_instr(Instruction *instr) const
 {
-    BBL_MAP_ITERATOR bbl_it;
-    INSTR_MAP_ITERATOR instr_it = _instr_maps.find(instr->get_instr_offset());
-    while((bbl_it = _bbl_maps.find(instr_it->first)) == _bbl_maps.end()){
-        if(instr_it!=_instr_maps.end())
-            instr_it--;
-        else
-            return NULL;
-    }
-    BasicBlock *ret = bbl_it->second;
-    return ret->is_in_bbl(instr) ? ret : NULL;
+    F_SIZE instr_offset = instr->get_instr_offset();
+    BBL_MAP_ITERATOR iter = _bbl_maps.upper_bound(instr_offset);
+    if(iter!=_bbl_maps.end() && (--iter)->second->is_in_bbl(instr_offset))
+        return iter->second;
+    else
+        return NULL;
 }
 
 Instruction *Module::find_instr_cover_offset(F_SIZE offset) const
 {
-    INSTR_MAP_ITERATOR it = _instr_maps.find(offset);
-    while(it==_instr_maps.end()){
-        if(is_in_x_section_in_off(offset))
-            it = _instr_maps.find(--offset);
-        else
-            return NULL;
-    }
-    Instruction *ret = it->second;
-    return ret->is_in_instr(offset) ? ret : NULL;
+    INSTR_MAP_ITERATOR iter = _instr_maps.upper_bound(offset);
+    if(iter!=_instr_maps.end() && (--iter)->second->is_in_instr(offset))
+        return iter->second;
+    else
+        return NULL;
 }
 
 Instruction *Module::find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const

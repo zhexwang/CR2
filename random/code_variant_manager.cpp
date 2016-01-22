@@ -5,9 +5,10 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "code_variant_manager.h"
-#include "utility.h"
+#include "instr_generator.h"
 
 CodeVariantManager::CVM_MAPS CodeVariantManager::_all_cvm_maps;
 std::string CodeVariantManager::_code_variant_img_path;
@@ -220,80 +221,216 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
     return ;
 }
 
-void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
+#define JMP32_LEN 0x5
+#define JMP8_LEN 0x2
+#define OVERLAP_JMP32_LEN 0x4
+#define JMP8_OPCODE 0xeb
+#define JMP32_OPCODE 0xe9
+
+inline CC_LAYOUT_PAIR place_trampoline8(S_ADDRX tramp8_addr, INT8 offset8, CC_LAYOUT &cc_layout)
 {
-    std::map<S_ADDRX, RandomBBL*> rbbl_maps;
-    std::map<S_ADDRX, RandomBBL*> trampoline_maps;
-    std::map<F_SIZE, P_SIZE> jmpin_offsets;
-    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
-    S_ADDRX curr_trampoline_addr = 0;
-    for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
-        F_SIZE curr_bbl_offset = iter->first;
-        F_SIZE next_bbl_offset = (++iter)!=_postion_fixed_rbbl_maps.end() ? iter->first : curr_bbl_offset;
-        iter--;
-        //can place trampoline
-        if((next_bbl_offset-curr_bbl_offset)>=0x5){
-            curr_trampoline_addr = curr_bbl_offset + cc_base;
-            trampoline_maps.insert(std::make_pair(curr_trampoline_addr, iter->second));
-        }else{
-            ;//ASSERTM(0, "trampoline place error!\n");
-            if((next_bbl_offset-curr_bbl_offset)!=0){
-                if((next_bbl_offset-curr_bbl_offset)<2)
-                    ERR("MIN_SIZE=1 : %lx (%s)\n", curr_bbl_offset, _elf_real_name.c_str());
+    //gen jmp rel8 instruction
+    UINT16 pos = 0;
+    std::string jmp_rel8_template = InstrGenerator::gen_jump_rel8_instr(pos, offset8);
+    jmp_rel8_template.copy((char*)tramp8_addr, jmp_rel8_template.length());
+    //insert trampoline8 into cc layout
+    return cc_layout.insert(std::make_pair(Range<S_ADDRX>(tramp8_addr, tramp8_addr+JMP8_LEN-1), TRAMP_JMP8_PTR));
+}
+inline CC_LAYOUT_PAIR place_trampoline32(S_ADDRX tramp32_addr, INT32 offset32, CC_LAYOUT &cc_layout)
+{
+    //gen jmp rel8 instruction
+    UINT16 pos = 0;
+    std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(pos, offset32);
+    jmp_rel32_template.copy((char*)tramp32_addr, jmp_rel32_template.length());
+    //insert trampoline8 into cc layout
+    return cc_layout.insert(std::make_pair(Range<S_ADDRX>(tramp32_addr, tramp32_addr+JMP32_LEN-1), TRAMP_JMP32_PTR));
+}
+
+inline CC_LAYOUT_PAIR place_overlap_trampoline32(S_ADDRX tramp32_addr, INT32 offset32, CC_LAYOUT &cc_layout)
+{
+    //gen jmp rel8 instruction
+    UINT16 pos = 0;
+    std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(pos, offset32);
+    jmp_rel32_template.copy((char*)tramp32_addr, jmp_rel32_template.length());
+    //insert trampoline8 into cc layout
+    return cc_layout.insert(std::make_pair(Range<S_ADDRX>(tramp32_addr, tramp32_addr+OVERLAP_JMP32_LEN-1), TRAMP_OVERLAP_JMP32_PTR));
+}
+
+//this function is only used to place trampoline8 with trampoline32 
+S_ADDRX front_to_place_overlap_trampoline32(S_ADDRX overlap_tramp_addr, UINT8 overlap_byte, CC_LAYOUT &cc_layout)
+{
+    // 1. set boundary to start searching
+    std::pair<CC_LAYOUT_ITER, BOOL> boundary = cc_layout.insert(std::make_pair(Range<S_ADDRX>(overlap_tramp_addr, \
+        overlap_tramp_addr+OVERLAP_JMP32_LEN-1), TRAMP_OVERLAP_JMP32_PTR));
+    CC_LAYOUT_ITER curr_iter = boundary.first, prev_iter = --boundary.first;
+    ASSERT(curr_iter!=cc_layout.begin());
+    S_ADDRX trampoline32_addr = 0;
+    //loop to find the space to place the tramp32
+    while(prev_iter!=cc_layout.end()){
+        S_SIZE left_space = curr_iter->first - prev_iter->first;
+        if(left_space>=JMP32_LEN){
+            trampoline32_addr = curr_iter->first.low() - JMP32_LEN;
+            S_ADDRX end = prev_iter->first.high() + 1;
+            while(trampoline32_addr!=end){
+                INT32 offset32 = trampoline32_addr - overlap_tramp_addr - JMP32_LEN;
+                if(((offset32>>24)&0xff)==overlap_byte){
+                    CC_LAYOUT_PAIR ret = place_overlap_trampoline32(overlap_tramp_addr, offset32, cc_layout);
+                    FATAL(ret.second, "place overlap trampoline32 wrong!\n");
+                    return trampoline32_addr;
+                }
+                trampoline32_addr--;
             }
         }
-    }
     
-    S_ADDRX rbbl_place_base = curr_trampoline_addr + 0x5;
+        curr_iter--;
+        prev_iter--;
+    }
+    ASSERT(prev_iter!=cc_layout.end());
+    return trampoline32_addr;
+}
 
+S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc_layout)
+{
+    // 1. set boundary to start searching
+    std::pair<CC_LAYOUT_ITER, BOOL> boundary = cc_layout.insert(std::make_pair(Range<S_ADDRX>(fixed_trampoline_addr, \
+        fixed_trampoline_addr+JMP8_LEN-1), TRAMP_JMP8_PTR));
+    ASSERT(boundary.second);
+    // 2. init scanner
+    CC_LAYOUT_ITER curr_iter = boundary.first, prev_iter = --boundary.first;
+    ASSERT(curr_iter!=cc_layout.begin());
+    // 3. variables used to store the results
+    S_ADDRX trampoline32_addr = 0;
+    S_ADDRX trampoline8_base = fixed_trampoline_addr;
+    S_ADDRX last_tramp8_addr = 0;
+    // 4. loop to search
+    while(prev_iter!=cc_layout.begin()){
+        S_SIZE space = curr_iter->first - prev_iter->first;
+        ASSERT(space>=0);
+        // assumpe the dest can place tramp32
+        trampoline32_addr = curr_iter->first.low() - JMP32_LEN;
+        INT32 dest_offset8 = trampoline32_addr - trampoline8_base - JMP8_LEN;
+        // 4.1 judge can place trampoline32
+        if((space>=JMP32_LEN) && (dest_offset8>=SCHAR_MIN)){
+            CC_LAYOUT_PAIR ret = place_trampoline8(trampoline8_base, dest_offset8, cc_layout);
+            FATAL((trampoline8_base!=fixed_trampoline_addr) && !ret.second, " place trampoline8 wrong!\n");
+            break;
+        }
+        // assumpe the dest can place tramp8
+        S_ADDRX tramp8_addr = curr_iter->first.low() - JMP8_LEN;
+        INT32 relay_offset8 = tramp8_addr - trampoline8_base - JMP8_LEN;
+        // 4.2 judge is over 8 relative offset
+        if(relay_offset8>=SCHAR_MIN)
+            last_tramp8_addr = space>=JMP8_LEN ? tramp8_addr : last_tramp8_addr;
+        else{//need relay
+            ASSERT(last_tramp8_addr!=0);
+            INT32 last_offset8 = last_tramp8_addr - trampoline8_base - JMP8_LEN;
+            ASSERT(last_offset8>=SCHAR_MIN);
+            //place the internal jmp8 rel8 template
+            CC_LAYOUT_PAIR ret = place_trampoline8(trampoline8_base, last_offset8, cc_layout);
+            FATAL((trampoline8_base!=fixed_trampoline_addr) && !ret.second, " place trampoline8 wrong!\n");
+            //clear last
+            trampoline8_base = last_tramp8_addr;
+            last_tramp8_addr = 0;
+        }
+
+        curr_iter--;
+        prev_iter--;
+    }
+    ASSERT(prev_iter!=cc_layout.begin());
+    
+    return trampoline32_addr;
+}
+
+S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, \
+    RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
+{
+    S_ADDRX trampoline32_addr = 0;
+    S_ADDRX used_cc_base = 0;
+    // 1.place fixed rbbl's trampoline  
+    cc_layout.insert(std::make_pair(Range<S_ADDRX>(cc_base, cc_base), BOUNDARY_PTR));
+    for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
+        RAND_BBL_MAPS::iterator iter_bk = iter;
+        F_SIZE curr_bbl_offset = iter->first;
+        F_SIZE next_bbl_offset = (++iter)!=_postion_fixed_rbbl_maps.end() ? iter->first : curr_bbl_offset+JMP32_LEN;
+        S_SIZE left_space = next_bbl_offset - curr_bbl_offset;
+        iter = iter_bk;
+        //place trampoline
+        if(left_space>=JMP32_LEN){
+            trampoline32_addr = curr_bbl_offset + cc_base;
+            used_cc_base = trampoline32_addr + JMP32_LEN;
+        }else{
+            ASSERT(left_space>=JMP8_LEN);
+            //search lower address to find space to place the jmp rel32 trampoline
+            trampoline32_addr = front_to_place_trampoline32(curr_bbl_offset + cc_base, cc_layout);
+            used_cc_base = next_bbl_offset + cc_base;
+        }
+        //place tramp32
+        CC_LAYOUT_PAIR ret = place_trampoline32(trampoline32_addr, curr_bbl_offset, cc_layout);
+        FATAL(!ret.second, " place trampoline32 wrong!\n");
+    }
+    // 2.place switch-case/memset trampolines
+    #define TRAMP_GAP 0x100
+    S_ADDRX new_cc_base = used_cc_base + TRAMP_GAP;
+    // get full jmpin targets
+    TARGET_SET merge_set;
+    for(JMPIN_ITERATOR iter = _switch_case_jmpin_rbbl_maps.begin(); iter!= _switch_case_jmpin_rbbl_maps.end(); iter++){
+        F_SIZE jmpin_offset = iter->first;
+        P_SIZE jmpin_target_offset = _cc_offset + new_cc_base - cc_base;
+        jmpin_offsets.insert(std::make_pair(jmpin_offset, jmpin_target_offset));
+        merge_set.insert(iter->second.begin(), iter->second.end());
+    }
+    // 3.place jmpin targets trampoline
+    for(TARGET_ITERATOR it = merge_set.begin(); it!=merge_set.end(); it++){
+        TARGET_ITERATOR it_bk = it;
+        F_SIZE curr_bbl_offset = *it;
+        F_SIZE next_bbl_offset = (++it)!=merge_set.end() ? *it : curr_bbl_offset+JMP32_LEN;
+        S_SIZE left_space = next_bbl_offset - curr_bbl_offset;
+        it = it_bk;
+        //can place trampoline
+        if(left_space>=JMP32_LEN){
+            trampoline32_addr = curr_bbl_offset + new_cc_base;
+            used_cc_base = trampoline32_addr + JMP32_LEN;
+        }else{
+            ASSERT(left_space>=JMP8_LEN);
+            //search lower address to find space to place the jmp rel32 trampoline
+            trampoline32_addr = front_to_place_trampoline32(curr_bbl_offset + new_cc_base, cc_layout);
+            used_cc_base = next_bbl_offset + new_cc_base;
+        }
+        //place tramp32
+        CC_LAYOUT_PAIR ret = place_trampoline32(trampoline32_addr, curr_bbl_offset, cc_layout);
+        FATAL(!ret.second, " place trampoline32 wrong!\n");
+    }
+    // 4.place fixed and movable rbbls
     for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
         S_SIZE rbbl_size = iter->second->get_template_size();
-        rbbl_maps.insert(std::make_pair(rbbl_place_base, iter->second));
-        rbbl_place_base += rbbl_size;
+        rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)iter->second));
+        used_cc_base += rbbl_size;
     }
 
     for(RAND_BBL_MAPS::iterator iter = _movable_rbbl_maps.begin(); iter!=_movable_rbbl_maps.end(); iter++){
         S_SIZE rbbl_size = iter->second->get_template_size();
-        rbbl_maps.insert(std::make_pair(rbbl_place_base, iter->second));
-        rbbl_place_base += rbbl_size;
+        rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)iter->second));
+        used_cc_base += rbbl_size;
     }
 
-    TARGET_SET merge_set;
-
-    for(JMPIN_ITERATOR iter = _jmpin_rbbl_maps.begin(); iter!= _jmpin_rbbl_maps.end(); iter++){
-        F_SIZE jmpin_offset = iter->first;
-        P_SIZE jmpin_target_offset = _cc_offset + rbbl_place_base - cc_base;
-        jmpin_offsets.insert(std::make_pair(jmpin_offset, jmpin_target_offset));
-        merge_set.insert(iter->second.begin(), iter->second.end());
-    }
-    
-    for(TARGET_ITERATOR it = merge_set.begin(); it!=merge_set.end(); it++){
-        F_SIZE curr_bbl_offset = *it;
-        F_SIZE next_bbl_offset = (++it)!=merge_set.end() ? *it : curr_bbl_offset;
-        it--;
-        //can place trampoline
-        if((next_bbl_offset-curr_bbl_offset)>=0x5){
-            curr_trampoline_addr = curr_bbl_offset + rbbl_place_base;
-            RAND_BBL_MAPS::iterator ret = _postion_fixed_rbbl_maps.find(curr_bbl_offset);
-            RandomBBL *target_rbbl = NULL;
-            
-            if(ret==_postion_fixed_rbbl_maps.end()){
-                ret = _movable_rbbl_maps.find(curr_bbl_offset);
-                ASSERT(ret!=_movable_rbbl_maps.end());
-            }
-
-            target_rbbl = ret->second;
-            trampoline_maps.insert(std::make_pair(curr_trampoline_addr, target_rbbl));
-        }else{
-            ;//ASSERTM(0, "trampoline place error!\n");
-            if((next_bbl_offset-curr_bbl_offset)!=0){
-                if((next_bbl_offset-curr_bbl_offset)<2)
-                    ERR("MIN_SIZE=1 : %lx (%s)\n", curr_bbl_offset, _elf_real_name.c_str());
-            }
-        }
-    }
     //judge used cc size
-    ASSERT((curr_trampoline_addr + 0x5 - cc_base)<=_cc_load_size);
+    ASSERT((used_cc_base - cc_base)<=_cc_load_size);
+    return used_cc_base;
+}
+
+void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
+{
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
+    RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
+    JMPIN_CC_OFFSET &jmpin_offsets = is_first_cc ? _jmpin_offsets1 : _jmpin_offsets2;
+    // 1.arrange the code layout
+    arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_offsets);
+    // 2.generate the code
+    
+
     return ;
 }
 
@@ -301,7 +438,7 @@ void CodeVariantManager::generate_all_code_variant()
 {
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         iter->second->generate_code_variant(true);
-        iter->second->generate_code_variant(false);
+        //iter->second->generate_code_variant(false);
     }
     
     return ;

@@ -6,6 +6,19 @@
 #include "type.h"
 #include "utility.h"
 #include "relocation.h"
+#include "range.h"
+
+//if range is randomBBL, void* is not 0 and 1, if range is jmp8 trampoline, void* is 0, 
+//if range is jmp32 tramp, void* is 1; 
+#define TRAMP_JMP8_PTR 0
+#define TRAMP_JMP32_PTR 1
+#define TRAMP_OVERLAP_JMP32_PTR 2
+#define BOUNDARY_PTR 3
+typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
+typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
+typedef std::pair<CC_LAYOUT_ITER, BOOL> CC_LAYOUT_PAIR;
+typedef std::map<F_SIZE, S_ADDRX> RBBL_CC_MAPS;
+typedef std::map<F_SIZE, P_SIZE> JMPIN_CC_OFFSET;
 
 class CodeVariantManager
 {
@@ -19,8 +32,17 @@ public:
 protected:
 	RAND_BBL_MAPS _postion_fixed_rbbl_maps;
 	RAND_BBL_MAPS _movable_rbbl_maps;
-	JMPIN_TARGETS_MAPS _jmpin_rbbl_maps;
+	JMPIN_TARGETS_MAPS _switch_case_jmpin_rbbl_maps;
 	std::string _elf_real_name;
+	//generate code information
+    CC_LAYOUT _cc_layout1;
+	CC_LAYOUT _cc_layout2;
+    //store the mapping which maps from binary offset to cc address
+    RBBL_CC_MAPS _rbbl_maps1;
+	RBBL_CC_MAPS _rbbl_maps2;
+    //store the switch-case/memset jmpin offset
+    JMPIN_CC_OFFSET _jmpin_offsets1;
+	JMPIN_CC_OFFSET _jmpin_offsets2;
 	//shuffle process information
 	//code cache
 	BOOL _curr_is_first_cc;
@@ -61,6 +83,7 @@ public:
 	//set functions
 	static void parse_proc_maps(PID protected_pid);
 	static void generate_all_code_variant();
+	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
 	void generate_code_variant(BOOL is_first_cc);
 	//get functions
 	CodeVariantManager(std::string module_path);
@@ -74,20 +97,20 @@ public:
 	{
 		_movable_rbbl_maps.insert(std::make_pair(bbl_offset, rand_bbl));
 	}
-	void insert_jmpin_rbbl(F_SIZE src_bbl_offset, F_SIZE target_bbl_offset)
+	void insert_switch_case_jmpin_rbbl(F_SIZE src_bbl_offset, F_SIZE target_bbl_offset)
 	{
-		JMPIN_ITERATOR iter = _jmpin_rbbl_maps.find(src_bbl_offset);
-		if(iter!=_jmpin_rbbl_maps.end()){
+		JMPIN_ITERATOR iter = _switch_case_jmpin_rbbl_maps.find(src_bbl_offset);
+		if(iter!=_switch_case_jmpin_rbbl_maps.end()){
 			TARGET_SET &targets = iter->second;
 			targets.insert(target_bbl_offset);
 		}else{
 			TARGET_SET targets;
-			_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
+			_switch_case_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
 		}
 	}
-	void insert_jmpin_rbbl(F_SIZE src_bbl_offset, TARGET_SET targets)
+	void insert_switch_case_jmpin_rbbl(F_SIZE src_bbl_offset, TARGET_SET targets)
 	{
-		_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
+		_switch_case_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
 	}
 	//init cc and ss
 	void init_cc();

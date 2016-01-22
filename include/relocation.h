@@ -71,7 +71,8 @@ typedef std::vector<INSTR_RELA>::iterator INSTR_RELA_VEC_ITER;
 typedef std::vector<BBL_RELA> BBL_RELA_VEC;
 typedef std::vector<BBL_RELA>::iterator BBL_RELA_VEC_ITER;
 
-class RandomBBL{
+class RandomBBL
+{
 protected:
 	F_SIZE _origin_bbl_start;
 	F_SIZE _origin_bbl_end;
@@ -82,6 +83,7 @@ public:
 	RandomBBL(F_SIZE origin_start, F_SIZE origin_end, BOOL has_lock_and_repeat_prefix, \
 		std::vector<BBL_RELA> reloc_info, std::string random_template);
 	~RandomBBL();
+	BOOL has_lock_and_repeat_prefix(){return _has_lock_and_repeat_prefix;}
 	SIZE get_template_size()const {return _random_template.length();}
 	/* @Args: random_offset represents the BBL's postion relative to the fixed postion in code cache
 	 *        cc_offset represents the offset between the code cache with origin code region
