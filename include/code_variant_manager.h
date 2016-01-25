@@ -17,8 +17,6 @@
 typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
 typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
 typedef std::pair<CC_LAYOUT_ITER, BOOL> CC_LAYOUT_PAIR;
-typedef std::map<F_SIZE, S_ADDRX> RBBL_CC_MAPS;
-typedef std::map<F_SIZE, P_SIZE> JMPIN_CC_OFFSET;
 
 class CodeVariantManager
 {

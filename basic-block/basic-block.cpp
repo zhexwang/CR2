@@ -109,8 +109,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     {
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
-                        INT16 r_addend = (INT16)rela.r_value;
-                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
+                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, rela.r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -154,8 +153,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     {
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
-                        INT16 r_addend = (INT16)rela.r_value;
-                        BBL_RELA bbl_rela = {TRAMPOLINE_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
+                        BBL_RELA bbl_rela = {TRAMPOLINE_RELA_TYPE, r_byte_pos, r_byte_size, 0, rela.r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;

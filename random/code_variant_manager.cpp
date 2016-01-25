@@ -238,7 +238,7 @@ inline CC_LAYOUT_PAIR place_trampoline8(S_ADDRX tramp8_addr, INT8 offset8, CC_LA
 }
 inline CC_LAYOUT_PAIR place_trampoline32(S_ADDRX tramp32_addr, INT32 offset32, CC_LAYOUT &cc_layout)
 {
-    //gen jmp rel8 instruction
+    //gen jmp rel32 instruction
     UINT16 pos = 0;
     std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(pos, offset32);
     jmp_rel32_template.copy((char*)tramp32_addr, jmp_rel32_template.length());
@@ -248,7 +248,7 @@ inline CC_LAYOUT_PAIR place_trampoline32(S_ADDRX tramp32_addr, INT32 offset32, C
 
 inline CC_LAYOUT_PAIR place_overlap_trampoline32(S_ADDRX tramp32_addr, INT32 offset32, CC_LAYOUT &cc_layout)
 {
-    //gen jmp rel8 instruction
+    //gen jmp rel32 instruction
     UINT16 pos = 0;
     std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(pos, offset32);
     jmp_rel32_template.copy((char*)tramp32_addr, jmp_rel32_template.length());
@@ -422,7 +422,32 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
 
 void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
 {
-    ;
+    for(CC_LAYOUT::iterator iter = cc_layout.begin(); iter!=cc_layout.end(); iter++){
+        S_ADDRX range_base_addr = iter->first.low();
+        switch(iter->second){
+            case BOUNDARY_PTR: break;
+            case TRAMP_JMP8_PTR: break;
+            case TRAMP_OVERLAP_JMP32_PTR: ASSERT(0); break;
+            case TRAMP_JMP32_PTR://need relocate the trampolines
+                {
+                    S_ADDRX relocate_addr = range_base_addr + 0x1;//opcode
+                    S_ADDRX curr_pc = range_base_addr + JMP32_LEN;
+                    F_SIZE target_rbbl_offset = (F_SIZE)(*(INT32*)relocate_addr);
+                    RBBL_CC_MAPS::iterator ret = rbbl_maps.find(target_rbbl_offset);
+                    ASSERT(ret!=rbbl_maps.end());
+                    S_ADDRX target_rbbl_addr = ret->second;
+                    INT64 offset64 = target_rbbl_addr - curr_pc;
+                    ASSERT((offset64 > 0 ? offset64 : -offset64) < 0x7fffffff);
+                    *(INT32*)relocate_addr = (INT32)offset64;
+                }
+                break;
+            default://rbbl
+                {
+                    RandomBBL *rbbl = (RandomBBL*)iter->second;
+                    rbbl->relocate(range_base_addr, _cc_offset, _ss_offset, rbbl_maps, jmpin_offsets);
+                }
+        }
+    }
 }
 
 void CodeVariantManager::generate_code_variant(BOOL is_first_cc)

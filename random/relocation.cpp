@@ -15,7 +15,7 @@ RandomBBL::~RandomBBL()
     ;
 }
 
-void RandomBBL::relocate(SIZE random_offset, SIZE cc_offset, SIZE ss_offset, S_ADDRX relocate_pos, SIZE relocate_size)
+void RandomBBL::relocate(S_ADDRX gen_addr, SIZE cc_offset, SIZE ss_offset, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
 {
     NOT_IMPLEMENTED(wangzhe);
 }

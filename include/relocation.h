@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 #include "type.h"
 
 enum RELA_TYPE{
@@ -23,7 +24,7 @@ typedef struct{
 	UINT16    r_byte_size;//relocation bytes num
 	UINT16    r_base_pos; //base postion (pc)
 	INT64     r_value;    //1.rip_rela_type: displacement; 2. branch_rela_type: branch target; 3.high32/low32 CC/ORG rela type: F_SIZE addr
-}INSTR_RELA;             //3. SS rela type: addend; 4.CC rela type: addend
+}INSTR_RELA;             //3. SS rela type: addend; 4.CC/trampoline rela type: callin or jmpin address in elf
 
 typedef struct{
 	RELA_TYPE r_type; 
@@ -31,7 +32,7 @@ typedef struct{
 	UINT16    r_byte_size;  //need relocate size
 	INT16     r_addend;     //relocation addend, normalize the instr relocation to bbl start relocation info
 	INT64     r_value;      //1.rip_rela_type: displacement; 2. branch_rela_type: branch target; 3.high32/low32 CC/ORG rela type: F_SIZE addr
-}BBL_RELA;                 
+}BBL_RELA;                //4.CC/Trampoline rela type: callin or jmpin address in elf 
 
 /************RIP Relocation******************
         VA(hight->low)               Relocation 
@@ -70,6 +71,8 @@ typedef std::vector<INSTR_RELA> INSTR_RELA_VEC;
 typedef std::vector<INSTR_RELA>::iterator INSTR_RELA_VEC_ITER;
 typedef std::vector<BBL_RELA> BBL_RELA_VEC;
 typedef std::vector<BBL_RELA>::iterator BBL_RELA_VEC_ITER;
+typedef std::map<F_SIZE, S_ADDRX> RBBL_CC_MAPS;
+typedef std::map<F_SIZE, P_SIZE> JMPIN_CC_OFFSET;
 
 class RandomBBL
 {
@@ -85,12 +88,11 @@ public:
 	~RandomBBL();
 	BOOL has_lock_and_repeat_prefix(){return _has_lock_and_repeat_prefix;}
 	SIZE get_template_size()const {return _random_template.length();}
-	/* @Args: random_offset represents the BBL's postion relative to the fixed postion in code cache
+	/* @Args: gen_addr represents the BBL's postion in code cache
 	 *        cc_offset represents the offset between the code cache with origin code region
 	 *        ss_offset represents the offset between the shadow stack with main stack
-	 *	      relocate_pos represents output the relocation code into relocate_pos address.
 	 */
-	void relocate(SIZE random_offset, SIZE cc_offset, SIZE ss_offset, S_ADDRX relocate_pos, SIZE relocate_size);
+	void relocate(S_ADDRX gen_addr, SIZE cc_offset, SIZE ss_offset, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
 	void dump_template(P_ADDRX relocation_base);
 	void dump_relocation();
 };

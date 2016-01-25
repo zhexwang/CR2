@@ -391,7 +391,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
     
     rela_addq_pos += (UINT16)instr_template.length();
     curr_pc += addq_template.length();
-    INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, curr_pc, 0};
+    INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, curr_pc, (INT64)get_instr_offset()};
     
     reloc_vec.push_back(rela_addq);
     instr_template += addq_template;
@@ -541,10 +541,10 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
         rela_addq_pos += (UINT16)instr_template.length();
         UINT16 addq_base_pos = (UINT16)(instr_template.length() + addq_template.length());
         if(has_recognized_targets){//recoginized jmpin
-            INSTR_RELA rela_addq = {TRAMPOLINE_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, 0};
+            INSTR_RELA rela_addq = {TRAMPOLINE_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
             reloc_vec.push_back(rela_addq);
         }else{
-            INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, 0};
+            INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
             reloc_vec.push_back(rela_addq);
         }
         instr_template += addq_template;

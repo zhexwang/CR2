@@ -48,7 +48,7 @@ int main(int argc, char **argv)
         //generate code variant
         CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset);
         CodeVariantManager::generate_all_code_variant();
-        MESG_BAG msg_content = {1, 0, (long)curr_pc, cc_offset, ss_offset, "Generate the code variant!"};
+        MESG_BAG msg_content = {1, 0, (long)curr_pc, (long)cc_offset, (long)ss_offset, "Generate the code variant!"};
         NetLink::send_mesg(msg_content);
         NetLink::disconnect_with_lkm();
     }
