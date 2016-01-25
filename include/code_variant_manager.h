@@ -85,6 +85,7 @@ public:
 	static void generate_all_code_variant();
 	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
 	void generate_code_variant(BOOL is_first_cc);
+	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
 	//get functions
 	CodeVariantManager(std::string module_path);
 	~CodeVariantManager();

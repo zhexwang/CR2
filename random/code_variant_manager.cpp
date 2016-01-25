@@ -422,7 +422,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
 
 void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
 {
-    
+    ;
 }
 
 void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
