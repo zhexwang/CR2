@@ -61,19 +61,49 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset) const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset) const
 {
     JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
-    if(it!=_indirect_jump_maps.end())
+    if(it!=_indirect_jump_maps.end()){
+        is_memset = it->second.type==MEMSET_JMP ? true : false;
         return it->second.targets;
-    else
+    }else{
+        is_memset = false;
         return std::set<F_SIZE>();
+    }
 }
 
 BasicBlock *Module::get_bbl_by_va(const P_ADDRX addr) const
 {
     ASSERTM(_real_load_base!=0, "Forgot setting real load base of module(%s)\n", get_name().c_str());
     return get_bbl_by_off(addr - _real_load_base);
+}
+
+BOOL Module::is_memset_jmpin(const F_SIZE offset) const
+{
+    JUMPIN_MAP::const_iterator it = _indirect_jump_maps.find(offset);
+    if(it!=_indirect_jump_maps.end()){
+        return it->second.type==MEMSET_JMP ? true : false;
+    }else
+        return false;
+}
+
+BOOL Module::is_switch_case_main_jmpin(const F_SIZE offset) const
+{
+    JUMPIN_MAP::const_iterator it = _indirect_jump_maps.find(offset);
+    if(it!=_indirect_jump_maps.end()){
+        return it->second.type==SWITCH_CASE_ABSOLUTE ? true : false;
+    }else
+        return false;
+}
+
+BOOL Module::is_switch_case_so_jmpin(const F_SIZE offset) const
+{
+    JUMPIN_MAP::const_iterator it = _indirect_jump_maps.find(offset);
+    if(it!=_indirect_jump_maps.end()){
+        return it->second.type==SWITCH_CASE_OFFSET ? true : false;
+    }else
+        return false;
 }
 
 BOOL Module::is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const
@@ -295,7 +325,7 @@ void Module::generate_relocation_block()
         BasicBlock *src_bbl = find_bbl_cover_offset(jump_offset);
         F_SIZE second;
         F_SIZE src_bbl_offset = src_bbl->get_bbl_offset(second);
-        TODO:memset use hash!!!!
+        //TODO:memset use hash!!!!
         if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE)
             _cvm->insert_switch_case_jmpin_rbbl(src_bbl_offset, info.targets);
     }
@@ -613,7 +643,9 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
                 insert_br_target(memset_entry_target, jump_offset);
                 targets.insert(memset_entry_target);
             }
-        }
+        }else
+            break;
+        
         entry_offset += 2;
         entry_data = read_2byte_data_in_off(entry_offset);
     }while(entry_data!=0);

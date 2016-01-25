@@ -1,4 +1,5 @@
 #include "instr_generator.h"
+#include "disasm_common.h"
 
 std::string InstrGenerator::gen_invalid_instr()
 {
@@ -12,6 +13,32 @@ std::string InstrGenerator::gen_addq_imm32_to_rsp_mem_instr(UINT16 &imm_pos, INT
         (UINT8)((imm32>>16)&0xff), (UINT8)((imm32>>24)&0xff)};
     imm_pos = 4;
     return std::string((const INT8*)array, 8);
+}
+
+std::string InstrGenerator::convert_jumpin_mem_to_cmpl_imm32(const UINT8 *instcode, UINT32 instsize, UINT16 &imm32_pos, INT32 imm32)
+{
+    ASSERT(instsize<=8);
+    std::string instr_template;
+    UINT32 jmpin_index = 0;
+    // 1. copy prefix 
+    if((instcode[jmpin_index])!=0xff){//copy prefix
+        instr_template.append(1, instcode[jmpin_index++]);//copy prefix
+        ASSERT(instcode[jmpin_index]==0xff);
+    }
+    // 2.set opcode
+    instr_template.append(1, 0x81);
+    jmpin_index++;
+    // 3.calculate cmp ModRM
+    instr_template.append(1, instcode[jmpin_index++]|0x38);
+    // 4.copy SIB | Displacement of jmpin_inst
+    while(jmpin_index<instsize)
+        instr_template.append(1, instcode[jmpin_index++]);
+    // 5.set imm32
+    imm32_pos = instr_template.length();
+    instr_template.append((const INT8*)&imm32, sizeof(INT32));
+    // 6.ret 
+
+    return instr_template;
 }
 
 std::string InstrGenerator::convert_jumpin_mem_to_push_mem(const UINT8 *instcode, UINT32 instsize)
@@ -168,6 +195,35 @@ std::string InstrGenerator::gen_pushq_imm32_instr(UINT16 &imm32_pos, INT32 imm32
     UINT8 array[5] = {0x68, (UINT8)(imm32&0xff), (UINT8)((imm32>>8)&0xff), (UINT8)((imm32>>16)&0xff), (UINT8)((imm32>>24)&0xff)};
     imm32_pos = 1;
     return std::string((const INT8*)array, 5);
+}
+
+std::string InstrGenerator::gen_cmp_reg32_imm32_instr(UINT8 reg_index, UINT16 &imm32_pos, INT32 imm32)
+{
+    std::string instr_template;
+    UINT8 modRM_reg = 0;
+    //1.prefix
+    if(reg_index>=R_R8D && reg_index<=R_R15D){
+        instr_template.append(1, 0x41);
+        modRM_reg = (reg_index - R_R8D)&0x7;
+    }else if(reg_index>=R_EAX && reg_index<=R_EDI)
+        modRM_reg = (reg_index - R_EAX)&0x7;
+    else
+        ASSERT(0);
+
+    instr_template.append(1, 0x81);
+    instr_template.append(1, 0xf8|modRM_reg);
+    imm32_pos = instr_template.length();
+    instr_template.append((const INT8*)&imm32, sizeof(INT32));
+
+    return instr_template;
+}
+
+std::string InstrGenerator::gen_je_rel32_instr(UINT16 &rel32_pos, INT32 rel32)
+{
+    UINT8 array[6] = {0x0f, 0x84, (UINT8)(rel32&0xff), (UINT8)((rel32>>8)&0xff), (UINT8)((rel32>>16)&0xff), \
+        (UINT8)((rel32>>24)&0xff)};
+    rel32_pos = 2;
+    return std::string((const INT8 *)array, 6);
 }
 
 std::string InstrGenerator::gen_call_next()

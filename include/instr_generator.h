@@ -33,7 +33,12 @@ public:
 	static std::string gen_addq_imm8_to_rsp_instr(UINT16 &imm8_pos, INT8 imm8);
 	//pushq imm32
 	static std::string gen_pushq_imm32_instr(UINT16 &imm32_pos, INT32 imm32);
+	//cmp reg32, imm32
+	static std::string gen_cmp_reg32_imm32_instr(UINT8 reg_index, UINT16 &imm32_pos, INT32 imm32);
+	//je rel32
+	static std::string gen_je_rel32_instr(UINT16 &rel32_pos, INT32 rel32);
 	//convert functions
+	static std::string convert_jumpin_mem_to_cmpl_imm32(const UINT8 *instcode, UINT32 instsize, UINT16 &imm32_pos, INT32 imm32);
 	static std::string convert_jumpin_mem_to_push_mem(const UINT8 *instcode, UINT32 instsize);
 	static std::string convert_jumpin_reg_to_push_reg(const UINT8 *instcode, UINT32 instsize);
 	static std::string convert_callin_reg_to_push_reg(const UINT8 *instcode, UINT32 instsize);

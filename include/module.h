@@ -142,7 +142,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset) const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_instr_cover_offset(F_SIZE offset) const;
@@ -150,6 +150,9 @@ public:
 	BasicBlock  *find_bbl_cover_offset(F_SIZE offset) const;
 	BasicBlock  *find_bbl_cover_instr(Instruction *instr) const;	
 	//judge functions
+	BOOL is_memset_jmpin(const F_SIZE offset) const;
+	BOOL is_switch_case_main_jmpin(const F_SIZE offset) const;
+	BOOL is_switch_case_so_jmpin(const F_SIZE offset) const;
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
 	BOOL is_bbl_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;
 	BOOL is_instr_entry_in_va(const P_ADDRX addr, BOOL consider_prefix) const;

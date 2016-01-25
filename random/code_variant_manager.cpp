@@ -368,7 +368,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         CC_LAYOUT_PAIR ret = place_trampoline32(trampoline32_addr, curr_bbl_offset, cc_layout);
         FATAL(!ret.second, " place trampoline32 wrong!\n");
     }
-    // 2.place switch-case/memset trampolines
+    // 2.place switch-case trampolines
     #define TRAMP_GAP 0x100
     S_ADDRX new_cc_base = used_cc_base + TRAMP_GAP;
     // get full jmpin targets
@@ -420,6 +420,11 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     return used_cc_base;
 }
 
+void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
+{
+    
+}
+
 void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
 {
     S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
@@ -429,7 +434,7 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
     // 1.arrange the code layout
     arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_offsets);
     // 2.generate the code
-    
+    relocate_rbbls_and_tramps(cc_layout, rbbl_maps, jmpin_offsets);
 
     return ;
 }

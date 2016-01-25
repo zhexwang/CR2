@@ -437,28 +437,103 @@ IndirectJumpInstr::~IndirectJumpInstr()
     ;
 }
 
+static BOOL can_hash_low_32bits(std::set<F_SIZE> sets)                                                                                                              
+{             
+    UINT32 high32_base = 0;
+    for(std::set<F_SIZE>::iterator iter = sets.begin(); iter!=sets.end(); iter++){
+        UINT32 high32 = ((*iter)>>32)&0xffffffff;
+        if(iter==sets.begin())
+            high32_base = high32;
+
+        if(high32_base!=high32)
+            return false;
+    }         
+    return true;
+}
+
+static inline UINT8 convert_reg64_to_reg32(UINT8 reg_index)
+{            
+    ASSERT(reg_index>=R_RAX && reg_index<=R_R15);
+    return reg_index + R_EAX - R_RAX;
+}
+
 std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
 {
     ASSERTM(_dInst.opcode!=I_JMP_FAR, "we only handle jmp near!\n");
     
-    std::string instr_template;
-    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr);
+    BOOL is_memset = false;
+    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset);
     BOOL has_recognized_targets = targets.size()==0 ? false : true;
 
-    std::string push_template;
-    if(_dInst.ops[0].type==O_REG){
-        push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
-    }else{
-        //1. convert jumpin mem to push mem
-        push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);
-        if(is_rip_relative()){//add relocation information if the instruction is rip relative
-            ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
-            UINT16 rela_push_pos = find_disp_pos_from_encode((const UINT8 *)push_template.c_str(), _dInst.size, (INT32)_dInst.disp);
-            rela_push_pos += (UINT16)instr_template.length();
-            UINT16 push_base_pos = (UINT16)(instr_template.length() + push_template.length());
-            INSTR_RELA rela_push = {RIP_RELA_TYPE, rela_push_pos, 4, push_base_pos, (INT64)_dInst.disp};
-            reloc_vec.push_back(rela_push);
+    std::string instr_template;
+    if(is_memset){
+        BOOL can_hash = can_hash_low_32bits(targets);
+        FATAL(!can_hash, "memset jumpin can not use hash!\n");
+        UINT16 curr_pc = 0;
+        BOOL is_target_in_reg = _dInst.ops[0].type==O_REG ? true : false;
+        UINT8 reg32_index = is_target_in_reg ? convert_reg64_to_reg32(_dInst.ops[0].index) : 0;
+        for(std::set<F_SIZE>::iterator iter = targets.begin(); iter!=targets.end(); iter++){
+            //cmp reg32, imm32
+            //1.1 gen cmp instruction
+            UINT16 rela_imm32_pos = 0;
+            std::string cmp_template;
+            if(is_target_in_reg)
+                cmp_template = InstrGenerator::gen_cmp_reg32_imm32_instr(reg32_index, rela_imm32_pos, 0);
+            else
+                cmp_template = InstrGenerator::convert_jumpin_mem_to_cmpl_imm32(_encode, _dInst.size, rela_imm32_pos, 0);
+            //1.2 calculate the base pc
+            curr_pc += cmp_template.length();
+            rela_imm32_pos += instr_template.length();
+            //1.3 push relocation information
+            INSTR_RELA cmp_imm32_rela = {LOW32_ORG_RELA_TYPE, rela_imm32_pos, 4, curr_pc, (INT64)(*iter)};
+            reloc_vec.push_back(cmp_imm32_rela);
+            // add rip relocation
+            if(is_rip_relative()){
+                ASSERT(!is_target_in_reg);
+                ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                UINT16 rela_disp32_pos = find_disp_pos_from_encode((const UINT8 *)cmp_template.c_str(), \
+                    cmp_template.length(), (INT32)_dInst.disp);
+                rela_disp32_pos += instr_template.length();
+                INSTR_RELA cmp_disp_rela = {RIP_RELA_TYPE, rela_disp32_pos, 4, curr_pc, (INT64)(_dInst.disp)};
+                reloc_vec.push_back(cmp_disp_rela);
+            }
+            //1.4 merge the template
+            instr_template += cmp_template;
+            //je rel32
+            //2.1 gen je instruction
+            UINT16 rela_rel32_pos = 0;
+            std::string je_template = InstrGenerator::gen_je_rel32_instr(rela_rel32_pos, 0);
+            //2.2 calculate the base pc
+            curr_pc += je_template.length();
+            rela_rel32_pos += instr_template.length();
+            //2.3 push relocation information
+            INSTR_RELA je_rel32_rela = {LOW32_CC_RELA_TYPE, rela_rel32_pos, 4, curr_pc, (INT64)(*iter)};
+            reloc_vec.push_back(je_rel32_rela);
+            //2.4 merge the template
+            instr_template += je_template;
         }
+        
+        std::string invalid_template = InstrGenerator::gen_invalid_instr();
+        instr_template += invalid_template;
+    }else{
+        std::string push_template;
+        if(_dInst.ops[0].type==O_REG){
+            //1. convert jumpin reg to push reg
+            push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
+        }else{
+            //1. convert jumpin mem to push mem
+            push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);
+            if(is_rip_relative()){//add relocation information if the instruction is rip relative
+                ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                UINT16 rela_push_pos = find_disp_pos_from_encode((const UINT8 *)push_template.c_str(), \
+                    push_template.length(), (INT32)_dInst.disp);
+                rela_push_pos += (UINT16)instr_template.length();
+                UINT16 push_base_pos = (UINT16)(instr_template.length() + push_template.length());
+                INSTR_RELA rela_push = {RIP_RELA_TYPE, rela_push_pos, 4, push_base_pos, (INT64)_dInst.disp};
+                reloc_vec.push_back(rela_push);
+            }
+        }
+        
         instr_template += push_template;
         //2. add code cache offset or trampoline offset
         UINT16 rela_addq_pos;
@@ -477,7 +552,7 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
         std::string retq_template = InstrGenerator::gen_retq_instr();
         instr_template += retq_template;
     }
-
+    
     return instr_template;
 }
 
