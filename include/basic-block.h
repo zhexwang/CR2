@@ -19,8 +19,11 @@ protected:
 	const BOOL _has_lock_and_repeat_prefix;
 	INSTR_MAPS _instr_maps;
 	BOOL _is_nop;
+	BOOL _has_ud2;
+	BOOL _has_hlt;
 	F_SIZE _target;
 	F_SIZE _fallthrough;
+	BOOL _has_fallthrough_bbl;
 public:
 	BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps);
@@ -59,6 +62,10 @@ public:
 	F_SIZE get_target_offset() const {return _target;};
 	F_SIZE get_fallthrough_offset() const {return _fallthrough;};
 	BOOL has_lock_and_repeat_prefix() const {return _has_lock_and_repeat_prefix;}
+	BOOL has_fallthrough_bbl() const {return _has_fallthrough_bbl;}
+	BOOL has_ud2() const {return _has_ud2;}
+	BOOL has_hlt() const {return _has_hlt;}
+	void set_no_fallthrough(){_has_fallthrough_bbl = false;}
 	//dump functions
 	void dump_in_va(const P_ADDRX load_base) const;
 	void dump_in_off() const;

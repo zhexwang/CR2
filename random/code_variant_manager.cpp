@@ -227,6 +227,13 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
 #define JMP8_OPCODE 0xeb
 #define JMP32_OPCODE 0xe9
 
+inline CC_LAYOUT_PAIR place_invalid_boundary(S_ADDRX invalid_addr, CC_LAYOUT &cc_layout)
+{
+    std::string invalid_template = InstrGenerator::gen_invalid_instr();
+    invalid_template.copy((char*)invalid_addr, invalid_template.length());
+    return cc_layout.insert(std::make_pair(Range<S_ADDRX>(invalid_addr, invalid_addr+invalid_template.length()-1), BOUNDARY_PTR));
+}
+
 inline CC_LAYOUT_PAIR place_trampoline8(S_ADDRX tramp8_addr, INT8 offset8, CC_LAYOUT &cc_layout)
 {
     //gen jmp rel8 instruction
@@ -342,12 +349,13 @@ S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc
 }
 
 S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, \
-    RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
+    RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
 {
     S_ADDRX trampoline32_addr = 0;
     S_ADDRX used_cc_base = 0;
     // 1.place fixed rbbl's trampoline  
-    cc_layout.insert(std::make_pair(Range<S_ADDRX>(cc_base, cc_base), BOUNDARY_PTR));
+    CC_LAYOUT_PAIR invalid_ret = place_invalid_boundary(cc_base, cc_layout);
+    FATAL(!invalid_ret.second, " place invalid boundary wrong!\n");
     for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
         RAND_BBL_MAPS::iterator iter_bk = iter;
         F_SIZE curr_bbl_offset = iter->first;
@@ -374,9 +382,9 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     // get full jmpin targets
     TARGET_SET merge_set;
     for(JMPIN_ITERATOR iter = _switch_case_jmpin_rbbl_maps.begin(); iter!= _switch_case_jmpin_rbbl_maps.end(); iter++){
-        F_SIZE jmpin_offset = iter->first;
+        F_SIZE jmpin_rbbl_offset = iter->first;
         P_SIZE jmpin_target_offset = _cc_offset + new_cc_base - cc_base;
-        jmpin_offsets.insert(std::make_pair(jmpin_offset, jmpin_target_offset));
+        jmpin_rbbl_offsets.insert(std::make_pair(jmpin_rbbl_offset, jmpin_target_offset));
         merge_set.insert(iter->second.begin(), iter->second.end());
     }
     // 3.place jmpin targets trampoline
@@ -402,16 +410,22 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     }
     // 4.place fixed and movable rbbls
     for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
-        S_SIZE rbbl_size = iter->second->get_template_size();
+        RandomBBL *rbbl = iter->second;
+        S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)iter->second));
+        if(rbbl->has_lock_and_repeat_prefix())//consider prefix
+            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
     }
 
     for(RAND_BBL_MAPS::iterator iter = _movable_rbbl_maps.begin(); iter!=_movable_rbbl_maps.end(); iter++){
-        S_SIZE rbbl_size = iter->second->get_template_size();
+        RandomBBL *rbbl = iter->second;
+        S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)iter->second));
+        if(rbbl->has_lock_and_repeat_prefix())//consider prefix
+            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
     }
 
@@ -420,16 +434,19 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     return used_cc_base;
 }
 
-void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets)
+void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, \
+    RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
 {
     for(CC_LAYOUT::iterator iter = cc_layout.begin(); iter!=cc_layout.end(); iter++){
         S_ADDRX range_base_addr = iter->first.low();
+        S_SIZE range_size = iter->first.high() - range_base_addr + 1;
         switch(iter->second){
             case BOUNDARY_PTR: break;
-            case TRAMP_JMP8_PTR: break;
+            case TRAMP_JMP8_PTR: ASSERT(range_size>=JMP8_LEN); break;//has already relocated, when generate the jmp rel8
             case TRAMP_OVERLAP_JMP32_PTR: ASSERT(0); break;
             case TRAMP_JMP32_PTR://need relocate the trampolines
                 {
+                    ASSERT(range_size>=JMP32_LEN);
                     S_ADDRX relocate_addr = range_base_addr + 0x1;//opcode
                     S_ADDRX curr_pc = range_base_addr + JMP32_LEN;
                     F_SIZE target_rbbl_offset = (F_SIZE)(*(INT32*)relocate_addr);
@@ -444,7 +461,11 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC
             default://rbbl
                 {
                     RandomBBL *rbbl = (RandomBBL*)iter->second;
-                    rbbl->relocate(range_base_addr, _cc_offset, _ss_offset, rbbl_maps, jmpin_offsets);
+                    F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
+                    JMPIN_CC_OFFSET::iterator ret = jmpin_rbbl_offsets.find(rbbl_offset);
+                    P_SIZE jmpin_offset = ret!=jmpin_rbbl_offsets.end() ? ret->second : 0;//judge is switch case or not
+                    rbbl->gen_code(cc_base, range_base_addr, range_size, _org_x_load_base, _cc_offset, _ss_offset, \
+                        rbbl_maps, jmpin_offset);
                 }
         }
     }
@@ -455,11 +476,11 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
     S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
     CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
     RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
-    JMPIN_CC_OFFSET &jmpin_offsets = is_first_cc ? _jmpin_offsets1 : _jmpin_offsets2;
+    JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
     // 1.arrange the code layout
-    arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_offsets);
+    arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
     // 2.generate the code
-    relocate_rbbls_and_tramps(cc_layout, rbbl_maps, jmpin_offsets);
+    relocate_rbbls_and_tramps(cc_layout, cc_base, rbbl_maps, jmpin_rbbl_offsets);
 
     return ;
 }

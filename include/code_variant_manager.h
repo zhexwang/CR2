@@ -14,6 +14,7 @@
 #define TRAMP_JMP32_PTR 1
 #define TRAMP_OVERLAP_JMP32_PTR 2
 #define BOUNDARY_PTR 3
+#define RBBL_PTR_MIN 4
 typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
 typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
 typedef std::pair<CC_LAYOUT_ITER, BOOL> CC_LAYOUT_PAIR;
@@ -39,8 +40,8 @@ protected:
     RBBL_CC_MAPS _rbbl_maps1;
 	RBBL_CC_MAPS _rbbl_maps2;
     //store the switch-case/memset jmpin offset
-    JMPIN_CC_OFFSET _jmpin_offsets1;
-	JMPIN_CC_OFFSET _jmpin_offsets2;
+    JMPIN_CC_OFFSET _jmpin_rbbl_offsets1;
+	JMPIN_CC_OFFSET _jmpin_rbbl_offsets2;
 	//shuffle process information
 	//code cache
 	BOOL _curr_is_first_cc;
@@ -81,9 +82,9 @@ public:
 	//set functions
 	static void parse_proc_maps(PID protected_pid);
 	static void generate_all_code_variant();
-	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
+	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	void generate_code_variant(BOOL is_first_cc);
-	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
+	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	//get functions
 	CodeVariantManager(std::string module_path);
 	~CodeVariantManager();

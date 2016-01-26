@@ -16,12 +16,19 @@ const std::string ConditionBrBBL::_bbl_type = "ConditionBrBBL";
 BasicBlock::BasicBlock(const F_SIZE start, const SIZE size, BOOL is_call_proceeded, BOOL has_lock_and_repeat_prefix,\
 		BasicBlock::INSTR_MAPS &instr_maps)
     : _start(start), _size(size), _is_call_proceeded(is_call_proceeded), _has_lock_and_repeat_prefix(has_lock_and_repeat_prefix),\
-        _instr_maps(instr_maps)
+        _instr_maps(instr_maps), _has_fallthrough_bbl(true)
 {
     _is_nop = true;
-    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++)
+    _has_ud2 = false;
+    _has_hlt = false;
+    for(INSTR_MAPS_ITERATOR iter = _instr_maps.begin(); iter!=_instr_maps.end(); iter++){
         if(!iter->second->is_nop())
             _is_nop = false;
+        if(!_has_ud2 && iter->second->is_ud2())
+            _has_ud2 = true;
+        if(!_has_hlt && iter->second->is_hlt())
+            _has_hlt = true;
+    }
 }
 
 BasicBlock::~BasicBlock()
@@ -65,12 +72,11 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
 {
     INSTR_RELA_VEC instr_reloc_vec;
     std::string bbl_template;
-    UINT16 curr_pc_pos = 0;
+    INT32 curr_pc_pos = 0;
     for(BasicBlock::INSTR_MAPS_ITERATOR iter = instr_maps.begin(); iter!=instr_maps.end(); iter++){
         Instruction *instr = iter->second;
         curr_pc_pos += instr->get_instr_size();
         SIZE curr_bbl_template_len = bbl_template.length();
-        ASSERTM(curr_bbl_template_len < USHRT_MAX, "bbl template should be not larger than USHRT_MAX\n");
         std::string instr_template = instr->generate_instr_template(instr_reloc_vec);
         //normalize the instruction relocations into bbl start relocation
         for(INSTR_RELA_VEC_ITER it = instr_reloc_vec.begin(); it!=instr_reloc_vec.end(); it++){
@@ -78,7 +84,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
             switch(rela.r_type){
                 case RIP_RELA_TYPE:
                     {
-                        INT16 r_addend = (INT16)curr_pc_pos - (INT16)(rela.r_base_pos + curr_bbl_template_len);
+                        INT32 r_addend = (INT32)curr_pc_pos - (INT32)(rela.r_base_pos + curr_bbl_template_len);
                         INT64 r_value = rela.r_value;
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
@@ -88,7 +94,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     break;
                 case BRANCH_RELA_TYPE:
                     {
-                        INT16 r_addend = 0 - (INT16)(rela.r_base_pos + curr_bbl_template_len);
+                        INT32 r_addend = 0 - (INT32)(rela.r_base_pos + curr_bbl_template_len);
                         INT64 r_value = rela.r_value;
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
@@ -98,7 +104,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     break;
                 case SS_RELA_TYPE:
                     {
-                        INT16 r_addend = (INT16)rela.r_value;
+                        INT32 r_addend = (INT32)rela.r_value;
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         BBL_RELA bbl_rela = {SS_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, 0};
@@ -109,7 +115,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     {
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
-                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, rela.r_value};
+                        INT32 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {CC_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, rela.r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -118,7 +125,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         INT64 r_value = rela.r_value;
-                        BBL_RELA bbl_rela = {LOW32_CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        INT32 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {LOW32_CC_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -127,7 +135,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         INT64 r_value = rela.r_value;
-                        BBL_RELA bbl_rela = {HIGH32_CC_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        INT32 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {HIGH32_CC_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -136,7 +145,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         INT64 r_value = rela.r_value;
-                        BBL_RELA bbl_rela = {LOW32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        INT32 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {LOW32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -145,7 +155,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
                         INT64 r_value = rela.r_value;
-                        BBL_RELA bbl_rela = {HIGH32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, 0, r_value};
+                        INT16 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {HIGH32_ORG_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;    
@@ -153,7 +164,8 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
                     {
                         UINT16 r_byte_pos = rela.r_byte_pos + curr_bbl_template_len;
                         UINT16 r_byte_size = rela.r_byte_size;
-                        BBL_RELA bbl_rela = {TRAMPOLINE_RELA_TYPE, r_byte_pos, r_byte_size, 0, rela.r_value};
+                        INT32 r_addend = curr_bbl_template_len;
+                        BBL_RELA bbl_rela = {TRAMPOLINE_RELA_TYPE, r_byte_pos, r_byte_size, r_addend, rela.r_value};
                         reloc_vec.push_back(bbl_rela);
                     }
                     break;
@@ -186,20 +198,26 @@ SequenceBBL::~SequenceBBL()
 std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
 {
     std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps);
-    SIZE curr_bbl_template_len = bbl_template.length();
     
-    UINT16 rela_jump_pos;
-    std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(rela_jump_pos, 0);
-    
-    UINT16 r_byte_pos = curr_bbl_template_len + rela_jump_pos;
-    bbl_template += jmp_rel32_template;
-    
-    UINT16 jump_next_pos = bbl_template.length();
-    INT16 r_addend = 0 - (INT16)jump_next_pos;
-    INT64 r_value = (INT64)get_fallthrough_offset();
-    
-    BBL_RELA rela = {BRANCH_RELA_TYPE, r_byte_pos, 4, r_addend, r_value};
-    reloc_vec.push_back(rela);
+    if(_has_fallthrough_bbl){
+        SIZE curr_bbl_template_len = bbl_template.length();
+        
+        UINT16 rela_jump_pos;
+        std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(rela_jump_pos, 0);
+        
+        UINT16 r_byte_pos = curr_bbl_template_len + rela_jump_pos;
+        bbl_template += jmp_rel32_template;
+        
+        UINT16 jump_next_pos = bbl_template.length();
+        INT32 r_addend = 0 - (INT32)jump_next_pos;
+        INT64 r_value = (INT64)get_fallthrough_offset();
+        
+        BBL_RELA rela = {BRANCH_RELA_TYPE, r_byte_pos, 4, r_addend, r_value};
+        reloc_vec.push_back(rela);
+    }else{
+        std::string invalid_template = InstrGenerator::gen_invalid_instr();
+        bbl_template += invalid_template;
+    }
     
     return bbl_template;
 }

@@ -30,7 +30,7 @@ typedef struct{
 	RELA_TYPE r_type; 
 	UINT16    r_byte_pos;   //need relocate position
 	UINT16    r_byte_size;  //need relocate size
-	INT16     r_addend;     //relocation addend, normalize the instr relocation to bbl start relocation info
+	INT32     r_addend;     //relocation addend, normalize the instr relocation to bbl start relocation info
 	INT64     r_value;      //1.rip_rela_type: displacement; 2. branch_rela_type: branch target; 3.high32/low32 CC/ORG rela type: F_SIZE addr
 }BBL_RELA;                //4.CC/Trampoline rela type: callin or jmpin address in elf 
 
@@ -80,19 +80,27 @@ protected:
 	F_SIZE _origin_bbl_start;
 	F_SIZE _origin_bbl_end;
 	BOOL _has_lock_and_repeat_prefix;
+	BOOL _has_fallthrough_bbl;
 	BBL_RELA_VEC _reloc_table;
 	std::string _random_template;
 public:
-	RandomBBL(F_SIZE origin_start, F_SIZE origin_end, BOOL has_lock_and_repeat_prefix, \
+	RandomBBL(F_SIZE origin_start, F_SIZE origin_end, BOOL has_lock_and_repeat_prefix, BOOL has_fallthrough_bbl, \
 		std::vector<BBL_RELA> reloc_info, std::string random_template);
 	~RandomBBL();
-	BOOL has_lock_and_repeat_prefix(){return _has_lock_and_repeat_prefix;}
+	BOOL has_lock_and_repeat_prefix() const {return _has_lock_and_repeat_prefix;}
+	BOOL has_fallthrough_bbl() const {return _has_fallthrough_bbl;}
+	F_SIZE get_rbbl_offset() const {return _origin_bbl_start;}
 	SIZE get_template_size()const {return _random_template.length();}
-	/* @Args: gen_addr represents the BBL's postion in code cache
+	/* @Args: 
+	 *        cc_base represents the allocate address of code cache
+	 *		  gen_addr represents the BBL's postion in code cache
+	 *		  gen_size represents the space to generate
+	 *        orig_x_load_base represents the load address of origin x region
 	 *        cc_offset represents the offset between the code cache with origin code region
 	 *        ss_offset represents the offset between the shadow stack with main stack
 	 */
-	void relocate(S_ADDRX gen_addr, SIZE cc_offset, SIZE ss_offset, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_offsets);
+	void gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_ADDRX orig_x_load_base, P_SIZE cc_offset, P_SIZE ss_offset, \
+		RBBL_CC_MAPS &rbbl_maps, P_SIZE jmpin_offset);
 	void dump_template(P_ADDRX relocation_base);
 	void dump_relocation();
 };

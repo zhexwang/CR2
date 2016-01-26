@@ -300,8 +300,10 @@ void Module::generate_relocation_block()
         F_SIZE bbl_offset = bbl->get_bbl_offset(second);
         F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
+        BOOL has_fallthrough_bbl = bbl->has_fallthrough_bbl();
         std::string bbl_template = bbl->generate_code_template(rela_info);
-        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
+        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, \
+            rela_info, bbl_template);
         rela_info.clear();
         _cvm->insert_fixed_random_bbl(bbl_offset, rbbl);
     }
@@ -313,8 +315,10 @@ void Module::generate_relocation_block()
         F_SIZE bbl_offset = bbl->get_bbl_offset(second);
         F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
+        BOOL has_fallthrough_bbl = bbl->has_fallthrough_bbl();
         std::string bbl_template = bbl->generate_code_template(rela_info);
-        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, rela_info, bbl_template);
+        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, \
+            rela_info, bbl_template);
         rela_info.clear();
         _cvm->insert_movable_random_bbl(bbl_offset, rbbl);
     }
@@ -425,7 +429,7 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
 
     BOOL has_lock_and_repeat_prefix = first_instr->has_lock_and_repeat_prefix();    
     BasicBlock *generated_bbl = NULL;
-    
+
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
         generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_direct_call())
@@ -573,7 +577,27 @@ void Module::split_all_modules_into_bbls()
    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
    for(; it!=_all_module_maps.end(); it++){
         it->second->split_bbl();
+        it->second->examine_bbls();
    }
+}
+
+void Module::examine_bbls()
+{
+    for(BBL_MAP_ITERATOR iter = _bbl_maps.begin(); iter!=_bbl_maps.end(); iter++){
+        BasicBlock *bbl = iter->second;
+        F_SIZE fallthrough_offset = bbl->get_fallthrough_offset();
+        if(bbl->is_sequence()){
+            if(bbl->has_ud2() || bbl->has_hlt())
+                bbl->set_no_fallthrough();
+            else if(!find_bbl_by_offset(fallthrough_offset, false))
+                bbl->set_no_fallthrough();
+        }else if(bbl->is_ret() || bbl->is_direct_jump() || bbl->is_indirect_jump())
+            bbl->set_no_fallthrough();
+        else if(bbl->is_indirect_call()){
+            if(!find_bbl_by_offset(fallthrough_offset, false))
+                bbl->set_no_fallthrough();
+        }
+    }
 }
 
 BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)

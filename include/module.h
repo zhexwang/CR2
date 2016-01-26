@@ -105,6 +105,7 @@ protected:
 	GS_RECORD _gs_set;
 protected:
 	void split_bbl();
+	void examine_bbls();
 	void analysis_indirect_jump_targets();
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);

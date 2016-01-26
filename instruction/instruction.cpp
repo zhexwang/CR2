@@ -576,6 +576,8 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
     F_SIZE fallthrough_offset = get_fallthrough_offset();
     std::string instr_template;
     UINT16 curr_pc = 0;
+    UINT16 limit_rel8_rela_pos = 0;
+    UINT16 limit_rel8_pc = 0;
     //1. target
     switch(_dInst.opcode){
         case I_JA: case I_JAE: case I_JB: case I_JBE: case I_JG:
@@ -596,14 +598,11 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
             break;
         case I_LOOP: case I_LOOPZ: case I_LOOPNZ: case I_JCXZ: case I_JRCXZ://can only be convert to rel8
             {
-                UINT16 cbr_rel8_rela_pos;
-                std::string cbr_template = InstrGenerator::convert_cond_br_relx_to_rel8(_encode, _dInst.size, cbr_rel8_rela_pos, 0);
+                std::string cbr_template = InstrGenerator::convert_cond_br_relx_to_rel8(_encode, _dInst.size, limit_rel8_rela_pos, 0);
 
                 curr_pc += cbr_template.length();
-                cbr_rel8_rela_pos += instr_template.length();
-
-                INSTR_RELA cbr_rela = {BRANCH_RELA_TYPE, cbr_rel8_rela_pos, 1, curr_pc, (INT64)target_offset};
-                reloc_vec.push_back(cbr_rela);
+                limit_rel8_pc = curr_pc;
+                limit_rel8_rela_pos += instr_template.length();
 
                 instr_template += cbr_template;
             }
@@ -624,6 +623,25 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
     reloc_vec.push_back(rela);
 
     instr_template += jmp_rel32_template;
+    //3. if is limit rel8 instruction, use trampoline to have a longer jump
+    if(limit_rel8_pc!=0){
+        //relocate the limit rel8 offset
+        INT32 offset32 = curr_pc - limit_rel8_pc;
+        ASSERT((offset32>0 ? offset32 : -offset32)<0x7f);
+        instr_template[limit_rel8_rela_pos] = (INT8)offset32;
+        //generate the longer jump
+        UINT16 longer_jmp_rel32_rela_pos;
+        std::string longer_jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(longer_jmp_rel32_rela_pos, 0);
+
+        curr_pc += longer_jmp_rel32_template.length();
+        longer_jmp_rel32_rela_pos += instr_template.length();
+
+        INSTR_RELA rela = {BRANCH_RELA_TYPE, longer_jmp_rel32_rela_pos, 4, curr_pc, (INT64)target_offset};
+        reloc_vec.push_back(rela);
+
+        instr_template += longer_jmp_rel32_template;
+    }
+    
     return instr_template;
 }
 
