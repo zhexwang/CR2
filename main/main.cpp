@@ -49,6 +49,7 @@ int main(int argc, char **argv)
         CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset);
         CodeVariantManager::generate_all_code_variant(true);
         P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
+        ASSERT(new_pc!=0);
         MESG_BAG msg_content = {1, 0, (long)new_pc, (long)cc_offset, (long)ss_offset, "Generate the code variant!"};
         NetLink::send_mesg(msg_content);
         NetLink::disconnect_with_lkm();

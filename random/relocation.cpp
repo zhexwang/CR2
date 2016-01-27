@@ -127,12 +127,12 @@ void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_A
                 break;
             case DEBUG_HIGH32_RELA_TYPE:
                 {
-                    *(INT32*)reloc_addr = (INT32)(((INT64)this)>>32);
+                    *(INT32*)reloc_addr = (INT32)(curr_rbbl_in_prot>>32);
                 }
                 break;
             case DEBUG_LOW32_RELA_TYPE:
                 {
-                    *(INT32*)reloc_addr = (INT32)((INT64)this);
+                    *(INT32*)reloc_addr = (INT32)curr_rbbl_in_prot;
                 }
                 break;
             default:

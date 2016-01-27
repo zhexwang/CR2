@@ -28,4 +28,5 @@
 //we only support run less than 4 same protected application at the same time
 #define MAX_APP_SLOT_LIST_NUM  MAX_APP_LIST_NUM*4
 
+#define TRACE_DEBUG
 #endif

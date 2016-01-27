@@ -37,6 +37,34 @@ void set_checkpoint(struct task_struct *ts, long program_entry, long x_region_st
 		put_user(check_instr_encode[index], target_encode+index);
 }
 
+ulong is_code_cache(char *name)
+{
+	if(name && strstr(name, ".cc"))
+		return 1;
+	else
+		return 0;
+}
+
+void protect_orig_x_region(struct task_struct *ts)
+{
+	PRINTK("Need protect origin x region! not implemented %s\n", __FUNCTION__);
+	/*struct mm_struct *mm = ts->mm;
+	struct vm_area_struct *list = mm->mmap, *ptr = list;
+	do{
+		
+		struct file *fil = ptr->vm_file;
+		if(fil != NULL){
+			char* name = fil->f_path.dentry->d_iname;
+			if(is_code_cache(name)!=0){
+
+			}			
+		}
+
+		ptr = ptr->vm_next;
+		if(ptr == NULL) break;
+	} while (ptr != list);*/
+}
+
 extern int shuffle_process_pid;
 extern long new_ip;
 extern long connect_with_shuffle_process;
@@ -67,7 +95,7 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
 	//protect the origin x region
-	PRINTK("Need protect origin x region! not implemented %s\n", __FUNCTION__);
+	protect_orig_x_region(current);
 	//send msg to generate the cc and get the pc
 	newip = send_mesg_to_shuffle_process(curr_ip, ts->pid);
 	//set rip according to the rerandomizaton result
@@ -265,7 +293,7 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 
 void mmap_debug_page(void)
 {
-	long ret = orig_mmap(0x1000, 0x1000, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, -1, 0);
+	long ret = orig_mmap(0x100000, 0x1000, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
 	PRINTK("[LKM]mmap debug page %lx-%lx\n", ret, ret+0x1000);
 }
 

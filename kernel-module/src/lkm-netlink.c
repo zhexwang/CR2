@@ -47,9 +47,10 @@ void nl_recv_msg(struct sk_buff *skb)
 	shuffle_process_pid = pid;
 	PRINTK("Recieve mesg from user(%d): %s\n", pid, ((MESG_BAG*)nlmsg_data(nlh))->mesg);
 	start_flag = 0;
-	new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
 	connect_with_shuffle_process = ((MESG_BAG*)nlmsg_data(nlh))->connect;
-
+	if(connect_with_shuffle_process!=0)
+		new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
+	
 	return ;
 }
 

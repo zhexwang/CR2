@@ -414,8 +414,13 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         RandomBBL *rbbl = iter->second;
         S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        if(rbbl->has_lock_and_repeat_prefix())//consider prefix
+        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
+#ifdef TRACE_DEBUG
+            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
+#else
             rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
+#endif
+        }
         cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
     }
@@ -424,8 +429,13 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         RandomBBL *rbbl = iter->second;
         S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        if(rbbl->has_lock_and_repeat_prefix())//consider prefix
-            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
+        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
+#ifdef TRACE_DEBUG
+            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
+#else
+            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
+#endif            
+        }
         cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
     }
@@ -612,4 +622,30 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL 
     S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
     S_ADDRX ret_addrx = find_cc_saddrx_from_orig(orig_p_addrx, is_first_cc);
     return ret_addrx!=0 ? (ret_addrx - cc_base + _cc_load_base) : 0;
+}
+
+P_ADDRX CodeVariantManager::find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc)
+{
+    RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;    
+    CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
+    F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    
+    RBBL_CC_MAPS::iterator iter = rbbl_maps.find(rbbl_offset);
+    if(iter!=rbbl_maps.end()){
+        S_ADDRX s_addrx = iter->second;
+        CC_LAYOUT_ITER it = cc_layout.lower_bound(Range<S_ADDRX>(s_addrx));
+        return (it!=cc_layout.end())&&(it->second==(S_ADDRX)rbbl)? (_cc_load_base + s_addrx - cc_base) : 0; 
+    }else
+        return 0;
+}
+
+P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_rbbl(rbbl, is_first_cc);
+        if(ret_addrx!=0)
+            return ret_addrx;
+    }
+    return 0;
 }

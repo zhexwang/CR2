@@ -87,6 +87,8 @@ public:
 	static RandomBBL *find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
 	static P_ADDRX find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
 	static S_ADDRX find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	static P_ADDRX find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc);
+	P_ADDRX find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc);
 	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
 	S_ADDRX find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
 	RandomBBL *find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
