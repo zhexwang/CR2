@@ -98,7 +98,7 @@ void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struc
 
 //when gdb debug the program, the ld.so is loaded at the very high address, there is no space to allocate the memory
 //so we remap the interpreter and allocate the code cache for main and ld.so by the way
-void remmap_interp_and_allocate_cc(void)
+void remmap_interp_and_allocate_cc(struct task_struct *ts)
 {
 	typedef struct {
 		ulong region_start;
@@ -112,9 +112,9 @@ void remmap_interp_and_allocate_cc(void)
 	LD_REGION ld_regions[LD_REGION_MAX];
 	int ld_region_num = 0;
 	int index = 0;
-	struct mm_struct *mm = current->mm;
+	struct mm_struct *mm = ts->mm;
 	struct vm_area_struct *list = mm->mmap, *ptr = list;
-	struct pt_regs *regs = task_pt_regs(current);
+	struct pt_regs *regs = task_pt_regs(ts);
 #ifdef _VM	
 	long ld_bss_start = 0;
 #endif
@@ -160,8 +160,8 @@ void remmap_interp_and_allocate_cc(void)
 					//get main program entry
 					program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
 					get_user(program_entry, program_entry_addr);
-					PRINTK("[LKM:%d]entry=0x%lx\n", current->pid, program_entry);
-					set_checkpoint(current, program_entry, ptr->vm_start, ptr->vm_end);
+					PRINTK("[LKM:%d]entry=0x%lx\n", ts->pid, program_entry);
+					set_checkpoint(ts, program_entry, ptr->vm_start, ptr->vm_end);
 				}
 				main_file_sec_no++;
 			}
@@ -221,7 +221,7 @@ void remmap_interp_and_allocate_cc(void)
 #endif	
 	}
 	//scan the aux in the stack and replace the base of interpreter
-	replace_at_base_in_aux(ld_regions[0].region_start, ld_regions[index].region_start-ld_offset, current);
+	replace_at_base_in_aux(ld_regions[0].region_start, ld_regions[index].region_start-ld_offset, ts);
 	
 	regs->ip -= ld_offset;
 }
@@ -263,6 +263,11 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 	
 }
 
+void mmap_debug_page(void)
+{
+	long ret = orig_mmap(0x1000, 0x1000, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, -1, 0);
+	PRINTK("[LKM]mmap debug page %lx-%lx\n", ret, ret+0x1000);
+}
 
 asmlinkage long intercept_execve(const char __user* filename, const char __user* const __user* argv,\
                     const char __user* const __user* envp)
@@ -272,13 +277,17 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	if(is_monitor_app(current->comm)){
 		PRINTK("[LKM]execve(%s)\n", current->comm);
 		//TODO: send mesg to setup shuffle process
+		PRINTK("need send mesg to setup shuffle process! not implemented!\n");
 	}
 	
 	ret = orig_execve(filename, argv, envp);
 
 	if(is_monitor_app(current->comm)){
 		init_app_slot(current);
-		remmap_interp_and_allocate_cc();
+		remmap_interp_and_allocate_cc(current);
+#ifdef TRACE_DEBUG		
+		mmap_debug_page();
+#endif
 	}
 	return ret;
 }

@@ -52,6 +52,7 @@ protected:
 	//protected process information
 	//x region and code cache
 	P_ADDRX _org_x_load_base;
+	P_SIZE _org_x_load_size;
 	P_ADDRX _cc_load_base;
 	P_SIZE _cc_load_size;
 	//main stack and shadow stack
@@ -81,9 +82,18 @@ public:
 	}
 	//set functions
 	static void parse_proc_maps(PID protected_pid);
-	static void generate_all_code_variant();
+	static void generate_all_code_variant(BOOL is_first_cc);
+	static RandomBBL *find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
+	static RandomBBL *find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
+	static P_ADDRX find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	static S_ADDRX find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	S_ADDRX find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	RandomBBL *find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
+	RandomBBL *find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
 	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	void generate_code_variant(BOOL is_first_cc);
+	void clean_cc(BOOL is_first_cc);
 	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	//get functions
 	CodeVariantManager(std::string module_path);
@@ -115,9 +125,10 @@ public:
 	//init cc and ss
 	void init_cc();
 	static void init_cc_and_ss();
-	void set_x_load_base(P_ADDRX load_base)
+	void set_x_load_base(P_ADDRX load_base, P_SIZE load_size)
 	{
 		_org_x_load_base = load_base;
+		_org_x_load_size = load_size;
 	}
 	void set_cc_load_info(P_ADDRX cc_load_base, P_SIZE cc_size, std::string cc_shm_path)
 	{

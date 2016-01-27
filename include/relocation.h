@@ -15,6 +15,8 @@ enum RELA_TYPE{
 	HIGH32_ORG_RELA_TYPE,//the direct address of the high 32 bits in orign code region
 	LOW32_ORG_RELA_TYPE, //the direct address of the low 32 bits in origin code region
 	TRAMPOLINE_RELA_TYPE,//recognized jmpin instructions will jump to their own trampolines 
+	DEBUG_LOW32_RELA_TYPE,  
+	DEBUG_HIGH32_RELA_TYPE,
 	INSTR_RELA_TYPE_NUM,
 }__attribute((packed));
 

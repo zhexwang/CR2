@@ -125,6 +125,16 @@ void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_A
                     *(INT32*)reloc_addr = new_imm32;
                 }
                 break;
+            case DEBUG_HIGH32_RELA_TYPE:
+                {
+                    *(INT32*)reloc_addr = (INT32)(((INT64)this)>>32);
+                }
+                break;
+            case DEBUG_LOW32_RELA_TYPE:
+                {
+                    *(INT32*)reloc_addr = (INT32)((INT64)this);
+                }
+                break;
             default:
                 ASSERT(0);
         }

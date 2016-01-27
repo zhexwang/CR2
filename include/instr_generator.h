@@ -7,6 +7,8 @@
 class InstrGenerator
 {
 public:
+	//debug
+	static std::string gen_movl_imm32_to_mem32_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &mem32_pos, INT32 mem32);
 	//bad
 	static std::string gen_invalid_instr();
 	//addq (%rsp), $imm32

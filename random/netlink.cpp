@@ -66,7 +66,7 @@ MESG_BAG NetLink::recv_mesg()
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }
 
-void NetLink::recv_mesg(PID &protected_id, S_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset)
+void NetLink::recv_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset)
 {
 	BLUE("Waiting for message from kernel: ");
     recvmsg(sock_fd, &msg, 0);

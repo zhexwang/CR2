@@ -42,16 +42,16 @@ int main(int argc, char **argv)
         }
         NetLink::connect_with_lkm();
         PID proc_id = 0;
-        S_ADDRX curr_pc = 0;
+        P_ADDRX curr_pc = 0;
         SIZE cc_offset = 0, ss_offset = 0;
         NetLink::recv_mesg(proc_id, curr_pc, cc_offset, ss_offset);
         //generate code variant
         CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset);
-        //CodeVariantManager::generate_all_code_variant();
-        MESG_BAG msg_content = {1, 0, (long)curr_pc, (long)cc_offset, (long)ss_offset, "Generate the code variant!"};
+        CodeVariantManager::generate_all_code_variant(true);
+        P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
+        MESG_BAG msg_content = {1, 0, (long)new_pc, (long)cc_offset, (long)ss_offset, "Generate the code variant!"};
         NetLink::send_mesg(msg_content);
         NetLink::disconnect_with_lkm();
-        CodeVariantManager::generate_all_code_variant();
     }
     
     

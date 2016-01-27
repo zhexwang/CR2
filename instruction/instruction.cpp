@@ -123,8 +123,8 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
     F_SIZE target_addr = get_target_offset();
     if(_module->is_shared_object()){//the offset between code cache and origin code region is lower than 4G
         /* @Shared Object Address is higher than 32bit
-            movl ($ss_offset-0x4)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address
-            movl ($ss_offset-0x8)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address  
+            movl ($ss_offset-0x4)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address
+            movl ($ss_offset-0x8)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address  
             pushq fallthrough_addr_in_origin_code&0xffffffff                    //push low32 bits real return address 
             movl 0x4(%rsp), (fallthrough_addr_in_origin_code>>32)&0xffffffff    //push high32 bits real return address
             jmp  rel32                                                          //jump to the target function
@@ -142,7 +142,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -4};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movl_rra_l32_template;
@@ -156,7 +156,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
           //2.3 push relocation information
         INSTR_RELA rra_h32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_h32_rela_disp32);
-        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
+        INSTR_RELA rra_h32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_h32_rela_imm32);
           //2.4 merge
         instr_template += movl_rra_h32_template;
@@ -253,8 +253,8 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
     UINT16 curr_pc = 0;
     if(_module->is_shared_object()){//the offset between code cache and origin code region is lower than 4G
         /* @Shared Object Address is higher than 32bit
-            movl ($ss_offset-0x4)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address
-            movl ($ss_offset-0x8)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address  
+            movl ($ss_offset-0x4)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address
+            movl ($ss_offset-0x8)(%rsp), fallthrough_addr_in_cc&0xfffffff       //shadow stack push low32 bits real return address  
             pushq fallthrough_addr_in_origin_code&0xffffffff                    //push low32 bits real return address 
             movl 0x4(%rsp), (fallthrough_addr_in_origin_code>>32)&0xffffffff    //push high32 bits real return address
             pushq mem                                                           (take care of the base register is rsp)
@@ -273,7 +273,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //1.3 push relocation information
         INSTR_RELA rra_l32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -4};
         reloc_vec.push_back(rra_l32_rela_disp32);
-        INSTR_RELA rra_l32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
+        INSTR_RELA rra_l32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_l32_rela_imm32);
           //1.4 merge the template
         instr_template += movl_rra_l32_template;
@@ -287,7 +287,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //2.3 push relocation information
         INSTR_RELA rra_h32_rela_disp32 = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
         reloc_vec.push_back(rra_h32_rela_disp32);
-        INSTR_RELA rra_h32_rela_imm32 = {HIGH32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
+        INSTR_RELA rra_h32_rela_imm32 = {LOW32_CC_RELA_TYPE, imm32_rela_pos, 4, curr_pc, (INT64)fallthrough_addr};
         reloc_vec.push_back(rra_h32_rela_imm32);
           //2.4 merge
         instr_template += movl_rra_h32_template;
@@ -678,6 +678,7 @@ std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec
     reloc_vec.push_back(rela);
 
     instr_template += jmpq_template;
+
     return instr_template;
 }
 

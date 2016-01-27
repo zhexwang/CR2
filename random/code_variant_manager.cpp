@@ -195,7 +195,7 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
             }else{
                 CVM_MAPS::iterator iter = _all_cvm_maps.find(maps_record_name);
                 ASSERT(iter!=_all_cvm_maps.end());
-                iter->second->set_x_load_base(currentRow->start);
+                iter->second->set_x_load_base(currentRow->start, currentRow->end - currentRow->start);
             }
         }
         //shadow stack and stack
@@ -224,6 +224,7 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
 #define JMP32_LEN 0x5
 #define JMP8_LEN 0x2
 #define OVERLAP_JMP32_LEN 0x4
+#define OFFSET_POS 0x1
 #define JMP8_OPCODE 0xeb
 #define JMP32_OPCODE 0xe9
 
@@ -471,26 +472,144 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
     }
 }
 
+void CodeVariantManager::clean_cc(BOOL is_first_cc)
+{
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    S_ADDRX place_addr = cc_base;
+    std::string invalid_instr = InstrGenerator::gen_invalid_instr();
+    S_SIZE instr_len = invalid_instr.length();
+    S_ADDRX cc_end = cc_base + _cc_load_size - instr_len;
+
+    while(place_addr<=cc_end){
+        invalid_instr.copy((char*)place_addr, instr_len);
+        place_addr += instr_len;
+    }
+    return ;
+}
+
 void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
 {
     S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
     CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
     RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
     JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
-    // 1.arrange the code layout
+    // 1.clean code cache
+    clean_cc(is_first_cc);
+    // 2.arrange the code layout
     arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
-    // 2.generate the code
+    // 3.generate the code
     relocate_rbbls_and_tramps(cc_layout, cc_base, rbbl_maps, jmpin_rbbl_offsets);
 
     return ;
 }
 
-void CodeVariantManager::generate_all_code_variant()
+void CodeVariantManager::generate_all_code_variant(BOOL is_first_cc)
 {
-    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
         iter->second->generate_code_variant(true);
-        //iter->second->generate_code_variant(false);
-    }
     
     return ;
+}
+
+RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        RandomBBL *rbbl = iter->second->find_rbbl_from_paddrx(p_addr, is_first_cc);
+        if(rbbl)
+            return rbbl;
+    }
+    return NULL;
+}
+
+RandomBBL *CodeVariantManager::find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        RandomBBL *rbbl = iter->second->find_rbbl_from_saddrx(s_addr, is_first_cc);
+        if(rbbl)
+            return rbbl;
+    }
+    return NULL;
+}
+
+RandomBBL *CodeVariantManager::find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc)
+{
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    
+    if(p_addr>=_cc_load_base && p_addr<(_cc_load_base+_cc_load_size))
+        return find_rbbl_from_saddrx(p_addr - _cc_load_base + cc_base, is_first_cc);
+    else
+        return NULL;
+}
+
+RandomBBL *CodeVariantManager::find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_first_cc)
+{
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
+
+    if(s_addr>=cc_base && s_addr<(cc_base+_cc_load_size)){
+        CC_LAYOUT_ITER iter = cc_layout.lower_bound(Range<S_ADDRX>(s_addr));
+        if(iter!=cc_layout.end() && s_addr<=iter->first.high()){
+            S_ADDRX ptr = iter->second;
+            switch(iter->second){
+                case BOUNDARY_PTR: return NULL;
+                case TRAMP_JMP8_PTR: 
+                    {
+                        ASSERT(*(UINT8*)ptr==JMP8_OPCODE);    
+                        INT8 offset8 = *(INT8*)(ptr+OFFSET_POS);
+                        S_ADDRX target_addr = s_addr + JMP8_LEN + offset8;    
+                        return find_rbbl_from_saddrx(target_addr, is_first_cc);
+                    }
+                case TRAMP_OVERLAP_JMP32_PTR: ASSERT(0); return NULL;
+                case TRAMP_JMP32_PTR://need relocate the trampolines
+                    {
+                        ASSERT(*(UINT8*)ptr==JMP32_OPCODE);    
+                        INT32 offset32 = *(INT32*)(ptr+OFFSET_POS);
+                        S_ADDRX target_addr = s_addr + JMP32_LEN + offset32;
+                        return find_rbbl_from_saddrx(target_addr, is_first_cc);
+                    }
+                default://rbbl
+                    return (RandomBBL*)ptr;
+                }
+        }else
+            return NULL;
+    }else
+        return NULL;
+}
+
+P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_orig(orig_p_addrx, is_first_cc);
+        if(ret_addrx!=0)
+            return ret_addrx;
+    }
+    return 0;
+}
+
+S_ADDRX CodeVariantManager::find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        P_ADDRX ret_addrx = iter->second->find_cc_saddrx_from_orig(orig_p_addrx, is_first_cc);
+        if(ret_addrx!=0)
+            return ret_addrx;
+    }
+    return 0;
+}
+
+S_ADDRX CodeVariantManager::find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
+{
+    RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
+    F_SIZE pc_size = orig_p_addrx - _org_x_load_base;
+    if(pc_size<_org_x_load_size){
+        RBBL_CC_MAPS::iterator iter = rbbl_maps.find(pc_size);
+        return iter!=rbbl_maps.end() ? iter->second : 0;
+    }else
+        return 0;
+}
+
+P_ADDRX CodeVariantManager::find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
+{
+    S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
+    S_ADDRX ret_addrx = find_cc_saddrx_from_orig(orig_p_addrx, is_first_cc);
+    return ret_addrx!=0 ? (ret_addrx - cc_base + _cc_load_base) : 0;
 }
