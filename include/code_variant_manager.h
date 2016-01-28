@@ -66,8 +66,20 @@ protected:
 	static std::string _code_variant_img_path;
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
+	static BOOL _is_cv1_ready;
+	static BOOL _is_cv2_ready;
 	//shadow stack
 public:
+	//get functions
+	CodeVariantManager(std::string module_path);
+	~CodeVariantManager();
+	static RandomBBL *find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
+	static RandomBBL *find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
+	static P_ADDRX find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	static S_ADDRX find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	static P_ADDRX find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc);
+	static void start_gen_code_variants();
+	static void stop_gen_code_variants();
 	static void init_protected_proc_info(PID protected_pid, SIZE cc_offset, SIZE ss_offset)
 	{
 		FATAL(ss_offset==0, "Current version only support shadow stack based on offset without gs segmentation!\n");
@@ -76,30 +88,12 @@ public:
 		parse_proc_maps(protected_pid);
 		init_cc_and_ss();
 	}
-	static void add_cvm(CodeVariantManager *cvm)
+	static BOOL is_code_variant_ready(BOOL is_first_cc)
 	{
-		_all_cvm_maps.insert(std::make_pair(cvm->get_name(), cvm));
+		return is_first_cc ? _is_cv1_ready : _is_cv2_ready;
 	}
-	//set functions
-	static void parse_proc_maps(PID protected_pid);
-	static void generate_all_code_variant(BOOL is_first_cc);
-	static RandomBBL *find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
-	static RandomBBL *find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
-	static P_ADDRX find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
-	static S_ADDRX find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
-	static P_ADDRX find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc);
-	P_ADDRX find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc);
-	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
-	S_ADDRX find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
-	RandomBBL *find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
-	RandomBBL *find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
-	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
-	void generate_code_variant(BOOL is_first_cc);
-	void clean_cc(BOOL is_first_cc);
-	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
-	//get functions
-	CodeVariantManager(std::string module_path);
-	~CodeVariantManager();
+	static void wait_for_code_variant_ready(BOOL is_first_cc);
+	static void consume_cv(BOOL is_first_cc);
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
@@ -124,6 +118,24 @@ public:
 	{
 		_switch_case_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
 	}
+protected:	
+	static void add_cvm(CodeVariantManager *cvm)
+	{
+		_all_cvm_maps.insert(std::make_pair(cvm->get_name(), cvm));
+	}
+	//set functions
+	static void parse_proc_maps(PID protected_pid);
+	static void generate_all_code_variant(BOOL is_first_cc);
+	static void *generate_code_variant_concurrently(void *arg);
+	P_ADDRX find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc);
+	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	S_ADDRX find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
+	RandomBBL *find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
+	RandomBBL *find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
+	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
+	void generate_code_variant(BOOL is_first_cc);
+	void clean_cc(BOOL is_first_cc);
+	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	//init cc and ss
 	void init_cc();
 	static void init_cc_and_ss();

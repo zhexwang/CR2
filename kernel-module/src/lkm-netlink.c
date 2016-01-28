@@ -2,6 +2,7 @@
 #include <net/sock.h>
 #include <linux/netlink.h>
 #include <linux/skbuff.h>
+#include <linux/mutex.h>
 
 #include "lkm-utility.h"
 #include "lkm-netlink.h"
@@ -38,19 +39,23 @@ long connect_with_shuffle_process = 0;
 int shuffle_process_pid = 0;
 long new_ip = 0;
 
+//struct mutex nl_mtx;
+
 void nl_recv_msg(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh;
     int pid;
+	//mutex_lock(&nl_mtx);
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid; /*pid of sending process */
 	shuffle_process_pid = pid;
 	PRINTK("Recieve mesg from user(%d): %s\n", pid, ((MESG_BAG*)nlmsg_data(nlh))->mesg);
 	start_flag = 0;
 	connect_with_shuffle_process = ((MESG_BAG*)nlmsg_data(nlh))->connect;
-	if(connect_with_shuffle_process!=0)
+	if(connect_with_shuffle_process!=DISCONNECT)
 		new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
-	
+
+	//mutex_unlock(&nl_mtx);
 	return ;
 }
 

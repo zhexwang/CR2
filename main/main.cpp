@@ -40,18 +40,33 @@ int main(int argc, char **argv)
             //read input relocation dbs
             NOT_IMPLEMENTED(wangzhe);
         }
+        // 1.init netlink and get protected process's information
         NetLink::connect_with_lkm();
         PID proc_id = 0;
         P_ADDRX curr_pc = 0;
         SIZE cc_offset = 0, ss_offset = 0;
-        NetLink::recv_mesg(proc_id, curr_pc, cc_offset, ss_offset);
-        //generate code variant
+        NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset);
+        // 2.generate the first code variant
         CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset);
-        CodeVariantManager::generate_all_code_variant(true);
+        CodeVariantManager::start_gen_code_variants();
+        CodeVariantManager::wait_for_code_variant_ready(true);
         P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
         ASSERT(new_pc!=0);
-        MESG_BAG msg_content = {1, 0, (long)new_pc, (long)cc_offset, (long)ss_offset, "Generate the code variant!"};
-        NetLink::send_mesg(msg_content);
+        // 3.send message to switch to the new generated code variant
+        NetLink::send_cv_ready_mesg(true, new_pc);
+        // 4.loop to listen for rereandomization and exit
+        BOOL need_cv1 = false;
+        while(NetLink::recv_cv_request_mesg(curr_pc, need_cv1)){
+            CodeVariantManager::wait_for_code_variant_ready(need_cv1);
+            new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, need_cv1);
+            ASSERT(new_pc!=0);
+            ASSERTM(0, "rerandomization need modify the shadow stack!\n");
+            NetLink::send_cv_ready_mesg(need_cv1, new_pc);
+            CodeVariantManager::consume_cv(need_cv1 ? true : false);
+        };
+        // 5.stop gen code variants
+        CodeVariantManager::stop_gen_code_variants();
+        // 6.disconnect
         NetLink::disconnect_with_lkm();
     }
     

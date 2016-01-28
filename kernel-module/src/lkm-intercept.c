@@ -44,35 +44,37 @@ ulong is_code_cache(char *name)
 	else
 		return 0;
 }
+extern long connect_with_shuffle_process;
 
 void protect_orig_x_region(struct task_struct *ts)
 {
-	struct mm_struct *mm = ts->mm;
-	struct vm_area_struct *list = mm->mmap, *ptr = list;
-	do{
-		
-		struct file *fil = ptr->vm_file;
-		if(fil != NULL){
-			char* name = fil->f_path.dentry->d_iname;
-			if(is_code_cache(name)==0 && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV)
-				orig_mprotect(ptr->vm_start, ptr->vm_end - ptr->vm_start, PROT_READ);			
-		}
+	if(connect_with_shuffle_process!=DISCONNECT){
+		struct mm_struct *mm = ts->mm;
+		struct vm_area_struct *list = mm->mmap, *ptr = list;
+		do{
+			
+			struct file *fil = ptr->vm_file;
+			if(fil != NULL){
+				char* name = fil->f_path.dentry->d_iname;
+				if(is_code_cache(name)==0 && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV)
+					orig_mprotect(ptr->vm_start, ptr->vm_end - ptr->vm_start, PROT_READ);			
+			}
 
-		ptr = ptr->vm_next;
-		if(ptr == NULL) break;
-	} while (ptr != list);
-	
-	PRINTK("Protect origin x region!\n");
+			ptr = ptr->vm_next;
+			if(ptr == NULL) break;
+		} while (ptr != list);
+		
+		PRINTK("Protect origin x region!\n");
+	}
 }
 
 extern int shuffle_process_pid;
 extern long new_ip;
-extern long connect_with_shuffle_process;
-long send_mesg_to_shuffle_process(long curr_ip, int curr_pid)
+long send_init_mesg_to_shuffle_process(long curr_ip, int curr_pid)
 {
-	MESG_BAG msg = {1, curr_pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and generate code variant!"};
+	MESG_BAG msg = {P_PROCESS_IS_IN, curr_pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and request code variant!"};
 
-	if(connect_with_shuffle_process!=0){
+	if(connect_with_shuffle_process!=DISCONNECT){
 		nl_send_msg(shuffle_process_pid, msg);
 		start_flag = 1;
 		while(start_flag){
@@ -95,7 +97,7 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
 	//send msg to generate the cc and get the pc
-	newip = send_mesg_to_shuffle_process(curr_ip, ts->pid);
+	newip = send_init_mesg_to_shuffle_process(curr_ip, ts->pid);
 	//protect the origin x region
 	protect_orig_x_region(current);
 	//set rip according to the rerandomizaton result
@@ -316,6 +318,15 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	return ret;
 }
 
+void send_exit_mesg_to_shuffle_process(int curr_pid)
+{
+	MESG_BAG msg = {P_PROCESS_IS_OUT, curr_pid, 0, CC_OFFSET, SS_OFFSET, "protected process is out!"};
+	if(connect_with_shuffle_process!=DISCONNECT)
+		nl_send_msg(shuffle_process_pid, msg);
+	
+	return ;
+}
+
 asmlinkage long intercept_exit_group(ulong error)
 {	
 	char *start_encode;
@@ -326,6 +337,7 @@ asmlinkage long intercept_exit_group(ulong error)
 			return set_program_start(current, start_encode);
 		}else{
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
+			send_exit_mesg_to_shuffle_process(current->pid);
 			free_app_slot(current);
 		}
 	}

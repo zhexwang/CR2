@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 
 #include "code_variant_manager.h"
 #include "instr_generator.h"
@@ -19,6 +20,8 @@ P_ADDRX CodeVariantManager::_ss_load_base = 0;
 P_SIZE CodeVariantManager::_ss_load_size = 0;
 std::string CodeVariantManager::_ss_shm_path;
 INT32 CodeVariantManager::_ss_fd = -1;
+BOOL CodeVariantManager::_is_cv1_ready = false;
+BOOL CodeVariantManager::_is_cv2_ready = false;
 
 static std::string get_real_path(const char *file_path)
 {
@@ -521,8 +524,60 @@ void CodeVariantManager::generate_all_code_variant(BOOL is_first_cc)
     return ;
 }
 
+static BOOL need_stop = false;
+pthread_t child_thread;
+
+void CodeVariantManager::start_gen_code_variants()
+{
+    need_stop = false;
+    pthread_create(&child_thread, NULL, generate_code_variant_concurrently, NULL);
+}
+
+void CodeVariantManager::stop_gen_code_variants()
+{
+    need_stop = true;
+    pthread_join(child_thread, NULL);
+}
+
+void* CodeVariantManager::generate_code_variant_concurrently(void *arg)
+{
+    while(!need_stop){
+        if(!_is_cv1_ready){
+            generate_all_code_variant(true);
+            _is_cv1_ready = true;
+        }
+
+        if(!_is_cv2_ready){
+            generate_all_code_variant(false);
+            _is_cv2_ready = true;
+        }
+        sched_yield();
+    }
+    return NULL;
+}
+
+void CodeVariantManager::consume_cv(BOOL is_first_cc)
+{
+    if(is_first_cc){
+        ASSERT(_is_cv1_ready);
+        _is_cv1_ready = false;
+    }else{
+        ASSERT(_is_cv2_ready);
+        _is_cv2_ready = false;
+    }
+}
+
+void CodeVariantManager::wait_for_code_variant_ready(BOOL is_first_cc)
+{
+    BOOL &is_ready = is_first_cc ? _is_cv1_ready : _is_cv2_ready;
+    while(!is_ready)
+        sched_yield();
+}
+
 RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc)
 {
+    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
+    
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         RandomBBL *rbbl = iter->second->find_rbbl_from_paddrx(p_addr, is_first_cc);
         if(rbbl)
@@ -533,6 +588,8 @@ RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is
 
 RandomBBL *CodeVariantManager::find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc)
 {
+    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
+    
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         RandomBBL *rbbl = iter->second->find_rbbl_from_saddrx(s_addr, is_first_cc);
         if(rbbl)
@@ -588,6 +645,8 @@ RandomBBL *CodeVariantManager::find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_fir
 
 P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
 {
+    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
+
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_orig(orig_p_addrx, is_first_cc);
         if(ret_addrx!=0)
@@ -598,6 +657,8 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, B
 
 S_ADDRX CodeVariantManager::find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
 {
+    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
+
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_saddrx_from_orig(orig_p_addrx, is_first_cc);
         if(ret_addrx!=0)
@@ -642,6 +703,8 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_fi
 
 P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc)
 {
+    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
+
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_rbbl(rbbl, is_first_cc);
         if(ret_addrx!=0)
