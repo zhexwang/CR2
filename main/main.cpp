@@ -58,11 +58,11 @@ int main(int argc, char **argv)
         BOOL need_cv1 = false;
         while(NetLink::recv_cv_request_mesg(curr_pc, need_cv1)){
             CodeVariantManager::wait_for_code_variant_ready(need_cv1);
-            new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, need_cv1);
+            new_pc = CodeVariantManager::get_new_pc_from_old_all(curr_pc, need_cv1);
             ASSERT(new_pc!=0);
-            ASSERTM(0, "rerandomization need modify the shadow stack!\n");
+            CodeVariantManager::modify_new_ra_in_ss(need_cv1);
             NetLink::send_cv_ready_mesg(need_cv1, new_pc);
-            CodeVariantManager::consume_cv(need_cv1 ? true : false);
+            CodeVariantManager::consume_cv(need_cv1 ? false : true);
         };
         // 5.stop gen code variants
         CodeVariantManager::stop_gen_code_variants();

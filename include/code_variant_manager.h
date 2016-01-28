@@ -33,7 +33,7 @@ protected:
 	RAND_BBL_MAPS _movable_rbbl_maps;
 	JMPIN_TARGETS_MAPS _switch_case_jmpin_rbbl_maps;
 	std::string _elf_real_name;
-	//generate code information
+	/********generate code information********/
     CC_LAYOUT _cc_layout1;
 	CC_LAYOUT _cc_layout2;
     //store the mapping which maps from binary offset to cc address
@@ -42,9 +42,12 @@ protected:
     //store the switch-case/memset jmpin offset
     JMPIN_CC_OFFSET _jmpin_rbbl_offsets1;
 	JMPIN_CC_OFFSET _jmpin_rbbl_offsets2;
+	//static vars
+	static BOOL _is_cv1_ready;
+	static BOOL _is_cv2_ready;
+	/*****************************************/
 	//shuffle process information
 	//code cache
-	BOOL _curr_is_first_cc;
 	S_ADDRX _cc1_base;
 	S_ADDRX _cc2_base;
 	std::string _cc_shm_path;
@@ -59,6 +62,8 @@ protected:
 	static P_ADDRX _org_stack_load_base;
 	static P_ADDRX _ss_load_base;
 	static P_SIZE _ss_load_size;
+	//shadow stack
+	static S_ADDRX _ss_base;
 	static std::string _ss_shm_path;
 	static INT32 _ss_fd;
 	//static vars
@@ -66,9 +71,6 @@ protected:
 	static std::string _code_variant_img_path;
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
-	static BOOL _is_cv1_ready;
-	static BOOL _is_cv2_ready;
-	//shadow stack
 public:
 	//get functions
 	CodeVariantManager(std::string module_path);
@@ -80,6 +82,8 @@ public:
 	static P_ADDRX find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc);
 	static void start_gen_code_variants();
 	static void stop_gen_code_variants();
+	static P_ADDRX get_new_pc_from_old_all(P_ADDRX old_pc, BOOL first_cc_is_new);
+	static void modify_new_ra_in_ss(BOOL first_cc_is_new);
 	static void init_protected_proc_info(PID protected_pid, SIZE cc_offset, SIZE ss_offset)
 	{
 		FATAL(ss_offset==0, "Current version only support shadow stack based on offset without gs segmentation!\n");
@@ -94,6 +98,7 @@ public:
 	}
 	static void wait_for_code_variant_ready(BOOL is_first_cc);
 	static void consume_cv(BOOL is_first_cc);
+	static void clear_all_cv(BOOL is_first_cc);
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
@@ -127,6 +132,8 @@ protected:
 	static void parse_proc_maps(PID protected_pid);
 	static void generate_all_code_variant(BOOL is_first_cc);
 	static void *generate_code_variant_concurrently(void *arg);
+	void clear_cv(BOOL is_first_cc);
+	P_ADDRX get_new_pc_from_old(P_ADDRX old_pc, BOOL first_cc_is_new);
 	P_ADDRX find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc);
 	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
 	S_ADDRX find_cc_saddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);

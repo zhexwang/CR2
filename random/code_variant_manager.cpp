@@ -17,6 +17,7 @@ SIZE CodeVariantManager::_cc_offset = 0;
 SIZE CodeVariantManager::_ss_offset = 0;
 P_ADDRX CodeVariantManager::_org_stack_load_base = 0;
 P_ADDRX CodeVariantManager::_ss_load_base = 0;
+S_ADDRX CodeVariantManager::_ss_base = 0;
 P_SIZE CodeVariantManager::_ss_load_size = 0;
 std::string CodeVariantManager::_ss_shm_path;
 INT32 CodeVariantManager::_ss_fd = -1;
@@ -113,8 +114,6 @@ void CodeVariantManager::init_cc()
     _cc_fd = map_shm_file(_cc_shm_path, _cc1_base, map_size);
     ASSERT(map_size==(_cc_load_size*2));
     _cc2_base = _cc1_base+map_size/2;  
-    // 2.set curr cc
-    _curr_is_first_cc = true;
 }
 
 void CodeVariantManager::init_cc_and_ss()
@@ -126,7 +125,7 @@ void CodeVariantManager::init_cc_and_ss()
     S_SIZE map_size;
     S_ADDRX map_start;
     _ss_fd = map_shm_file(_ss_shm_path, map_start, map_size);
-    _ss_load_base = map_start + map_size;
+    _ss_base = map_start + map_size;
     ASSERT(map_size==_ss_load_size);
 }
 
@@ -556,13 +555,33 @@ void* CodeVariantManager::generate_code_variant_concurrently(void *arg)
     return NULL;
 }
 
+void CodeVariantManager::clear_cv(BOOL is_first_cc)
+{
+    CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
+    RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
+    JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
+    cc_layout.clear();
+    rbbl_maps.clear();
+    jmpin_rbbl_offsets.clear();
+}
+
+void CodeVariantManager::clear_all_cv(BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
+        iter->second->clear_cv(is_first_cc);
+}
+
 void CodeVariantManager::consume_cv(BOOL is_first_cc)
 {
+    // 1.clear all code variants
+    clear_all_cv(is_first_cc);
+    // 2.clear ready flags
     if(is_first_cc){
         ASSERT(_is_cv1_ready);
         _is_cv1_ready = false;
     }else{
         ASSERT(_is_cv2_ready);
+        
         _is_cv2_ready = false;
     }
 }
@@ -712,3 +731,57 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL 
     }
     return 0;
 }
+
+P_ADDRX CodeVariantManager::get_new_pc_from_old(P_ADDRX old_pc, BOOL first_cc_is_new)
+{
+    RandomBBL *rbbl = find_rbbl_from_paddrx(old_pc, first_cc_is_new ? false : true);
+    if(rbbl){
+        //get old and new code variant information
+        RBBL_CC_MAPS &old_rbbl_maps = first_cc_is_new ? _rbbl_maps2 : _rbbl_maps1;
+        RBBL_CC_MAPS &new_rbbl_maps = first_cc_is_new ? _rbbl_maps1 : _rbbl_maps2;
+        S_ADDRX old_cc_base = first_cc_is_new ? _cc2_base : _cc1_base;
+        S_ADDRX new_cc_base = first_cc_is_new ? _cc1_base : _cc2_base;
+        //get old rbbl offset
+        RBBL_CC_MAPS::iterator it = old_rbbl_maps.find(rbbl->get_rbbl_offset());
+        ASSERT(it!=old_rbbl_maps.end());
+        S_ADDRX old_pc_saddrx = old_pc - _cc_load_base + old_cc_base;
+        S_SIZE rbbl_internal_offset = old_pc_saddrx - it->second;
+        //get new rbbl saddrx
+        it = new_rbbl_maps.find(rbbl->get_rbbl_offset());
+        ASSERT(it!=new_rbbl_maps.end());
+        S_ADDRX new_pc_saddrx = it->second + rbbl_internal_offset;
+        return new_pc_saddrx - new_cc_base + _cc_load_base;
+    }else
+        return 0;
+}
+
+P_ADDRX CodeVariantManager::get_new_pc_from_old_all(P_ADDRX old_pc, BOOL first_cc_is_new)
+{
+    ASSERT(_is_cv1_ready&&_is_cv2_ready);
+
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        P_ADDRX new_pc = iter->second->get_new_pc_from_old(old_pc, first_cc_is_new);
+        if(new_pc!=0)
+            return new_pc;                
+    }
+    
+    return 0;
+}
+
+void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
+{
+    //TODO: we only handle ordinary shadow stack, not shadow stack++
+    ASSERT(_is_cv1_ready && _is_cv2_ready);
+    S_ADDRX return_addr_ptr = _ss_base - sizeof(P_ADDRX);
+    
+    while(return_addr_ptr>=(_ss_base-_ss_load_size)){
+        P_ADDRX old_return_addr = *(P_ADDRX *)return_addr_ptr;
+        P_ADDRX new_return_addr = get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
+        //modify old return address to the new return address
+        if(new_return_addr!=0)
+            *(P_ADDRX *)return_addr_ptr = new_return_addr;
+        
+        return_addr_ptr -= sizeof(P_ADDRX);
+    }
+}
+
