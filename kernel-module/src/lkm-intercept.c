@@ -47,22 +47,22 @@ ulong is_code_cache(char *name)
 
 void protect_orig_x_region(struct task_struct *ts)
 {
-	PRINTK("Need protect origin x region! not implemented %s\n", __FUNCTION__);
-	/*struct mm_struct *mm = ts->mm;
+	struct mm_struct *mm = ts->mm;
 	struct vm_area_struct *list = mm->mmap, *ptr = list;
 	do{
 		
 		struct file *fil = ptr->vm_file;
 		if(fil != NULL){
 			char* name = fil->f_path.dentry->d_iname;
-			if(is_code_cache(name)!=0){
-
-			}			
+			if(is_code_cache(name)==0 && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV)
+				orig_mprotect(ptr->vm_start, ptr->vm_end - ptr->vm_start, PROT_READ);			
 		}
 
 		ptr = ptr->vm_next;
 		if(ptr == NULL) break;
-	} while (ptr != list);*/
+	} while (ptr != list);
+	
+	PRINTK("Protect origin x region!\n");
 }
 
 extern int shuffle_process_pid;
@@ -94,10 +94,10 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	//rewrite the checkpoint encode
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
-	//protect the origin x region
-	protect_orig_x_region(current);
 	//send msg to generate the cc and get the pc
 	newip = send_mesg_to_shuffle_process(curr_ip, ts->pid);
+	//protect the origin x region
+	protect_orig_x_region(current);
 	//set rip according to the rerandomizaton result
 	regs->ip = newip;
 	
@@ -151,7 +151,6 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 	long ld_offset = 0;//ld-linux.so fixed offset
 	long program_entry = 0;
 	long *program_entry_addr = NULL;
-	int main_file_sec_no = 0;
 #ifdef _C10	
 	char buf[256];
 	char *ld_path = NULL;
@@ -182,16 +181,13 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 #endif
 			}
 
-			if(name && is_monitor_app(name) && ptr->vm_pgoff==0){//main file executable region
-				if(main_file_sec_no==0){
-					cc_ret = allocate_cc_fixed(ptr->vm_start, ptr->vm_end, name);
-					//get main program entry
-					program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
-					get_user(program_entry, program_entry_addr);
-					PRINTK("[LKM:%d]entry=0x%lx\n", ts->pid, program_entry);
-					set_checkpoint(ts, program_entry, ptr->vm_start, ptr->vm_end);
-				}
-				main_file_sec_no++;
+			if(name && is_monitor_app(name) && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV){//main file executable region
+				cc_ret = allocate_cc_fixed(ptr->vm_start, ptr->vm_end, name);
+				//get main program entry
+				program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
+				get_user(program_entry, program_entry_addr);
+				PRINTK("[LKM:%d]entry=0x%lx\n", ts->pid, program_entry);
+				set_checkpoint(ts, program_entry, ptr->vm_start, ptr->vm_end);
 			}
 		}
 #ifdef _VM

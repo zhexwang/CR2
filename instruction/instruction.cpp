@@ -507,7 +507,7 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             curr_pc += je_template.length();
             rela_rel32_pos += instr_template.length();
             //2.3 push relocation information
-            INSTR_RELA je_rel32_rela = {LOW32_CC_RELA_TYPE, rela_rel32_pos, 4, curr_pc, (INT64)(*iter)};
+            INSTR_RELA je_rel32_rela = {BRANCH_RELA_TYPE, rela_rel32_pos, 4, curr_pc, (INT64)(*iter)};
             reloc_vec.push_back(je_rel32_rela);
             //2.4 merge the template
             instr_template += je_template;

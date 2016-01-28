@@ -274,3 +274,34 @@ void rerandomization(struct task_struct *ts)
 	PRINTK("Rerandomization need recieve msg from shuffle process! not implemented!\n");
 }
 
+/*************************Below functions are used to stop and wakeup processes******************************************/
+long saved_state = 0;
+
+void stop_all(void)
+{
+	struct task_struct *task;  
+	for_each_process(task)  
+	{
+		if(!strcmp(task->comm, "b.out")){
+			saved_state = task->state;
+			set_task_state(task, TASK_STOPPED);//TASK_INTERRUPTIBLE
+		}
+	} 
+	return ;
+}
+
+void wake_all(void)
+{
+	struct task_struct *task;  
+	//struct pt_regs *regs;
+	for_each_process(task)  
+	{
+		if(!strcmp(task->comm, "b.out")){
+			//regs = task_pt_regs(task);
+			wake_up_process(task);
+			set_task_state(task, saved_state);
+		}
+	} 
+	return ;
+}
+

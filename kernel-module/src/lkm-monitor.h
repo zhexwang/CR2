@@ -17,4 +17,6 @@ extern void insert_x_info(struct task_struct *ts, long cc_start, long cc_end, co
 extern void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file);
 
 extern void rerandomization(struct task_struct *ts);
+extern void stop_all(void);
+extern void wake_all(void);
 #endif

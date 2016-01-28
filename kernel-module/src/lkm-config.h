@@ -4,7 +4,7 @@
 #include <linux/kernel.h>
 /***************CR2 args******************/
 #define CC_OFFSET (1ul<<30)
-#define CC_MULTIPULE (4)
+#define CC_MULTIPULE (8)
 #define SS_OFFSET (1ul<<30)
 #define SS_MULTIPULE (15)
 
@@ -20,6 +20,8 @@
 		#error unkown os version
 	#endif
 #endif
+
+#define PAGE_COPY_EXECV (0x25LLU)
 
 #define _START_RAX 0x1c
 #define CHECK_ENCODE_LEN 7
