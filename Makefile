@@ -20,7 +20,7 @@ PIN_PATH := ${HOME}/pin-2.14/source/tools/profile_indirect
 INCLUDE := -I./include -I./${DISASM_DIR}/include
 
 # compiler and flags
-LDFLAGS := 
+LDFLAGS := -lpthread
 LIBS := -lrt
 CXX := g++ 
 CC := gcc

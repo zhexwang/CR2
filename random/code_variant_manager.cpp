@@ -519,7 +519,7 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
 void CodeVariantManager::generate_all_code_variant(BOOL is_first_cc)
 {
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
-        iter->second->generate_code_variant(true);
+        iter->second->generate_code_variant(is_first_cc);
     
     return ;
 }
