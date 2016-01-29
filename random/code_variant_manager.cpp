@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "code_variant_manager.h"
 #include "instr_generator.h"
@@ -351,6 +352,30 @@ S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc
     return trampoline32_addr;
 }
 
+S_ADDRX *random(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeVariantManager::RAND_BBL_MAPS movable_rbbls, \
+    SIZE &array_num)
+{
+    array_num = fixed_rbbls.size() + movable_rbbls.size();
+    S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+    //init array
+    SIZE index = 0;
+    for(CodeVariantManager::RAND_BBL_MAPS::const_iterator iter = fixed_rbbls.begin(); iter!=fixed_rbbls.end(); iter++, index++)
+        rbbl_array[index] = (S_ADDRX)iter->second;
+    for(CodeVariantManager::RAND_BBL_MAPS::const_iterator iter = movable_rbbls.begin(); iter!=movable_rbbls.end(); iter++, index++)
+        rbbl_array[index] = (S_ADDRX)iter->second;
+    //random seed
+    srand((INT32)time(NULL));
+    for(SIZE idx=array_num-1; idx>0; idx--){
+        //swap
+        INT32 swap_idx = rand()%idx;
+        INT32 temp = rbbl_array[swap_idx];
+        rbbl_array[swap_idx] = rbbl_array[idx];
+        rbbl_array[idx] = temp;
+    }
+
+    return rbbl_array;
+}
+
 S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, \
     RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
 {
@@ -412,6 +437,28 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         FATAL(!ret.second, " place trampoline32 wrong!\n");
     }
     // 4.place fixed and movable rbbls
+    // 4.1 random fixed and movable rbbls
+    SIZE random_array_size;
+    S_ADDRX *random_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, random_array_size);
+    // 4.2 place rbbls
+    for(SIZE idx = 0; idx<random_array_size; idx++){
+        RandomBBL *rbbl = (RandomBBL*)random_array[idx];
+        S_SIZE rbbl_size = rbbl->get_template_size();
+        F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
+        rbbl_maps.insert(std::make_pair(rbbl_offset, used_cc_base));
+        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
+#ifdef TRACE_DEBUG
+            rbbl_maps.insert(std::make_pair(rbbl_offset+1, used_cc_base+23));
+#else
+            rbbl_maps.insert(std::make_pair(rbbl_offset+1, used_cc_base+1));
+#endif
+        }
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
+        used_cc_base += rbbl_size;
+    }
+    // 4.3 free array
+    delete []random_array;
+#if 0    
     for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
         RandomBBL *rbbl = iter->second;
         S_SIZE rbbl_size = rbbl->get_template_size();
@@ -441,7 +488,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
     }
-
+#endif
     //judge used cc size
     ASSERT((used_cc_base - cc_base)<=_cc_load_size);
     return used_cc_base;
@@ -633,10 +680,10 @@ RandomBBL *CodeVariantManager::find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_fir
     CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
 
     if(s_addr>=cc_base && s_addr<(cc_base+_cc_load_size)){
-        CC_LAYOUT_ITER iter = cc_layout.lower_bound(Range<S_ADDRX>(s_addr));
-        if(iter!=cc_layout.end() && s_addr<=iter->first.high()){
+        CC_LAYOUT_ITER iter = cc_layout.upper_bound(Range<S_ADDRX>(s_addr));
+        if(iter!=cc_layout.end() && s_addr<=(--iter)->first.high() && s_addr>=iter->first.low()){
             S_ADDRX ptr = iter->second;
-            switch(iter->second){
+            switch(ptr){
                 case BOUNDARY_PTR: return NULL;
                 case TRAMP_JMP8_PTR: 
                     {

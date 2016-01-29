@@ -26,7 +26,7 @@
 #define ASSERTM(cond, format, ...) do{if(!(cond)) {ERR("ASSERT failed: %s:%-4d "format, __FILE__, __LINE__, ## __VA_ARGS__); abort();}}while(0)
 #define NOT_IMPLEMENTED(who)        do{ERR("%s() in %s:%-4d is not implemented by %s\n", __FUNCTION__, __FILE__, __LINE__, #who); abort();} while (0)
 
-#define TRACE_DEBUG
+//#define TRACE_DEBUG
 
 #else
 #define ASSERT(cond) 

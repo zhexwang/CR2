@@ -662,11 +662,8 @@ BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
         //record jump targets
         F_SIZE memset_entry_target = memset_target + entry_data;
         if(is_instr_entry_in_off(memset_entry_target, true)){
-            Instruction *inst = find_instr_by_off(memset_entry_target, true);
-            if(!inst->is_ret()){
-                insert_br_target(memset_entry_target, jump_offset);
-                targets.insert(memset_entry_target);
-            }
+            insert_br_target(memset_entry_target, jump_offset);
+            targets.insert(memset_entry_target);
         }else
             break;
         
@@ -841,7 +838,8 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
         //record jump targets
         if(is_instr_entry_in_off(target_instr, false)){//makae sure that is real jump target!
             Instruction *inst = find_instr_by_off(target_instr, false);
-            if(!inst->is_ret()){
+            Instruction *prev_inst = find_prev_instr_by_off(target_instr, false);
+            if(!inst->is_ret() || !prev_inst->is_pop_reg()){//special handling due to C10 platform
                 insert_br_target(target_instr, jump_offset);
                 targets.insert(target_instr);
             }
@@ -1008,7 +1006,8 @@ BOOL Module::analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, S
             F_SIZE target_offset = table_base+entry_data;
             if(is_instr_entry_in_off(target_offset, false)){
                 Instruction *inst = find_instr_by_off(target_offset, false);
-                if(!inst->is_ret()){
+                Instruction *prev_inst = find_prev_instr_by_off(target_offset, false);
+                if(!inst->is_ret() || !prev_inst->is_pop_reg()){//special handling due to C10 platform
                     insert_br_target(target_offset, jump_offset);
                     targets.insert(target_offset);
                 }
@@ -1205,3 +1204,20 @@ Instruction *Module::find_instr_by_off(F_SIZE offset, BOOL consider_prefix) cons
     }else
         return instr_it->second;
 }
+
+Instruction *Module::find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const
+{
+    INSTR_MAP_ITERATOR instr_it = _instr_maps.find(offset);
+    if(instr_it == _instr_maps.end()){
+        if(consider_prefix){
+            instr_it = _instr_maps.find(offset-1);
+            if(instr_it!=_instr_maps.end() && instr_it->second->has_lock_and_repeat_prefix())
+                return (--instr_it)->second;
+            else
+                return NULL;
+        }else
+            return NULL;
+    }else
+        return (--instr_it)->second;
+}
+

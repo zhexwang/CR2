@@ -146,6 +146,7 @@ public:
 	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
+	Instruction *find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_instr_cover_offset(F_SIZE offset) const;
 	BasicBlock  *find_bbl_by_offset(F_SIZE offset, BOOL consider_prefix) const;
 	BasicBlock  *find_bbl_cover_offset(F_SIZE offset) const;

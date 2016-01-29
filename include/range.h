@@ -21,10 +21,9 @@ public:
 
 	bool operator<(const Range& rhs) const
 	{
-		if (_mLow < rhs._mLow){
-			ASSERT(_mHigh < rhs._mLow); // sanity check
+		if (_mLow < rhs._mLow)
 			return true;
-		}else
+		else
 			return false;
 	} // operator<
 	SIZE operator-(const Range& rhs) const

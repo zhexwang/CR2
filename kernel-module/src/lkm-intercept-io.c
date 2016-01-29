@@ -17,7 +17,7 @@ INTERCEPT_FUNC_DEF(read)
 			PRINTK("[%d, %d] read syscall need rerandomization\n", current->pid, current->tgid);
 			rerandomization(current);
 		}else
-			//PRINTK("[%d, %d] read syscall\n", current->pid, current->tgid);
+			;//PRINTK("[%d, %d] read syscall\n", current->pid, current->tgid);
 		set_io_in(current, __NR_write, 0);
 	}
 

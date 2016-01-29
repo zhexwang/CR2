@@ -7,6 +7,8 @@
 #include "lkm-utility.h"
 #include "lkm-file.h"
 #include "lkm-hook.h"
+#include "lkm-netlink.h"
+
 char* monitor_app_list[MAX_APP_LIST_NUM];
 /**
  * checking if the intercepted app is the one we want to monitor
@@ -32,7 +34,7 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	monitor_app_list[0] = "a.out";
+	monitor_app_list[0] = "gcc_base.cr2";
 }
 
 //-------------APP slot----------------------//
@@ -51,7 +53,6 @@ typedef struct{
 	long cc_start;
 	long cc_end;
 	char shfile[256];
-	int cc_id;//current cc used index
 }X_REGION;
 
 typedef struct{
@@ -61,7 +62,8 @@ typedef struct{
 }STACK_REGION;
 
 typedef struct{
-	int tgid;	
+	int tgid;
+	int cc_id;//current cc used index
 	long program_entry;
 	char executed_start;
 	char app_name[256];
@@ -80,6 +82,7 @@ void init_app_slot(struct task_struct *ts)
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==0){
 			app_slot_list[index].tgid = ts->tgid;
+			app_slot_list[index].cc_id = 0;
 			app_slot_list[index].executed_start = 0;
 			app_slot_list[index].program_entry = 0;
 			strcpy(app_slot_list[index].app_name, ts->comm);
@@ -207,7 +210,6 @@ void insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const cha
 					app_slot_list[index].xr[internal_index].cc_start = cc_start;
 					app_slot_list[index].xr[internal_index].cc_end = cc_end;
 					strcpy(app_slot_list[index].xr[internal_index].shfile, file);
-					app_slot_list[index].xr[internal_index].cc_id = 0;
 					return;
 				}
 			}
@@ -239,6 +241,27 @@ void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const
 
 /**************************rerandomization and communication with shuffle process**************************/
 
+extern int shuffle_process_pid;
+extern long new_ip;
+extern long connect_with_shuffle_process;
+extern char start_flag;
+
+void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int curr_cc_id)
+{
+	int connect = curr_cc_id==0 ? CURR_IS_CV1_NEED_CV2 : CURR_IS_CV2_NEED_CV1;
+	struct pt_regs *regs = task_pt_regs(ts);
+	MESG_BAG msg = {connect, ts->pid, regs->ip, CC_OFFSET, SS_OFFSET, "need rerandomization!"};
+	
+	if(connect_with_shuffle_process!=DISCONNECT){
+		nl_send_msg(shuffle_process_pid, msg);
+		start_flag = 1;
+		while(start_flag){
+			schedule();
+		}
+		regs->ip = new_ip;
+	}
+}
+
 void rerandomization(struct task_struct *ts)
 {
 	int index = 0;
@@ -246,32 +269,30 @@ void rerandomization(struct task_struct *ts)
 	int shm_fd = 0;
 	long cc_start = 0;
 	long cc_end = 0;
-	int cc_id = 0;
+	int curr_cc_id = 0;
 	long shm_off = 0;
 	//struct pt_regs *regs = task_pt_regs(ts);
 	// 1.remap the code cache
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==ts->tgid){
+			curr_cc_id = app_slot_list[index].cc_id;
+			app_slot_list[index].cc_id = curr_cc_id==0 ? 1 : 0;
 			for(internal_index = 0; internal_index<15; internal_index++){
 				cc_start = app_slot_list[index].xr[internal_index].cc_start;
 				cc_end = app_slot_list[index].xr[internal_index].cc_end;
-				cc_id = app_slot_list[index].xr[internal_index].cc_id;
 				if(cc_start!=0){
-					app_slot_list[index].xr[internal_index].cc_id = 1;
-					shm_off = cc_id==0 ? (cc_end-cc_start) : 0;
+					shm_off = curr_cc_id==0 ? (cc_end-cc_start) : 0;
 					shm_fd = open_shm_file(app_slot_list[index].xr[internal_index].shfile);
 					orig_mmap(cc_start, cc_end-cc_start, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, shm_fd, shm_off);
 					PRINTK("remap %s %lx\n", app_slot_list[index].xr[internal_index].shfile, shm_off);
 					close_shm_file(shm_fd);
 				}
 			}
+			break;
 		}
 	}
 	// 2.send msg to shuffle process
-	//TODO:
-	PRINTK("Rerandomization need send msg to shuffle process! not implemented!\n");
-	// 3.get msg of shuffle process
-	PRINTK("Rerandomization need recieve msg from shuffle process! not implemented!\n");
+	send_rerandomization_mesg_to_shuffle_process(ts, curr_cc_id);
 }
 
 /*************************Below functions are used to stop and wakeup processes******************************************/

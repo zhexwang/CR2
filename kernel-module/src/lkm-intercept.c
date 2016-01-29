@@ -70,9 +70,11 @@ void protect_orig_x_region(struct task_struct *ts)
 
 extern int shuffle_process_pid;
 extern long new_ip;
-long send_init_mesg_to_shuffle_process(long curr_ip, int curr_pid)
+void send_init_mesg_to_shuffle_process(struct task_struct *ts)
 {
-	MESG_BAG msg = {P_PROCESS_IS_IN, curr_pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and request code variant!"};
+	struct pt_regs *regs = task_pt_regs(ts);
+	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
+	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and request code variant!"};
 
 	if(connect_with_shuffle_process!=DISCONNECT){
 		nl_send_msg(shuffle_process_pid, msg);
@@ -80,9 +82,9 @@ long send_init_mesg_to_shuffle_process(long curr_ip, int curr_pid)
 		while(start_flag){
 			schedule();
 		}
-		return new_ip;
+		regs->ip = new_ip;
 	}else
-		return curr_ip;
+		regs->ip = curr_ip;
 }
 
 //set checkpoint to check the program is begin to execute __start function
@@ -90,18 +92,13 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 {
 	int index;
 	char *target_encode = (char*)set_app_start(ts);
-	struct pt_regs *regs = task_pt_regs(ts);
-	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
-	long newip = 0;
 	//rewrite the checkpoint encode
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
 	//send msg to generate the cc and get the pc
-	newip = send_init_mesg_to_shuffle_process(curr_ip, ts->pid);
+	send_init_mesg_to_shuffle_process(ts);
 	//protect the origin x region
 	protect_orig_x_region(current);
-	//set rip according to the rerandomizaton result
-	regs->ip = newip;
 	
 	return _START_RAX;
 }
@@ -318,9 +315,9 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	return ret;
 }
 
-void send_exit_mesg_to_shuffle_process(int curr_pid)
+void send_exit_mesg_to_shuffle_process(struct task_struct *ts)
 {
-	MESG_BAG msg = {P_PROCESS_IS_OUT, curr_pid, 0, CC_OFFSET, SS_OFFSET, "protected process is out!"};
+	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, "protected process is out!"};
 	if(connect_with_shuffle_process!=DISCONNECT)
 		nl_send_msg(shuffle_process_pid, msg);
 	
@@ -337,7 +334,7 @@ asmlinkage long intercept_exit_group(ulong error)
 			return set_program_start(current, start_encode);
 		}else{
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
-			send_exit_mesg_to_shuffle_process(current->pid);
+			send_exit_mesg_to_shuffle_process(current);
 			free_app_slot(current);
 		}
 	}

@@ -103,10 +103,12 @@ public:
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
 		_postion_fixed_rbbl_maps.insert(std::make_pair(bbl_offset, rand_bbl));
+		
 	}
 	void insert_movable_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
 		_movable_rbbl_maps.insert(std::make_pair(bbl_offset, rand_bbl));
+		
 	}
 	void insert_switch_case_jmpin_rbbl(F_SIZE src_bbl_offset, F_SIZE target_bbl_offset)
 	{
