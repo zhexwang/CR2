@@ -299,6 +299,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
             if(strstr(objdump_line_buf, failed_disasm_instrs[idx].c_str())){
                 BOOL search_rip_relative_instr = strstr(objdump_line_buf, "rip") ? true : false;
                 BOOL search_sib_relative_instr = strstr(objdump_line_buf, ")") ? true : false;
+                BOOL search_rsp_sib_relative_instr = strstr(objdump_line_buf, "rsp") ? true : false;
                 //generate new instruction
                 _dInst.opcode = I_UNDEFINED;  
                 _dInst.addr = instr_off;
@@ -315,7 +316,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                     _dInst.dispSize = 32;
                     _dInst.disp = (UINT64)disp64;
                 }else{
-                    _dInst.size = search_sib_relative_instr ? 7 : 6;
+                    _dInst.size = search_sib_relative_instr ? (search_rsp_sib_relative_instr ? 8 : 7) : 6;
                     _dInst.flags = 0;
                 }
                 return new SequenceInstr(_dInst, module);

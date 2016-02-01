@@ -223,7 +223,8 @@ void Module::erase_br_target(const F_SIZE target, const F_SIZE src)
 
 void Module::insert_br_target(const F_SIZE target, const F_SIZE src)
 {      
-    BR_TARGETS_ITERATOR br_it = _br_targets.find(target);   
+    BR_TARGETS_ITERATOR br_it = _br_targets.find(target);  
+
     if(br_it==_br_targets.end()){
         BR_TARGET_SRCS srcs;
         srcs.insert(src);
@@ -429,7 +430,7 @@ BasicBlock *Module::construct_bbl(const Module::INSTR_MAP &instr_maps, BOOL is_c
 
     BOOL has_lock_and_repeat_prefix = first_instr->has_lock_and_repeat_prefix();    
     BasicBlock *generated_bbl = NULL;
-
+    
     if(last_instr->is_sequence() || last_instr->is_sys() || last_instr->is_int() || last_instr->is_cmov())
         generated_bbl = new SequenceBBL(bbl_start, bbl_size, is_call_proceeded, has_lock_and_repeat_prefix, instr_maps);
     else if(last_instr->is_direct_call())

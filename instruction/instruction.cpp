@@ -520,6 +520,11 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
         if(_dInst.ops[0].type==O_REG){
             //1. convert jumpin reg to push reg
             push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
+            //TODO:vsyscall
+            //1653e jmpq *%r11
+#if C10
+            fhk
+#endif
         }else{
             //1. convert jumpin mem to push mem
             push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);

@@ -13,8 +13,10 @@
 #define TRAMP_JMP8_PTR 0
 #define TRAMP_JMP32_PTR 1
 #define TRAMP_OVERLAP_JMP32_PTR 2
-#define BOUNDARY_PTR 3
-#define RBBL_PTR_MIN 4
+#define INV_TRAMP_PTR 3
+#define BOUNDARY_PTR 4
+#define RBBL_PTR_MIN 5
+
 typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
 typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
 typedef std::pair<CC_LAYOUT_ITER, BOOL> CC_LAYOUT_PAIR;

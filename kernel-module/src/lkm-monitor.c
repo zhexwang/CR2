@@ -34,7 +34,7 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	monitor_app_list[0] = "gcc_base.cr2";
+	monitor_app_list[0] = "perlbench_base.cr2";
 }
 
 //-------------APP slot----------------------//
@@ -264,6 +264,7 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 
 void rerandomization(struct task_struct *ts)
 {
+	return ;
 	int index = 0;
 	int internal_index = 0;
 	int shm_fd = 0;

@@ -109,6 +109,10 @@ void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struc
 	ulong interp_base = 0;
 	struct pt_regs *regs = task_pt_regs(ts);
 	ulong *auxv_rsp = (long*)regs->sp;
+	ulong *auxv_sysinfo = NULL;
+	ulong *auxv_sysinfo_ehdr = NULL;
+	ulong sysinfo_val = 0;
+	ulong sysinfo_ehdr_val = 0;
 	//interp_base in saved_auxv
 	while(*elf_info!=orig_interp_base){
 		elf_info++;
@@ -118,9 +122,19 @@ void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struc
 	while(interp_base!=orig_interp_base){
 		get_user(interp_base, auxv_rsp);
 		auxv_rsp++;
+		if(interp_base==AT_SYSINFO){
+			auxv_sysinfo = auxv_rsp;
+			get_user(sysinfo_val, auxv_rsp);
+			put_user(0, auxv_rsp);
+		}else if(interp_base==AT_SYSINFO_EHDR){
+			auxv_sysinfo_ehdr = auxv_rsp;
+			get_user(sysinfo_ehdr_val, auxv_rsp);
+			put_user(0, auxv_rsp);
+		}
 	}
 	auxv_rsp--;
 	put_user(new_interp_base, auxv_rsp);
+	PRINTK("SYSINFO: %lx, SYSINFO_EHDR: %lx\n", sysinfo_val, sysinfo_ehdr_val);
 }
 
 //when gdb debug the program, the ld.so is loaded at the very high address, there is no space to allocate the memory
