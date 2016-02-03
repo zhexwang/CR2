@@ -52,7 +52,7 @@ void protect_orig_x_region(struct task_struct *ts)
 		struct mm_struct *mm = ts->mm;
 		struct vm_area_struct *list = mm->mmap, *ptr = list;
 		do{
-			
+			//TODO: need protect [vdso] region
 			struct file *fil = ptr->vm_file;
 			if(fil != NULL){
 				char* name = fil->f_path.dentry->d_iname;

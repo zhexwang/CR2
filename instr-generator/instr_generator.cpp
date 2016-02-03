@@ -200,6 +200,14 @@ std::string InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, 
     return std::string((const INT8*)array, 12);
 }
 
+std::string InstrGenerator::gen_pushq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[7] = {0xff, 0xb4, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 3;
+    return std::string((const INT8 *)array, 7);
+}
+
 std::string InstrGenerator::gen_pushq_imm32_instr(UINT16 &imm32_pos, INT32 imm32)
 {
     UINT8 array[5] = {0x68, (UINT8)(imm32&0xff), (UINT8)((imm32>>8)&0xff), (UINT8)((imm32>>16)&0xff), (UINT8)((imm32>>24)&0xff)};
@@ -228,12 +236,101 @@ std::string InstrGenerator::gen_cmp_reg32_imm32_instr(UINT8 reg_index, UINT16 &i
     return instr_template;
 }
 
+std::string InstrGenerator::gen_cmp_reg64_imm8_instr(UINT8 reg_index, UINT16 &imm8_pos, INT8 imm8)
+{
+    std::string instr_template;
+    UINT8 modRM_reg = 0;
+    //1.prefix
+    if(reg_index>=R_R8 && reg_index<=R_R15){
+        instr_template.append(1, 0x49);
+        modRM_reg = (reg_index - R_R8)&0x7;
+    }else if(reg_index>=R_RAX && reg_index<=R_RDI){
+        instr_template.append(1, 0x48);
+        modRM_reg = (reg_index - R_RAX)&0x7;
+    }else
+        ASSERT(0);
+    //2.opcode
+    instr_template.append(1, 0x83);
+    //3.modRM
+    instr_template.append(1, 0xf8|modRM_reg);
+    imm8_pos = instr_template.length();
+    instr_template.append((const INT8*)&imm8, 1);
+
+    return instr_template;
+}
+
+std::string InstrGenerator::convert_jmpin_reg64_to_cmp_reg64_imm8(UINT8 *instcode, UINT16 instsize, UINT16 &imm8_pos, INT8 imm8)
+{
+    std::string instr_template;
+    UINT16 jmpin_index = 0;
+    if(instcode[jmpin_index]!=0xff){//has prefix
+        instr_template.append(1, 0x49);
+        jmpin_index++;
+        ASSERT(instsize=3);
+    }else{
+        instr_template.append(1, 0x48);
+        ASSERT(instsize==2);
+    }
+    
+    ASSERT(instcode[jmpin_index]==0xff);
+    instr_template.append(1, 0x83);//set opcode
+    jmpin_index++;
+    //set modRM
+    instr_template.append(1, 0xf8|instcode[jmpin_index]);
+    
+    imm8_pos = instr_template.length();
+    instr_template.append(1, (UINT8)imm8);
+
+    return instr_template;
+}
+
+std::string InstrGenerator::convert_jmpin_mem_to_cmp_mem_imm8(UINT8 *instcode, UINT16 instsize, UINT16 &imm8_pos, INT8 imm8)
+{
+    std::string instr_template;
+    UINT32 jmpin_index = 0;
+    // 1. calculate prefix 
+    if((instcode[jmpin_index])!=0xff){
+        instr_template.append(1, instcode[jmpin_index]|0x48);
+        jmpin_index++;
+    }else
+        instr_template.append(1, 0x48);
+    ASSERTM(instcode[jmpin_index]==0xff, "jmpin opcode is unkown!\n");
+    // 2.set opcode
+    instr_template.append(1, 0x83);
+    jmpin_index++;                                                                                                                                                      
+    // 3.calculate cmp ModRM
+    ASSERTM((instcode[jmpin_index]&0x38)==0x20, "We only handle jmp r/m64! jmp m16:[16|32|64] is not handled!\n");
+    instr_template.append(1, instcode[jmpin_index++]|0x38);
+    // 4.copy SIB | Displacement of jmpin_inst
+    while(jmpin_index<instsize)
+        instr_template.append(1, instcode[jmpin_index++]);
+    // 5.set imm8
+    imm8_pos = instr_template.length();
+    instr_template.append(1, (UINT8)imm8);
+    
+    return instr_template;
+}
+
 std::string InstrGenerator::gen_je_rel32_instr(UINT16 &rel32_pos, INT32 rel32)
 {
     UINT8 array[6] = {0x0f, 0x84, (UINT8)(rel32&0xff), (UINT8)((rel32>>8)&0xff), (UINT8)((rel32>>16)&0xff), \
         (UINT8)((rel32>>24)&0xff)};
     rel32_pos = 2;
     return std::string((const INT8 *)array, 6);
+}
+
+std::string InstrGenerator::gen_jl_rel8_instr(UINT16 &rel8_pos, INT8 rel8, BOOL is_taken)
+{
+    UINT8 array[3] = {is_taken ? (UINT8)0x3e : (UINT8)0x2e, 0x7c, (UINT8)rel8};
+    rel8_pos = 2;
+    return std::string((const INT8 *)array, 3);
+}
+
+std::string InstrGenerator::gen_jns_rel8_instr(UINT16 &rel8_pos, INT8 rel8, BOOL is_taken)
+{
+    UINT8 array[3] = {is_taken ? (UINT8)0x3e : (UINT8)0x2e, (UINT8)0x79, (UINT8)rel8};
+    rel8_pos = 2;
+    return std::string((const INT8*)array, 3);
 }
 
 std::string InstrGenerator::gen_call_next()

@@ -264,7 +264,6 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 
 void rerandomization(struct task_struct *ts)
 {
-	return ;
 	int index = 0;
 	int internal_index = 0;
 	int shm_fd = 0;

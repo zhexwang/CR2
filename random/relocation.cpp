@@ -158,15 +158,17 @@ static std::string type_to_string[] = {
     TO_STRING_INTERNAL(HIGH32_ORG_RELA_TYPE),//the direct address of the high 32 bits in orign code region
     TO_STRING_INTERNAL(LOW32_ORG_RELA_TYPE), //the direct address of the low 32 bits in origin code region
     TO_STRING_INTERNAL(TRAMPOLINE_RELA_TYPE),//recognized jmpin instructions will jump to their own trampolines 
-
+    TO_STRING_INTERNAL(DEBUG_LOW32_RELA_TYPE),  
+    TO_STRING_INTERNAL(DEBUG_HIGH32_RELA_TYPE),
 };
+
 void RandomBBL::dump_relocation()
 {
     INT32 entry_num = (INT32)_reloc_table.size();
-    ERR(" No          Type         RelaPos RelaSize   Addend            Value\n");
+    ERR(" No          Type           RelaPos RelaSize   Addend            Value\n");
     for(INT32 idx = 0; idx!=entry_num; idx++){
         BBL_RELA &rela = _reloc_table[idx];
-        PRINT("%3d %20s %8x %8d %8x %16llx\n", idx, type_to_string[rela.r_type].c_str(), rela.r_byte_pos, rela.r_byte_size, \
+        PRINT("%3d %22s %8x %8d %8x %16llx\n", idx, type_to_string[rela.r_type].c_str(), rela.r_byte_pos, rela.r_byte_size, \
             rela.r_addend, rela.r_value);
     }
 }

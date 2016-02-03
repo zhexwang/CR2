@@ -17,9 +17,19 @@ Module::Module(ElfParser *elf): _elf(elf), _real_load_base(0)
     _elf->search_plt_info(_plt_info_map);
     
     _setjmp_plt = 0;
-    for(PLT_INFO_MAP::iterator iter = _plt_info_map.begin(); iter!=_plt_info_map.end(); iter++)
+    _gettimeofday_plt = 0;
+    _time_plt = 0;
+    _getcpu_plt = 0;
+    for(PLT_INFO_MAP::iterator iter = _plt_info_map.begin(); iter!=_plt_info_map.end(); iter++){
         if(iter->second.plt_name.find("setjmp")!=std::string::npos)
             _setjmp_plt = iter->first;
+        else if(iter->second.plt_name == "gettimeofday")
+            _gettimeofday_plt = iter->first;
+        else if(iter->second.plt_name == "time")
+            _time_plt = iter->first;
+        else if(iter->second.plt_name == "getcpu")
+            _getcpu_plt = iter->first;
+    }
         
     _elf->search_rela_x_section(_rela_targets);
     _all_module_maps.insert(make_pair(_elf->get_elf_name(), this));

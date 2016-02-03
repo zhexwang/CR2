@@ -516,15 +516,67 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
         std::string invalid_template = InstrGenerator::gen_invalid_instr();
         instr_template += invalid_template;
     }else{
+        //TODO: vsyscall special handling
+        if(_module->is_likely_vsyscall_jmpq(_dInst.addr)){
+            //1. cmpq reg64, $0
+            UINT16 imm8_pos, jns_next_pc;
+            std::string cmp_template;
+            if(_dInst.ops[0].type==O_REG)
+                cmp_template = InstrGenerator::gen_cmp_reg64_imm8_instr(_dInst.ops[0].index, imm8_pos, 0);
+            else
+                cmp_template = InstrGenerator::convert_jmpin_mem_to_cmp_mem_imm8(_encode, _dInst.size, imm8_pos, 0);
+            
+            if(is_rip_relative()){
+                ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                UINT16 rela_disp32_pos = find_disp_pos_from_encode((const UINT8 *)cmp_template.c_str(), \
+                    cmp_template.length(), (INT32)_dInst.disp);
+                rela_disp32_pos += instr_template.length();
+                instr_template += cmp_template;
+                UINT16 cmpq_base = instr_template.length();
+                INSTR_RELA cmp_disp_rela = {RIP_RELA_TYPE, rela_disp32_pos, 4, cmpq_base, (INT64)(_dInst.disp)};
+                reloc_vec.push_back(cmp_disp_rela);
+            }else
+                instr_template += cmp_template;
+            //2. jns rel8
+            std::string jns_template = InstrGenerator::gen_jns_rel8_instr(imm8_pos, 0, true);
+            imm8_pos += instr_template.length();
+            instr_template += jns_template;
+            jns_next_pc = instr_template.length();
+            //3. add rsp
+            UINT16 addq_imm8_pos;
+            std::string add_rsp_template = InstrGenerator::gen_addq_imm8_to_rsp_instr(addq_imm8_pos, 8);
+            instr_template += add_rsp_template;
+            //4. push return address from shadow stack
+            UINT16 disp32_pos;
+            std::string pushq_rsp_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+            disp32_pos += instr_template.length();
+            instr_template += pushq_rsp_template;
+            UINT16 pushq_rsp_base = instr_template.length();
+            INSTR_RELA rela_pushq_rsp = {SS_RELA_TYPE, disp32_pos, 4, pushq_rsp_base, -8};
+            reloc_vec.push_back(rela_pushq_rsp);
+            //5. copy jmpq 
+            std::string jmpq_template = std::string((const char*)_encode, (SIZE)_dInst.size);
+            if(is_rip_relative()){
+                ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                UINT16 rela_disp32_pos = find_disp_pos_from_encode((const UINT8 *)jmpq_template.c_str(), \
+                    jmpq_template.length(), (INT32)_dInst.disp);
+                rela_disp32_pos += instr_template.length();
+                instr_template += jmpq_template;
+                UINT16 jmpq_base = instr_template.length();
+                INSTR_RELA jmpq_disp_rela = {RIP_RELA_TYPE, rela_disp32_pos, 4, jmpq_base, (INT64)(_dInst.disp)};
+                reloc_vec.push_back(jmpq_disp_rela);
+            }else
+                instr_template += jmpq_template;
+            //6. calculate the offset of jns instruction
+            INT32 offset32 = instr_template.length() - jns_next_pc;
+            ASSERT((offset32>0 ? offset32 : -offset32)<0x7f);
+            instr_template[imm8_pos] = (INT8)offset32;
+        }
+        
         std::string push_template;
         if(_dInst.ops[0].type==O_REG){
             //1. convert jumpin reg to push reg
             push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
-            //TODO:vsyscall
-            //1653e jmpq *%r11
-#if C10
-            fhk
-#endif
         }else{
             //1. convert jumpin mem to push mem
             push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);

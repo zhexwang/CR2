@@ -95,6 +95,9 @@ protected:
 	RELA_X_TARGETS _rela_targets;
 	//special handling 
 	F_SIZE _setjmp_plt;
+	F_SIZE _gettimeofday_plt;
+	F_SIZE _time_plt;
+	F_SIZE _getcpu_plt;
 	//bbl's entry must be fixed
 	BBL_SET _pos_fixed_bbls;
 	BBL_SET _pos_movable_bbls;
@@ -152,6 +155,25 @@ public:
 	BasicBlock  *find_bbl_cover_offset(F_SIZE offset) const;
 	BasicBlock  *find_bbl_cover_instr(Instruction *instr) const;	
 	//judge functions
+	BOOL is_likely_vsyscall_jmpq(F_SIZE offset) const
+	{
+		if(offset==_gettimeofday_plt)
+			return true;
+		else if(offset==_gettimeofday_plt)
+			return true;
+		else if(offset==_time_plt)
+			return true;
+#if _VM		
+		else if(offset==0x1653e){
+			if(get_name()=="ld-linux-x86-64.so.2")
+				return true;
+			else
+				return false;
+		}
+#endif		
+		else
+			return false;
+	}
 	BOOL is_memset_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_main_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_so_jmpin(const F_SIZE offset) const;
