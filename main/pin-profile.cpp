@@ -250,4 +250,26 @@ void PinProfile::check_func_safe() const
             target_bbl->dump_in_off();
         }
     }
+    //check unmatched return target is fixed
+    for(INDIRECT_BRANCH_INFO::const_iterator iter = _unmatched_ret.begin(); iter!=_unmatched_ret.end(); iter++){
+        INST_POS src = iter->first;
+        Module *src_module = _module_maps[src.image_index];
+        F_SIZE src_offset = src.instr_offset;
+        INST_POS target = iter->second;
+        Module *target_module = _module_maps[target.image_index];
+        F_SIZE target_offset = target.instr_offset;
+        BasicBlock *src_bbl = src_module->find_bbl_cover_offset(src_offset);
+        BasicBlock *target_bbl = target_module->find_bbl_by_offset(target_offset, false);
+        ASSERT(src_bbl && target_bbl);
+        
+        BOOL is_fixed = target_module->is_fixed_bbl(target_bbl);
+        if(!is_fixed){
+            ERR("check one unmatched ret target (%s:0x%lx) is not fixed!\n", \
+                target_module->get_path().c_str(), target_offset);
+            ERR("SrcBBL:\n");
+            src_bbl->dump_in_off();
+            ERR("TargetBBL:\n");
+            target_bbl->dump_in_off();
+        }
+    }
 }

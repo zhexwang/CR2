@@ -75,6 +75,12 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
     INT32 curr_pc_pos = 0;
 
 #ifdef TRACE_DEBUG 
+#if 0
+    if(instr_maps.begin()->second->get_instr_offset()==0x3445e8){
+        UINT16 imm32_pos, mem32_pos;
+        bbl_template += InstrGenerator::gen_addq_imm32_to_mem32_instr(imm32_pos, 1, mem32_pos, 0x100008);
+    }
+#endif    
     //generate low32 movl 
     UINT16 movl_low32_imm32_pos, movl_low32_mem32_pos;
     std::string movl_low32 = InstrGenerator::gen_movl_imm32_to_mem32_instr(movl_low32_imm32_pos, 0, movl_low32_mem32_pos, 0x100000);

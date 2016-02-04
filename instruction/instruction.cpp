@@ -715,27 +715,42 @@ RetInstr::~RetInstr()
 
 std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
 {
-    /*  addq %rsp, $0x8               //pop the main stack
-        jmpq ($ss_offset-0x8)(%rsp)   //jump to the real return address
-    */ 
     std::string instr_template;
     UINT16 curr_pc = 0;
-    //addq instruction 
-    UINT16 imm8_rela_pos;
-    std::string addq_template = InstrGenerator::gen_addq_imm8_to_rsp_instr(imm8_rela_pos, 8);
-    curr_pc += addq_template.length();
-    instr_template += addq_template;
-    //jmpq instruction
-    UINT16 disp32_rela_pos;
-    std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem(disp32_rela_pos, 0);
-    disp32_rela_pos += instr_template.length();
-    curr_pc += jmpq_template.length();
+    if(_module->is_unmatched_ret(_dInst.addr)){
+        //addq 
+        UINT16 rela_addq_pos;
+        std::string addq_template = InstrGenerator::gen_addq_imm32_to_rsp_mem_instr(rela_addq_pos, 0);
+        
+        rela_addq_pos += (UINT16)instr_template.length();
+        curr_pc += addq_template.length();
+        INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, curr_pc, (INT64)get_instr_offset()};
+        
+        reloc_vec.push_back(rela_addq);
+        instr_template += addq_template;
+        //retq
+        std::string retq_template = InstrGenerator::gen_retq_instr();
+        instr_template += retq_template;
+    }else{
+        /*  addq %rsp, $0x8               //pop the main stack
+            jmpq ($ss_offset-0x8)(%rsp)   //jump to the real return address
+        */ 
+        //addq instruction 
+        UINT16 imm8_rela_pos;
+        std::string addq_template = InstrGenerator::gen_addq_imm8_to_rsp_instr(imm8_rela_pos, 8);
+        curr_pc += addq_template.length();
+        instr_template += addq_template;
+        //jmpq instruction
+        UINT16 disp32_rela_pos;
+        std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem(disp32_rela_pos, 0);
+        disp32_rela_pos += instr_template.length();
+        curr_pc += jmpq_template.length();
 
-    INSTR_RELA rela = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
-    reloc_vec.push_back(rela);
+        INSTR_RELA rela = {SS_RELA_TYPE, disp32_rela_pos, 4, curr_pc, -8};
+        reloc_vec.push_back(rela);
 
-    instr_template += jmpq_template;
-
+        instr_template += jmpq_template;
+    }
     return instr_template;
 }
 

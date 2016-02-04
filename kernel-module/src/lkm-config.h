@@ -6,7 +6,7 @@
 #define CC_OFFSET (1ul<<30)
 #define CC_MULTIPULE (8)
 #define SS_OFFSET (1ul<<30)
-#define SS_MULTIPULE (15)
+#define SS_MULTIPULE (20)
 
 /*********When you change machine, you should modify the below info ***********/
 #ifdef _VM
@@ -26,7 +26,7 @@
 #define _START_RAX 0x1c
 #define CHECK_ENCODE_LEN 7
 
-#define MAX_APP_LIST_NUM 10
+#define MAX_APP_LIST_NUM 20
 //we only support run less than 4 same protected application at the same time
 #define MAX_APP_SLOT_LIST_NUM  MAX_APP_LIST_NUM*4
 

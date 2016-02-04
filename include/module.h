@@ -98,6 +98,7 @@ protected:
 	F_SIZE _gettimeofday_plt;
 	F_SIZE _time_plt;
 	F_SIZE _getcpu_plt;
+	F_SIZE _unmatched_ret;
 	//bbl's entry must be fixed
 	BBL_SET _pos_fixed_bbls;
 	BBL_SET _pos_movable_bbls;
@@ -109,6 +110,7 @@ protected:
 protected:
 	void split_bbl();
 	void examine_bbls();
+	void special_handling_in_cpp_exception();
 	void analysis_indirect_jump_targets();
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
@@ -174,6 +176,10 @@ public:
 		else
 			return false;
 	}
+	BOOL is_unmatched_ret(F_SIZE offset) const
+	{
+		return offset == _unmatched_ret;
+	}
 	BOOL is_memset_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_main_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_so_jmpin(const F_SIZE offset) const;
@@ -223,6 +229,7 @@ public:
 	void erase_br_target(const F_SIZE target, const F_SIZE src);
 	void erase_instr_range(F_SIZE ,F_SIZE ,std::vector<Instruction*> &);    
 	void erase_gs_seg(F_SIZE instr_offset);
+	void erase_movable_bbl(BasicBlock *bbl);
 	//read functions
 	UINT8 read_1byte_code_in_off(const F_SIZE read_offset) const
 	{

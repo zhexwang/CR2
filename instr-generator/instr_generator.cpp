@@ -11,6 +11,16 @@ std::string InstrGenerator::gen_movl_imm32_to_mem32_instr(UINT16 &imm32_pos, INT
     return std::string((const INT8 *)array, 11);
 }
 
+std::string InstrGenerator::gen_addq_imm32_to_mem32_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &mem32_pos, INT32 mem32)
+{
+    UINT8 array[12] = {0x48, 0x81, 0x04, 0x25, (UINT8)(mem32&0xff), (UINT8)((mem32>>8)&0xff), (UINT8)((mem32>>16)&0xff), \
+        (UINT8)((mem32>>24)&0xff), (UINT8)(imm32&0xff), (UINT8)((imm32>>8)&0xff), (UINT8)((imm32>>16)&0xff),\
+        (UINT8)((imm32>>24)&0xff)};
+    imm32_pos = 9;
+    mem32_pos = 4;
+    return std::string((const INT8*)array, 12);
+}
+
 std::string InstrGenerator::gen_invalid_instr()
 {
     UINT8 array = 0xd6;

@@ -724,6 +724,27 @@ void Module::separate_movable_bbls()
             }
         }
     }
+    // 5.c++ try{}catch{} handling, catch entry bbl must be fixed! 
+    special_handling_in_cpp_exception();
+}
+
+void Module::special_handling_in_cpp_exception()
+{
+    _unmatched_ret = 0;
+#if _VM
+    //1. should read elf _gcc_exception section to get these information(Dwarf)! We leave it in future 
+    if(get_name()=="omnetpp_base.cr2"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x3cc7f, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+    }
+    //2. tag the unmatched return instruction in _Unwind_RaiseException
+    if(get_name()=="libgcc_s.so.1")
+        _unmatched_ret = 0x103d4;
+#endif
 }
 
 void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
@@ -806,6 +827,12 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
 BOOL Module::is_movable_bbl(BasicBlock *bbl)
 {
     return _pos_movable_bbls.find(bbl)!=_pos_movable_bbls.end();
+}
+
+void Module::erase_movable_bbl(BasicBlock *bbl)
+{
+    if(is_movable_bbl(bbl))
+        _pos_movable_bbls.erase(bbl);
 }
 
 BOOL Module::is_fixed_bbl(BasicBlock *bbl)

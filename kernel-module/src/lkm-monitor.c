@@ -34,7 +34,25 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	monitor_app_list[0] = "perlbench_base.cr2";
+	//SPEC CPU2006 INT
+	//c language
+	monitor_app_list[0] = "perlbench_base.cr2";//400
+	monitor_app_list[1] = "bzip2_base.cr2";//401
+	monitor_app_list[2] = "gcc_base.cr2";//403
+	monitor_app_list[3] = "mcf_base.cr2";//429
+	monitor_app_list[4] = "gobmk_base.cr2";//445
+	monitor_app_list[5] = "hmmer_base.cr2";//456
+	monitor_app_list[6] = "sjeng_base.cr2";//458
+	monitor_app_list[7] = "libquantum_base.cr2";//462
+	monitor_app_list[8] = "h264ref_base.cr2";//464
+	monitor_app_list[9] = "specrand_base.cr2";//999
+	//c++ language
+	monitor_app_list[10] = "omnetpp_base.cr2";//471
+	monitor_app_list[11] = "astar_base.cr2";//473
+	monitor_app_list[12] = "Xalan_base.cr2";//483
+	//SPEC CPU2006 FP
+	monitor_app_list[13] = "bwaves_base.cr2";//410
+	monitor_app_list[14] = "gamess_base.cr2";//416, train and ref has bug
 }
 
 //-------------APP slot----------------------//
