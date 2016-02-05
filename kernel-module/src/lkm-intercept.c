@@ -56,8 +56,10 @@ void protect_orig_x_region(struct task_struct *ts)
 			struct file *fil = ptr->vm_file;
 			if(fil != NULL){
 				char* name = fil->f_path.dentry->d_iname;
-				if(is_code_cache(name)==0 && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV)
-					orig_mprotect(ptr->vm_start, ptr->vm_end - ptr->vm_start, PROT_READ);			
+				if(is_code_cache(name)==0 && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV && ptr->vm_start!=(0x400000+CC_OFFSET)){
+					orig_mprotect(ptr->vm_start, ptr->vm_end - ptr->vm_start, PROT_READ);
+					PRINTK("protect %lx - %lx %s\n", ptr->vm_start, ptr->vm_end, name);
+				}
 			}
 
 			ptr = ptr->vm_next;

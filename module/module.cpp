@@ -730,7 +730,7 @@ void Module::separate_movable_bbls()
 
 void Module::special_handling_in_cpp_exception()
 {
-    _unmatched_ret = 0;
+    _unmatched_rets.clear();
 #if _VM
     //1. should read elf _gcc_exception section to get these information(Dwarf)! We leave it in future 
     if(get_name()=="omnetpp_base.cr2"){
@@ -740,10 +740,25 @@ void Module::special_handling_in_cpp_exception()
             erase_movable_bbl(catch_bbl);
             insert_fixed_bbl(catch_bbl);
         }
+    }else if(get_name()=="povray_base.cr2"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x87de1, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+        catch_bbl = find_bbl_by_offset(0x8778e, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
     }
-    //2. tag the unmatched return instruction in _Unwind_RaiseException
-    if(get_name()=="libgcc_s.so.1")
-        _unmatched_ret = 0x103d4;
+    //2. tag the unmatched return instruction in _Unwind_RaiseException and _Unwind_Resume
+    if(get_name()=="libgcc_s.so.1"){
+        _unmatched_rets.insert(0x103d4);
+        _unmatched_rets.insert(0x10586);
+    }
 #endif
 }
 

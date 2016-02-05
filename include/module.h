@@ -69,6 +69,8 @@ public:
 	//typedef mapping module name to Module* 
 	typedef std::map<std::string, Module*> MODULE_MAP;
 	typedef MODULE_MAP::iterator MODULE_MAP_ITERATOR;
+	//typedef unmatched rets
+	typedef std::set<F_SIZE> UNMATCHED_RETS;
 protected:
 	ElfParser *_elf;
 	INSTR_MAP _instr_maps;//all instructions
@@ -98,7 +100,7 @@ protected:
 	F_SIZE _gettimeofday_plt;
 	F_SIZE _time_plt;
 	F_SIZE _getcpu_plt;
-	F_SIZE _unmatched_ret;
+	UNMATCHED_RETS _unmatched_rets;
 	//bbl's entry must be fixed
 	BBL_SET _pos_fixed_bbls;
 	BBL_SET _pos_movable_bbls;
@@ -178,7 +180,7 @@ public:
 	}
 	BOOL is_unmatched_ret(F_SIZE offset) const
 	{
-		return offset == _unmatched_ret;
+		return _unmatched_rets.find(offset)!=_unmatched_rets.end();
 	}
 	BOOL is_memset_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_main_jmpin(const F_SIZE offset) const;

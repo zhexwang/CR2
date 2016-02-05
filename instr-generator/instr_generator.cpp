@@ -456,15 +456,13 @@ std::string InstrGenerator::modify_disp_of_pushq_rsp_mem(std::string src_templat
             break;
         case 0xb4://dispSize=32
             {
-                INT64 disp = 0;
-                for(INT32 idx=0; idx<4; idx++)
-                    disp |= src_template[pushq_index+idx+2]<<(idx*8);// 2 is skip the ModRM and SIB  
-                INT64 fixed_disp = disp + (INT64)addend;
-                ASSERT((fixed_disp > 0 ? fixed_disp : -fixed_disp) < 0x7fffffff);
                 //copy ModRM
                 dest_template.append(1, src_template[pushq_index++]);
                 //copy SIB
                 dest_template.append(1, src_template[pushq_index++]);
+                INT64 disp = *(INT64*)(&src_template[pushq_index]);
+                INT64 fixed_disp = disp + (INT64)addend;
+                ASSERT((fixed_disp > 0 ? fixed_disp : -fixed_disp) < 0x7fffffff);
                 //set displacement
                 dest_template.append((const INT8*)&fixed_disp, 4);
             }

@@ -340,7 +340,11 @@ S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc
         if(relay_offset8>=SCHAR_MIN)
             last_tramp8_addr = space>=JMP8_LEN ? tramp8_addr : last_tramp8_addr;
         else{//need relay
-            ASSERT(last_tramp8_addr!=0);
+            if(last_tramp8_addr==0){
+                CC_LAYOUT_ITER erase_iter = cc_layout.upper_bound(Range<S_ADDRX>(fixed_trampoline_addr));
+                cc_layout.erase(--erase_iter);
+                return 0;
+            }
             INT32 last_offset8 = last_tramp8_addr - trampoline8_base - JMP8_LEN;
             ASSERT(last_offset8>=SCHAR_MIN);
             //place the internal jmp8 rel8 template
@@ -355,7 +359,7 @@ S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc
         prev_iter--;
     }
     ASSERT(prev_iter!=cc_layout.begin());
-    
+    ASSERT(trampoline32_addr!=0);
     return trampoline32_addr;
 }
 
@@ -406,12 +410,16 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
             if(left_space<JMP8_LEN){
                 ERR("There is no space to place the trampoline (%lx), so we only place the invalid instruction!\n", curr_bbl_offset);
                 inv_trampoline_addr = curr_bbl_offset + cc_base;
-                used_cc_base = next_bbl_offset + cc_base;
             }else{
                 //search lower address to find space to place the jmp rel32 trampoline
                 trampoline32_addr = front_to_place_trampoline32(curr_bbl_offset + cc_base, cc_layout);
-                used_cc_base = next_bbl_offset + cc_base;
+                if(trampoline32_addr==0){
+                    ERR("There is no space to place the trampoline (%lx), so we only place the invalid instruction!\n", curr_bbl_offset);
+                    inv_trampoline_addr = curr_bbl_offset + cc_base;
+                }
             }
+            
+            used_cc_base = next_bbl_offset + cc_base;
         }
         CC_LAYOUT_PAIR ret;
         if(inv_trampoline_addr!=0){
@@ -452,12 +460,16 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
             if(left_space<JMP8_LEN){
                 ERR("There is no space to place the trampoline (%lx), so we only place the invalid instruction!\n", curr_bbl_offset);
                 inv_trampoline_addr = curr_bbl_offset + new_cc_base;
-                used_cc_base = next_bbl_offset + new_cc_base;
             }else{
                 //search lower address to find space to place the jmp rel32 trampoline
                 trampoline32_addr = front_to_place_trampoline32(curr_bbl_offset + new_cc_base, cc_layout);
-                used_cc_base = next_bbl_offset + new_cc_base;
+                if(trampoline32_addr==0){
+                    ERR("There is no space to place the trampoline (%lx), so we only place the invalid instruction!\n", curr_bbl_offset);
+                    inv_trampoline_addr = curr_bbl_offset + new_cc_base;
+                }
             }
+            
+            used_cc_base = next_bbl_offset + new_cc_base;
         }
 
         CC_LAYOUT_PAIR ret;

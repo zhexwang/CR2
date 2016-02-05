@@ -34,7 +34,7 @@ ulong is_monitor_app(const char *name)
 
 void init_monitor_app_list(void)
 {
-	//SPEC CPU2006 INT
+	//----SPEC CPU2006 INT------//
 	//c language
 	monitor_app_list[0] = "perlbench_base.cr2";//400
 	monitor_app_list[1] = "bzip2_base.cr2";//401
@@ -45,14 +45,32 @@ void init_monitor_app_list(void)
 	monitor_app_list[6] = "sjeng_base.cr2";//458
 	monitor_app_list[7] = "libquantum_base.cr2";//462
 	monitor_app_list[8] = "h264ref_base.cr2";//464
-	monitor_app_list[9] = "specrand_base.cr2";//999
+	monitor_app_list[9] = "specrand_base.cr2";//999--998
 	//c++ language
 	monitor_app_list[10] = "omnetpp_base.cr2";//471
 	monitor_app_list[11] = "astar_base.cr2";//473
 	monitor_app_list[12] = "Xalan_base.cr2";//483
-	//SPEC CPU2006 FP
+	//----SPEC CPU2006 FP------//
+	//fortran language
 	monitor_app_list[13] = "bwaves_base.cr2";//410
 	monitor_app_list[14] = "gamess_base.cr2";//416, train and ref has bug
+	monitor_app_list[15] = "zeusmp_base.cr2";//434
+	monitor_app_list[16] = "cactusADM_base.cr2";//436
+	monitor_app_list[17] = "leslie3d_base.cr2";//437
+	monitor_app_list[18] = "calculix_base.cr2";//454
+	monitor_app_list[19] = "GemsFDTD_base.cr2";//459
+	monitor_app_list[20] = "tonto_base.cr2";//465
+	monitor_app_list[21] = "wrf_base.cr2";//481
+	//c language
+	monitor_app_list[22] = "milc_base.cr2";//433
+	monitor_app_list[23] = "gromacs_base.cr2";//435
+	monitor_app_list[24] = "lbm_base.cr2";//470
+	monitor_app_list[25] = "sphinx_livepretend_base.cr2";//482
+	//c++ language
+	monitor_app_list[26] = "namd_base.cr2";//444
+	monitor_app_list[27] = "soplex_base.cr2";//450
+	monitor_app_list[28] = "dealII_base.cr2";//447
+	monitor_app_list[29] = "povray_base.cr2";//453, ref has bug
 }
 
 //-------------APP slot----------------------//
