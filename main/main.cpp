@@ -33,6 +33,7 @@ int main(int argc, char **argv)
         Module::init_cvm_from_modules();
         Module::generate_all_relocation_block();
         // 7. output static analysis dbs    
+        
     }
 
     if(Options::_dynamic_shuffle){
@@ -68,6 +69,9 @@ int main(int argc, char **argv)
         CodeVariantManager::stop_gen_code_variants();
         // 6.disconnect
         NetLink::disconnect_with_lkm();
+#ifdef TRACE_DEBUG
+        Module::cmp_bbl_list("/home/wangzhe/pprofile/povray_base.cr2.trace.log");
+#endif
     }
     
     

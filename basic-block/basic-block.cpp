@@ -74,23 +74,39 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
     std::string bbl_template;
     INT32 curr_pc_pos = 0;
 
-#ifdef TRACE_DEBUG 
-#if 0
-    if(instr_maps.begin()->second->get_instr_offset()==0x3445e8){
-        UINT16 imm32_pos, mem32_pos;
-        bbl_template += InstrGenerator::gen_addq_imm32_to_mem32_instr(imm32_pos, 1, mem32_pos, 0x100008);
+#ifdef TRACE_DEBUG
+    if(!instr_maps.begin()->second->is_shared_object()){
+        UINT16 temp_pos;
+        //xchg %rax, 0x100000
+        bbl_template += InstrGenerator::gen_xchg_rax_mem32_instr(temp_pos, 0x100000);
+        //mov $bbl_offset, (%rax)
+        bbl_template += InstrGenerator::gen_movq_imm32_to_rax_smem_instr(temp_pos, instr_maps.begin()->first);
+        //xchg %rsp, 0x100008
+        bbl_template += InstrGenerator::gen_xchg_rsp_mem32_instr(temp_pos, 0x100008);
+        //pushfq
+        bbl_template += InstrGenerator::gen_pushfq();
+        //addq $0x8, %rax
+        bbl_template += InstrGenerator::gen_addq_imm8_to_rax_instr(temp_pos, 0x8);
+        //popfq
+        bbl_template += InstrGenerator::gen_popfq();
+        //xchg %rsp, 0x100008
+        bbl_template += InstrGenerator::gen_xchg_rsp_mem32_instr(temp_pos, 0x100008);
+        //xchg %rax, 0x100000
+        bbl_template += InstrGenerator::gen_xchg_rax_mem32_instr(temp_pos, 0x100000);
     }
-#endif    
+#endif 
+
+#ifdef LAST_RBBL_DEBUG    
     //generate low32 movl 
     UINT16 movl_low32_imm32_pos, movl_low32_mem32_pos;
-    std::string movl_low32 = InstrGenerator::gen_movl_imm32_to_mem32_instr(movl_low32_imm32_pos, 0, movl_low32_mem32_pos, 0x100000);
+    std::string movl_low32 = InstrGenerator::gen_movl_imm32_to_mem32_instr(movl_low32_imm32_pos, 0, movl_low32_mem32_pos, 0x100010);
     UINT16 r_byte_pos = bbl_template.length() + movl_low32_imm32_pos;
     BBL_RELA movl_low32_rela = {DEBUG_LOW32_RELA_TYPE, r_byte_pos, 4, 0, 0};
     reloc_vec.push_back(movl_low32_rela);
     bbl_template += movl_low32;
     //generate high32 movl
     UINT16 movl_high32_imm32_pos, movl_high32_mem32_pos;
-    std::string movl_high32 = InstrGenerator::gen_movl_imm32_to_mem32_instr(movl_high32_imm32_pos, 0, movl_high32_mem32_pos, 0x100004);
+    std::string movl_high32 = InstrGenerator::gen_movl_imm32_to_mem32_instr(movl_high32_imm32_pos, 0, movl_high32_mem32_pos, 0x100014);
     r_byte_pos = bbl_template.length() + movl_high32_imm32_pos;
     BBL_RELA movl_high32_rela = {DEBUG_HIGH32_RELA_TYPE, r_byte_pos, 4, 0, 0};
     reloc_vec.push_back(movl_high32_rela);

@@ -129,6 +129,9 @@ public:
 	static void separate_movable_bbls_from_all_modules();
 	static void generate_all_relocation_block();
 	static void init_cvm_from_modules();
+#ifdef TRACE_DEBUG
+	static void cmp_bbl_list(std::string path);
+#endif
 	//check functions
 	/*	@Arguments: none
 		@Return value: none
@@ -150,7 +153,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset) const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_plt) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;

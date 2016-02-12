@@ -302,17 +302,22 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 	
 }
 
-void mmap_debug_page(void)
+void mmap_last_rbbl_debug_page(ulong debug_base, ulong debug_size)
 {
-	long ret = orig_mmap(0x100000, 0x1000, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
-	PRINTK("[LKM]mmap debug page %lx-%lx\n", ret, ret+0x1000);
+	long ret = orig_mmap(debug_base, debug_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
+	PRINTK("[LKM]mmap last rbbl debug page %lx-%lx\n", ret, ret+debug_size);
 }
 
 asmlinkage long intercept_execve(const char __user* filename, const char __user* const __user* argv,\
                     const char __user* const __user* envp)
 {
 	int ret = 0;
-	
+#ifdef TRACE_DEBUG
+	long debug_buf_base = 0x50000000;
+	long xchg_rsp_base = 0x101000;
+	long *ptr = (long*)0x100000;
+	long *ptr2 = (long*)0x100008;
+#endif
 	if(is_monitor_app(current->comm)){
 		PRINTK("[LKM]execve(%s)\n", current->comm);
 		//TODO: send mesg to setup shuffle process
@@ -324,9 +329,14 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	if(is_monitor_app(current->comm)){
 		init_app_slot(current);
 		remmap_interp_and_allocate_cc(current);
-#ifdef TRACE_DEBUG		
-		mmap_debug_page();
+#if defined(LAST_RBBL_DEBUG)&&defined(TRACE_DEBUG)	
+		mmap_last_rbbl_debug_page(0x100000, 0x1000);
 #endif
+#ifdef TRACE_DEBUG
+		allocate_trace_debug_buffer(0x50000000, 0x20000000);
+		put_user(debug_buf_base, ptr);
+		put_user(xchg_rsp_base, ptr2);
+#endif		
 	}
 	return ret;
 }

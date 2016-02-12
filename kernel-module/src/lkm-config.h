@@ -31,4 +31,5 @@
 #define MAX_APP_SLOT_LIST_NUM  MAX_APP_LIST_NUM*4
 
 #define TRACE_DEBUG
+#define LAST_RBBL_DEBUG
 #endif

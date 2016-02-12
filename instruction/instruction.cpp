@@ -31,6 +31,11 @@ Instruction::~Instruction()
     free(_encode);
 }
 
+BOOL Instruction::is_shared_object() const 
+{
+    return _module->is_shared_object();
+}
+
 void Instruction::dump_pinst(const P_ADDRX load_base) const
 {
     Disassembler::dump_pinst(this, load_base);
@@ -251,6 +256,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
     std::string instr_template;
     F_SIZE fallthrough_addr = get_fallthrough_offset();
     UINT16 curr_pc = 0;
+
     if(_module->is_shared_object()){//the offset between code cache and origin code region is lower than 4G
         /* @Shared Object Address is higher than 32bit
             movl ($ss_offset-0x4)(%rsp), (fallthrough_addr_in_cc>>32)&0xfffffff //shadow stack push high32 bits real return address
@@ -462,7 +468,8 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
     ASSERTM(_dInst.opcode!=I_JMP_FAR, "we only handle jmp near!\n");
     
     BOOL is_memset = false;
-    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset);
+    BOOL is_plt = false;
+    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset, is_plt);
     BOOL has_recognized_targets = targets.size()==0 ? false : true;
 
     std::string instr_template;
@@ -572,44 +579,147 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             ASSERT((offset32>0 ? offset32 : -offset32)<0x7f);
             instr_template[imm8_pos] = (INT8)offset32;
         }
-        
-        std::string push_template;
-        if(_dInst.ops[0].type==O_REG){
-            //1. convert jumpin reg to push reg
-            push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
-        }else{
-            //1. convert jumpin mem to push mem
-            push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);
-            if(is_rip_relative()){//add relocation information if the instruction is rip relative
-                ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
-                UINT16 rela_push_pos = find_disp_pos_from_encode((const UINT8 *)push_template.c_str(), \
-                    push_template.length(), (INT32)_dInst.disp);
-                rela_push_pos += (UINT16)instr_template.length();
-                UINT16 push_base_pos = (UINT16)(instr_template.length() + push_template.length());
-                INSTR_RELA rela_push = {RIP_RELA_TYPE, rela_push_pos, 4, push_base_pos, (INT64)_dInst.disp};
-                reloc_vec.push_back(rela_push);
+
+        BOOL need_protect_eflags = !is_plt && !_module->is_likely_vsyscall_jmpq(_dInst.addr);
+        BOOL need_protect_stack_vars = !is_plt && !_module->is_likely_vsyscall_jmpq(_dInst.addr);
+
+        if(need_protect_stack_vars){
+            //1. movq %rax, ($ss_offset-0x8)(%rsp) [spill a register]
+            UINT16 disp32_pos;
+            UINT16 curr_pc;
+            std::string movq_spill_template = InstrGenerator::gen_movq_rsp_smem_rax_instr(disp32_pos, 0);
+            disp32_pos += instr_template.length();
+            instr_template += movq_spill_template;
+            curr_pc = instr_template.length();
+            INSTR_RELA rela_spill = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -8};
+            reloc_vec.push_back(rela_spill);
+            
+            if(need_protect_eflags){
+                //2. popq ($ss_offset-0x18)(%rsp) [protect the top of current stack]
+                std::string popq_template = InstrGenerator::gen_popq_rsp_smem_instr(disp32_pos, 0);
+                disp32_pos += instr_template.length();
+                instr_template += popq_template;
+                curr_pc = instr_template.length();
+                INSTR_RELA rela_popq = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -24};
+                reloc_vec.push_back(rela_popq);
+                //3. pushfq [protect the eflag]
+                std::string pushfq_template = InstrGenerator::gen_pushfq();
+                instr_template += pushfq_template;
             }
-        }
-        
-        instr_template += push_template;
-        //2. add code cache offset or trampoline offset
-        UINT16 rela_addq_pos;
-        std::string addq_template = InstrGenerator::gen_addq_imm32_to_rsp_mem_instr(rela_addq_pos, 0);
-        rela_addq_pos += (UINT16)instr_template.length();
-        UINT16 addq_base_pos = (UINT16)(instr_template.length() + addq_template.length());
-        if(has_recognized_targets){//recoginized jmpin
-            INSTR_RELA rela_addq = {TRAMPOLINE_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
-            reloc_vec.push_back(rela_addq);
+            //4. movq %rax, reg/mem [jmpin reg/mem]
+            std::string movq_template;
+            if(_dInst.ops[0].type==O_REG){
+                //4.1 convert jumpin reg to movq reg
+                movq_template = InstrGenerator::convert_jumpin_reg_to_movq_rax_reg(_encode, _dInst.size);
+                instr_template += movq_template;
+            }else{
+                //4.2 convert jumpin mem to movq mem
+                movq_template = InstrGenerator::convert_jumpin_mem_to_movq_rax_mem(_encode, _dInst.size);
+                if(is_rip_relative()){//add relocation information if the instruction is rip relative
+                    ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                    disp32_pos = find_disp_pos_from_encode((const UINT8 *)movq_template.c_str(), \
+                        movq_template.length(), (INT32)_dInst.disp);
+                    disp32_pos += (UINT16)instr_template.length();  
+                    instr_template += movq_template;
+                    curr_pc = instr_template.length();
+                    INSTR_RELA rela_push = {RIP_RELA_TYPE, disp32_pos, 4, curr_pc, (INT64)_dInst.disp};
+                    reloc_vec.push_back(rela_push);
+                }else
+                    instr_template += movq_template;
+            }
+            //5. addq %rax, $cc_offset/$trampoline_offset
+            std::string addq_template = InstrGenerator::gen_addq_rax_imm32_instr(disp32_pos, 0);
+            disp32_pos += instr_template.length();
+            instr_template += addq_template;
+            curr_pc = instr_template.length();
+            if(has_recognized_targets){//recoginized jmpin
+                INSTR_RELA rela_addq = {TRAMPOLINE_RELA_TYPE, disp32_pos, 4, curr_pc, (INT64)get_instr_offset()};
+                reloc_vec.push_back(rela_addq);
+            }else{
+                INSTR_RELA rela_addq = {CC_RELA_TYPE, disp32_pos, 4, curr_pc, (INT64)get_instr_offset()};
+                reloc_vec.push_back(rela_addq);
+            }
+            
+            if(need_protect_eflags){
+                //6. popfq [recover the eflag]
+                std::string popfq_template = InstrGenerator::gen_popfq();
+                instr_template += popfq_template;
+                //7. pushq ($ss_offset-0x18)(%rsp) [recover the top of current stack]
+                std::string pushq_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+                disp32_pos += instr_template.length();
+                instr_template += pushq_template;
+                curr_pc = instr_template.length();
+                INSTR_RELA rela_pushq = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -24};
+                reloc_vec.push_back(rela_pushq);
+            }
+            //8. xchg %rax, ($ss_offset-0x8)(%rsp) [recover rax]
+            std::string xchg_template = InstrGenerator::gen_xchg_rax_rsp_smem_instr(disp32_pos, 0);
+            disp32_pos += instr_template.length();
+            instr_template += xchg_template;
+            curr_pc = instr_template.length();
+            INSTR_RELA rela_xchg = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -8};
+            reloc_vec.push_back(rela_xchg);
+            //9. jmpq * ($ss_offset-0x8)(%rsp)
+            std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_pos, 0);
+            disp32_pos += instr_template.length();
+            instr_template += jmpq_template;
+            curr_pc = instr_template.length();
+            INSTR_RELA rela_jmpq = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -8};
+            reloc_vec.push_back(rela_jmpq);
         }else{
-            INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
-            reloc_vec.push_back(rela_addq);
+            //1. push target onto stack
+            std::string push_template;
+            if(_dInst.ops[0].type==O_REG){
+                //1.1 convert jumpin reg to push reg
+                push_template = InstrGenerator::convert_jumpin_reg_to_push_reg(_encode, _dInst.size);
+            }else{
+                //1.2 convert jumpin mem to push mem
+                push_template = InstrGenerator::convert_jumpin_mem_to_push_mem(_encode, _dInst.size);
+                if(is_rip_relative()){//add relocation information if the instruction is rip relative
+                    ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+                    UINT16 rela_push_pos = find_disp_pos_from_encode((const UINT8 *)push_template.c_str(), \
+                        push_template.length(), (INT32)_dInst.disp);
+                    rela_push_pos += (UINT16)instr_template.length();
+                    UINT16 push_base_pos = (UINT16)(instr_template.length() + push_template.length());
+                    INSTR_RELA rela_push = {RIP_RELA_TYPE, rela_push_pos, 4, push_base_pos, (INT64)_dInst.disp};
+                    reloc_vec.push_back(rela_push);
+                }
+            }
+            instr_template += push_template;
+            //2. if instruction is not plt or vsyscall jump, saved eflags
+            if(need_protect_eflags){
+                std::string pushfq = InstrGenerator::gen_pushfq();
+                instr_template += pushfq;
+            }
+            //3. add code cache offset or trampoline offset
+            UINT16 rela_addq_pos;
+            std::string addq_template;
+            if(need_protect_eflags){
+                UINT16 disp8_pos;
+                addq_template = InstrGenerator::gen_addq_imm32_to_rsp_smem_disp8_instr(rela_addq_pos, 0, disp8_pos, 0x8);
+            }else
+                addq_template = InstrGenerator::gen_addq_imm32_to_rsp_mem_instr(rela_addq_pos, 0);
+            
+            rela_addq_pos += (UINT16)instr_template.length();
+            UINT16 addq_base_pos = (UINT16)(instr_template.length() + addq_template.length());
+            if(has_recognized_targets){//recoginized jmpin
+                INSTR_RELA rela_addq = {TRAMPOLINE_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
+                reloc_vec.push_back(rela_addq);
+            }else{
+                INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
+                reloc_vec.push_back(rela_addq);
+            }
+            instr_template += addq_template;
+            //4. if instruction is not plt or vsyscall jump, recover eflags
+            if(need_protect_eflags){
+                std::string popfq = InstrGenerator::gen_popfq();
+                instr_template += popfq;
+            }
+            //5. gen return instruction
+            std::string retq_template = InstrGenerator::gen_retq_instr();
+            instr_template += retq_template;
         }
-        instr_template += addq_template;
-        //3. gen return instruction
-        std::string retq_template = InstrGenerator::gen_retq_instr();
-        instr_template += retq_template;
     }
-    
     return instr_template;
 }
 
@@ -742,7 +852,7 @@ std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec
         instr_template += addq_template;
         //jmpq instruction
         UINT16 disp32_rela_pos;
-        std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem(disp32_rela_pos, 0);
+        std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_rela_pos, 0);
         disp32_rela_pos += instr_template.length();
         curr_pc += jmpq_template.length();
 

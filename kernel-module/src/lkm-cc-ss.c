@@ -7,6 +7,24 @@
 #include "lkm-config.h"
 #include "lkm-file.h"
 
+long allocate_trace_debug_buffer(ulong buffer_base, ulong buffer_size)
+{
+	char shm_path[256];
+	int curr_gid = current->tgid;
+	int fd;
+	long ret;
+	ulong aligned_buffer_size = X86_PAGE_ALIGN_CEIL(buffer_size);
+	ulong aligned_buffer_base = X86_PAGE_ALIGN_CEIL(buffer_base);
+	
+	sprintf(shm_path, "/dev/shm/%d.tdb", curr_gid);
+	fd = open_shm_file(shm_path);
+	orig_ftruncate(fd, aligned_buffer_size);
+	ret = orig_mmap(aligned_buffer_base, aligned_buffer_size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FIXED, fd, 0);
+	printk(KERN_EMERG  "[CR2:%d]mmap debug page(addr:%lx, len:%lx)\n", current->pid, ret, aligned_buffer_size);
+	close_shm_file(fd);
+	return ret;
+}
+
 long allocate_cc(long orig_x_size, const char *orig_name)
 {
 	int cc_fd = 0;

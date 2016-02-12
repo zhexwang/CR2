@@ -67,6 +67,7 @@ public:
 	virtual BOOL is_int() const =0;
 	virtual BOOL is_sys() const =0;
 	virtual BOOL is_cmov() const =0;
+	BOOL is_shared_object() const;
 	BOOL is_in_instr(F_SIZE offset) const {return offset>=_dInst.addr && offset<(_dInst.addr+_dInst.size);}
 	BOOL is_nop() const
 	{

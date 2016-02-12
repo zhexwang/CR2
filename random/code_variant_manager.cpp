@@ -156,6 +156,19 @@ inline BOOL is_shared(const MapsFileItem *item_ptr)
 		return false;
 }
 
+#ifdef TRACE_DEBUG
+S_ADDRX trace_debug_buffer_base = 0;
+S_ADDRX trace_debug_buffer_end = 0;
+void set_tdb_load_info(P_ADDRX start, P_SIZE load_size, std::string name)
+{
+    S_SIZE map_size = 0;
+    int fd = map_shm_file(name, trace_debug_buffer_base, map_size);
+    ASSERT(map_size==load_size);
+    trace_debug_buffer_end = trace_debug_buffer_base + map_size;
+    close_shm_file(fd);
+}
+#endif
+
 void CodeVariantManager::parse_proc_maps(PID protected_pid)
 {
     //1.open maps file
@@ -205,13 +218,21 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
         if(!is_executable(currentRow)){
             std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
             if(is_shared(currentRow)){//shadow stack
-                ASSERT(maps_record_name.find(ss_sufix)!=std::string::npos);
-                set_ss_load_info(currentRow->end, currentRow->end-currentRow->start, maps_record_name);
+                if(maps_record_name.find(ss_sufix)!=std::string::npos)
+                    set_ss_load_info(currentRow->end, currentRow->end-currentRow->start, maps_record_name);
             }else{
                 if(strstr(currentRow->pathname, "[stack]"))//stack
                     set_stack_load_base(currentRow->end);
             }
         }
+
+        //debug trace buffer
+#ifdef TRACE_DEBUG
+        if(strstr(currentRow->pathname, ".tdb")){
+            std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
+            set_tdb_load_info(currentRow->start, currentRow->end - currentRow->start, maps_record_name);
+        }
+#endif
         
         //calculate the row number
         mapsRowNum++;
@@ -495,11 +516,15 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
         rbbl_maps.insert(std::make_pair(rbbl_offset, used_cc_base));
         if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
+            S_ADDRX prefix_start = used_cc_base + 1;
 #ifdef TRACE_DEBUG
-            rbbl_maps.insert(std::make_pair(rbbl_offset+1, used_cc_base+23));
-#else
-            rbbl_maps.insert(std::make_pair(rbbl_offset+1, used_cc_base+1));
+            if(_org_x_load_base<0x7fffffff)//main executable 
+                prefix_start += 29;
 #endif
+#ifdef LAST_RBBL_DEBUG
+            prefix_start += 22;
+#endif
+            rbbl_maps.insert(std::make_pair(rbbl_offset+1, prefix_start));      
         }
         cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
         used_cc_base += rbbl_size;
@@ -512,7 +537,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
         if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
-#ifdef TRACE_DEBUG
+#ifdef LAST_RBBL_DEBUG
             rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
 #else
             rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
@@ -527,7 +552,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         S_SIZE rbbl_size = rbbl->get_template_size();
         rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
         if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
-#ifdef TRACE_DEBUG
+#ifdef LAST_RBBL_DEBUG
             rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
 #else
             rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
@@ -732,20 +757,25 @@ RandomBBL *CodeVariantManager::find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_fir
         CC_LAYOUT_ITER iter = cc_layout.upper_bound(Range<S_ADDRX>(s_addr));
         if(iter!=cc_layout.end() && s_addr<=(--iter)->first.high() && s_addr>=iter->first.low()){
             S_ADDRX ptr = iter->second;
+            S_ADDRX start = iter->first.low();
             switch(ptr){
                 case BOUNDARY_PTR: return NULL;
                 case TRAMP_JMP8_PTR: 
                     {
-                        ASSERT(*(UINT8*)ptr==JMP8_OPCODE);    
-                        INT8 offset8 = *(INT8*)(ptr+OFFSET_POS);
+                        if(start!=s_addr)//s_addr must be trampoline aligned
+                            return NULL;
+                        ASSERT(*(UINT8*)start==JMP8_OPCODE);    
+                        INT8 offset8 = *(INT8*)(start+OFFSET_POS);
                         S_ADDRX target_addr = s_addr + JMP8_LEN + offset8;    
                         return find_rbbl_from_saddrx(target_addr, is_first_cc);
                     }
                 case TRAMP_OVERLAP_JMP32_PTR: ASSERT(0); return NULL;
                 case TRAMP_JMP32_PTR://need relocate the trampolines
                     {
-                        ASSERT(*(UINT8*)ptr==JMP32_OPCODE);    
-                        INT32 offset32 = *(INT32*)(ptr+OFFSET_POS);
+                        if(start!=s_addr)//s_addr must be trampoline aligned
+                            return NULL;
+                        ASSERT(*(UINT8*)start==JMP32_OPCODE);    
+                        INT32 offset32 = *(INT32*)(start+OFFSET_POS);
                         S_ADDRX target_addr = s_addr + JMP32_LEN + offset32;
                         return find_rbbl_from_saddrx(target_addr, is_first_cc);
                     }

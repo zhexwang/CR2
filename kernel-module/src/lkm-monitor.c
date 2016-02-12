@@ -53,7 +53,7 @@ void init_monitor_app_list(void)
 	//----SPEC CPU2006 FP------//
 	//fortran language
 	monitor_app_list[13] = "bwaves_base.cr2";//410
-	monitor_app_list[14] = "gamess_base.cr2";//416, train and ref has bug
+	monitor_app_list[14] = "gamess_base.cr2";//416
 	monitor_app_list[15] = "zeusmp_base.cr2";//434
 	monitor_app_list[16] = "cactusADM_base.cr2";//436
 	monitor_app_list[17] = "leslie3d_base.cr2";//437
@@ -70,7 +70,7 @@ void init_monitor_app_list(void)
 	monitor_app_list[26] = "namd_base.cr2";//444
 	monitor_app_list[27] = "soplex_base.cr2";//450
 	monitor_app_list[28] = "dealII_base.cr2";//447
-	monitor_app_list[29] = "povray_base.cr2";//453, ref has bug
+	monitor_app_list[29] = "povray_base.cr2";//453
 }
 
 //-------------APP slot----------------------//

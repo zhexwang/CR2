@@ -1,3 +1,5 @@
+#include <fstream>
+
 #include "module.h"
 #include "elf-parser.h"
 #include "instruction.h"
@@ -71,14 +73,16 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset) const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_plt) const
 {
     JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
     if(it!=_indirect_jump_maps.end()){
         is_memset = it->second.type==MEMSET_JMP ? true : false;
+        is_plt = it->second.type==PLT_JMP ? true : false;
         return it->second.targets;
     }else{
         is_memset = false;
+        is_plt = false;
         return std::set<F_SIZE>();
     }
 }
@@ -354,6 +358,67 @@ void Module::generate_all_relocation_block()
         module->generate_relocation_block();
     }
 }
+
+#ifdef TRACE_DEBUG
+extern S_ADDRX trace_debug_buffer_base;
+extern S_ADDRX trace_debug_buffer_end;
+
+inline INT64 convert_str_to_int64(std::string str)
+{
+    char *stopstring;
+    INT64 offset = strtol(str.c_str(), &stopstring, 16);
+    return offset;
+}
+
+void Module::cmp_bbl_list(std::string path)
+{
+    // 1.get main module
+    Module *main_module = NULL;
+    MODULE_MAP_ITERATOR it = _all_module_maps.begin();
+    for(; it!=_all_module_maps.end(); it++){
+        Module *module = it->second;
+        if(!module->is_shared_object()){
+            main_module = module;
+            break;
+        }
+    }
+    // 2.gen bbl list
+    std::ifstream is;
+    is.open(path.c_str(), std::ios::in);
+    std::string str;
+    std::vector<F_SIZE> bbl_list;
+    while(getline(is, str)){
+        F_SIZE instr_offset = convert_str_to_int64(str) - 0x400000;
+        BasicBlock *curr_bb = main_module->find_bbl_by_offset(instr_offset, false);
+        if(curr_bb)
+            bbl_list.push_back(instr_offset);
+    }
+    // 3.compare
+    std::vector<F_SIZE>::iterator iter = bbl_list.begin();
+    S_ADDRX *addr = (S_ADDRX*)trace_debug_buffer_base;
+    F_SIZE last_offset = 0;
+    while((S_ADDRX)addr<=trace_debug_buffer_end){
+        F_SIZE p_offset = *addr;
+        if(p_offset!=0){
+            if(iter!=bbl_list.end()){
+                if(*iter!=p_offset){
+                    ASSERTM(0, "Mismatch! Last Right BBL: %lx, Mismatch BBL: %lx (PinResult: %lx)\n", \
+                        last_offset, p_offset, *iter);
+                }else{
+                    iter++;
+                    last_offset = p_offset;
+                }
+            }else
+                ASSERTM(0, "bbl too short!\n");
+        }else{
+            ASSERT(iter==bbl_list.end());
+            break;
+        }
+        
+        addr++;
+    }
+}
+#endif
 
 void Module::insert_bbl(BasicBlock *bbl)
 {
