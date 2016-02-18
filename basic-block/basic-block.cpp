@@ -68,7 +68,7 @@ void BasicBlock::dump_in_off() const
     }
 }
 
-static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, BasicBlock::INSTR_MAPS &instr_maps)
+static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, BasicBlock::INSTR_MAPS &instr_maps, LKM_SS_TYPE ss_type)
 {
     INSTR_RELA_VEC instr_reloc_vec;
     std::string bbl_template;
@@ -117,7 +117,7 @@ static std::string generate_instr_templates(std::vector<BBL_RELA> &reloc_vec, Ba
         Instruction *instr = iter->second;
         curr_pc_pos += instr->get_instr_size();
         SIZE curr_bbl_template_len = bbl_template.length();
-        std::string instr_template = instr->generate_instr_template(instr_reloc_vec);
+        std::string instr_template = instr->generate_instr_template(instr_reloc_vec, ss_type);
         //normalize the instruction relocations into bbl start relocation
         for(INSTR_RELA_VEC_ITER it = instr_reloc_vec.begin(); it!=instr_reloc_vec.end(); it++){
             INSTR_RELA &rela = *it;
@@ -235,9 +235,9 @@ SequenceBBL::~SequenceBBL()
     ;
 }
 
-std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string SequenceBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps);
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type);
     
     if(_has_fallthrough_bbl){
         SIZE curr_bbl_template_len = bbl_template.length();
@@ -276,9 +276,9 @@ RetBBL::~RetBBL()
     ;
 }
 
-std::string RetBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string RetBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps);    
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type);    
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;
 }
@@ -296,9 +296,9 @@ DirectCallBBL::~DirectCallBBL()
     ;
 }
 
-std::string DirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string DirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps);
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type);
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;
 }
@@ -316,9 +316,9 @@ IndirectCallBBL::~IndirectCallBBL()
     ;
 }
 
-std::string IndirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string IndirectCallBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps); 
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type); 
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;
 }
@@ -336,9 +336,9 @@ DirectJumpBBL::~DirectJumpBBL()
     ;
 }
 
-std::string DirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string DirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps); 
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type); 
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;
 }
@@ -356,9 +356,9 @@ IndirectJumpBBL::~IndirectJumpBBL()
     ;
 }
 
-std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string IndirectJumpBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps); 
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type); 
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;  
 }
@@ -376,9 +376,9 @@ ConditionBrBBL::~ConditionBrBBL()
     ;
 }
 
-std::string ConditionBrBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec) const
+std::string ConditionBrBBL::generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
-    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps); 
+    std::string bbl_template = generate_instr_templates(reloc_vec, _instr_maps, ss_type); 
     ASSERT(bbl_template.length()<=USHRT_MAX);
     return bbl_template;
 }

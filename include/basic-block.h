@@ -83,7 +83,7 @@ public:
 	virtual BOOL is_indirect_jump() const =0;
 	virtual BOOL is_condition_branch() const =0;
 	virtual BOOL is_ret() const =0;
-	virtual std::string generate_code_template(std::vector<BBL_RELA> &rela) const =0;
+	virtual std::string generate_code_template(std::vector<BBL_RELA> &rela, LKM_SS_TYPE ss_type) const =0;
 };
 
 class SequenceBBL : public BasicBlock
@@ -102,7 +102,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class RetBBL : public BasicBlock
@@ -121,7 +121,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return true;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class DirectCallBBL : public BasicBlock
@@ -140,7 +140,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class IndirectCallBBL : public BasicBlock
@@ -159,7 +159,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class DirectJumpBBL : public BasicBlock
@@ -178,7 +178,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class IndirectJumpBBL : public BasicBlock
@@ -197,7 +197,7 @@ public:
 	BOOL is_indirect_jump() const {return true;}
 	BOOL is_condition_branch() const {return false;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class ConditionBrBBL : public BasicBlock
@@ -216,7 +216,7 @@ public:
 	BOOL is_indirect_jump() const {return false;}
 	BOOL is_condition_branch() const {return true;}
 	BOOL is_ret() const {return false;}
-	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec) const;
+	std::string generate_code_template(std::vector<BBL_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 

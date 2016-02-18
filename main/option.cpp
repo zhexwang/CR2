@@ -8,6 +8,7 @@ BOOL Options::_need_check_static_analysis = false;
 BOOL Options::_has_elf_path = false;
 BOOL Options::_has_input_db_file = false;
 BOOL Options::_has_output_db_file = false;
+BOOL Options::_need_randomize_rbbl = false;
 
 std::string Options::_check_file;
 std::string Options::_elf_path;
@@ -33,15 +34,16 @@ void Options::show_system()
 
 void Options::print_usage(char *cr2)
 {
-    PRINT("Usage: %s, Copyright WangZhe | ICT\n", cr2);
+    PRINT("Usage: %s, Copyright@WangZhe | ICT\n", cr2);
     PRINT("Option list (alphabetical order):\n");
     PRINT(" -A                             Static Analysis and Dynamic Shuffle code.\n");
     PRINT(" -C /path/*.cr2.indirect.log    Input indirect log file to check static analysis.\n");
     PRINT(" -D                             Dynamic Shuffle (Generate the shuffle code variants).\n");
     PRINT(" -h                             Display help information.\n");
-    PRINT(" -i /path/*.cr2.rela.db         Input the db file of relocation block.\n");
+    PRINT(" -i /rela.db.path               Input the db file of relocation block.\n");
     PRINT(" -I /path/elf                   Handle elf binary file and its all dependence library.\n");
-    PRINT(" -o /path/*.cr2.rela.db         Output relocation block to db file used for shuffle code at runtime.\n");
+    PRINT(" -o /rela.db.path               Output relocation block to db file used for shuffle code at runtime.\n");
+    PRINT(" -R                             All relocation block should be randomized in code variant.!\n");
     PRINT(" -S                             Static Analysis (Disassemble/Recognize IndirectJump Targets/Split BBLs/Classify BBLs).\n");
     PRINT(" -v                             Display version information.\n");
 }
@@ -78,7 +80,7 @@ inline INT64 convert_str_to_num(std::string str)
 void Options::parse(int argc, char** argv)
 {
     //1. process cr2 options
-    const char *opt_string = "Ac:C:Dhi:I:o:s:Sv";
+    const char *opt_string = "AC:Dhi:I:o:RSv";
     INT32 ret;
     while((ret = getopt(argc, argv, opt_string))!=-1){
         switch (ret){
@@ -109,6 +111,9 @@ void Options::parse(int argc, char** argv)
             case 'o':
                 _has_output_db_file = true;
                 _output_db_file_path = std::string(optarg);
+                break;
+            case 'R':
+                _need_randomize_rbbl = true;
                 break;
             case 'S':
                 _static_analysis = true;

@@ -96,7 +96,7 @@ static UINT16 find_disp_pos_from_encode(const UINT8 *encode, UINT8 size, INT8 di
     return (UINT16)rela_pos;
 }
 */
-std::string SequenceInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string SequenceInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     if(is_rip_relative()){
         ASSERTM(_dInst.ops[0].type==O_SMEM || _dInst.ops[0].type==O_MEM  || _dInst.ops[1].type==O_SMEM || _dInst.ops[1].type==O_MEM
@@ -121,7 +121,7 @@ DirectCallInstr::~DirectCallInstr()
     ;
 }
 
-std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     std::string instr_template;
     F_SIZE fallthrough_addr = get_fallthrough_offset();
@@ -139,7 +139,13 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         UINT16 curr_pc = instr_template.length();
         //1. first template
           //1.1 generate instruction template
-        std::string movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movl_rra_l32_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else
+            ASSERT(0);
           //1.2 calculate the base pc
         curr_pc += movl_rra_l32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -153,7 +159,13 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         instr_template += movl_rra_l32_template;
         //2. second template
           //2.1 generate instruction template
-        std::string movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movl_rra_h32_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else
+            ASSERT(0);
           //2.2 calculate the base pc
         curr_pc += movl_rra_h32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -179,7 +191,7 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         //4. fouth template  
           //4.1 generate the template
         UINT16 disp8_pos;
-        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, 4);
+        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, (INT8)4);
           //4.2 calculate the base pc
         curr_pc += movl_ora_h32_template.length();
         imm32_rela_pos += instr_template.length();
@@ -199,7 +211,13 @@ std::string DirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &re
         UINT16 curr_pc = instr_template.length();
         //1. first template
           //1.1 generate instruction template
-        std::string movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movq_rra_l32_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else
+            ASSERT(0);
           //1.2 calculate the base pc
         curr_pc += movq_rra_l32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -250,7 +268,7 @@ IndirectCallInstr::~IndirectCallInstr()
     ;
 }
 
-std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     ASSERTM(_dInst.opcode!=I_CALL_FAR, "we only handle call near!\n");
     std::string instr_template;
@@ -271,7 +289,13 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         UINT16 imm32_rela_pos;
         //1. first template
           //1.1 generate instruction template
-        std::string movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movl_rra_l32_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movl_rra_l32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else
+            ASSERT(0);
           //1.2 calculate the base pc
         curr_pc += movl_rra_l32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -285,7 +309,13 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         instr_template += movl_rra_l32_template;
         //2. second template
           //2.1 generate instruction template
-        std::string movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movl_rra_h32_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movl_rra_h32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, (INT32)0);
+        else
+            ASSERT(0);
           //2.2 calculate the base pc
         curr_pc += movl_rra_h32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -311,7 +341,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         //4. fouth template  
           //4.1 generate the template
         UINT16 disp8_pos;
-        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, 4);
+        std::string movl_ora_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp8_pos, (INT8)4);
           //4.2 calculate the base pc
         curr_pc += movl_ora_h32_template.length();
         imm32_rela_pos += instr_template.length();
@@ -332,7 +362,13 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
         UINT16 imm32_rela_pos;
         //1. first template
           //1.1 generate instruction template
-        std::string movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos, 0);
+        std::string movq_rra_l32_template ;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos,(INT32)0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            movq_rra_l32_template = InstrGenerator::gen_movq_imm32_to_gs_rsp_smem_instr(imm32_rela_pos, 0, disp32_rela_pos,(INT32)0);
+        else
+            ASSERT(0);
           //1.2 calculate the base pc
         curr_pc += movq_rra_l32_template.length();
         disp32_rela_pos += instr_template.length();
@@ -419,7 +455,7 @@ DirectJumpInstr::~DirectJumpInstr()
     ;
 }
 
-std::string DirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string DirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     UINT16 r_byte_pos;
     std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(r_byte_pos, 0);
@@ -463,13 +499,14 @@ static inline UINT8 convert_reg64_to_reg32(UINT8 reg_index)
     return reg_index + R_EAX - R_RAX;
 }
 
-std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     ASSERTM(_dInst.opcode!=I_JMP_FAR, "we only handle jmp near!\n");
     
     BOOL is_memset = false;
     BOOL is_plt = false;
-    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset, is_plt);
+    BOOL is_switch_case = false;
+    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset, is_switch_case, is_plt);
     BOOL has_recognized_targets = targets.size()==0 ? false : true;
 
     std::string instr_template;
@@ -555,7 +592,13 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             instr_template += add_rsp_template;
             //4. push return address from shadow stack
             UINT16 disp32_pos;
-            std::string pushq_rsp_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+            std::string pushq_rsp_template;
+            if(ss_type==LKM_OFFSET_SS_TYPE)
+                pushq_rsp_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+            else if(ss_type==LKM_SEG_SS_TYPE)
+                pushq_rsp_template = InstrGenerator::gen_pushq_gs_rsp_smem_instr(disp32_pos, 0);
+            else
+                ASSERT(0);
             disp32_pos += instr_template.length();
             instr_template += pushq_rsp_template;
             UINT16 pushq_rsp_base = instr_template.length();
@@ -580,14 +623,22 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             instr_template[imm8_pos] = (INT8)offset32;
         }
 
-        BOOL need_protect_eflags = !is_plt && !_module->is_likely_vsyscall_jmpq(_dInst.addr);
-        BOOL need_protect_stack_vars = !is_plt && !_module->is_likely_vsyscall_jmpq(_dInst.addr);
-
+        BOOL need_protect_eflags = is_switch_case;
+        BOOL need_protect_stack_vars = is_switch_case;
+        if(is_switch_case)
+            ASSERT(!_module->is_likely_vsyscall_jmpq(_dInst.addr));
+        
         if(need_protect_stack_vars){
             //1. movq %rax, ($ss_offset-0x8)(%rsp) [spill a register]
             UINT16 disp32_pos;
             UINT16 curr_pc;
-            std::string movq_spill_template = InstrGenerator::gen_movq_rsp_smem_rax_instr(disp32_pos, 0);
+            std::string movq_spill_template;
+            if(ss_type==LKM_OFFSET_SS_TYPE)
+                movq_spill_template = InstrGenerator::gen_movq_rsp_smem_rax_instr(disp32_pos, 0);
+            else if(ss_type==LKM_SEG_SS_TYPE)
+                movq_spill_template = InstrGenerator::gen_movq_gs_rsp_smem_rax_instr(disp32_pos, 0);
+            else
+                ASSERT(0);
             disp32_pos += instr_template.length();
             instr_template += movq_spill_template;
             curr_pc = instr_template.length();
@@ -596,7 +647,13 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             
             if(need_protect_eflags){
                 //2. popq ($ss_offset-0x18)(%rsp) [protect the top of current stack]
-                std::string popq_template = InstrGenerator::gen_popq_rsp_smem_instr(disp32_pos, 0);
+                std::string popq_template;
+                if(ss_type==LKM_OFFSET_SS_TYPE)
+                    popq_template = InstrGenerator::gen_popq_rsp_smem_instr(disp32_pos, 0);
+                else if(ss_type==LKM_SEG_SS_TYPE)
+                    popq_template = InstrGenerator::gen_popq_gs_rsp_smem_instr(disp32_pos, 0);
+                else
+                    ASSERT(0);
                 disp32_pos += instr_template.length();
                 instr_template += popq_template;
                 curr_pc = instr_template.length();
@@ -645,7 +702,13 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
                 std::string popfq_template = InstrGenerator::gen_popfq();
                 instr_template += popfq_template;
                 //7. pushq ($ss_offset-0x18)(%rsp) [recover the top of current stack]
-                std::string pushq_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+                std::string pushq_template;
+                if(ss_type==LKM_OFFSET_SS_TYPE)
+                    pushq_template = InstrGenerator::gen_pushq_rsp_smem_instr(disp32_pos, 0);
+                else if(ss_type==LKM_SEG_SS_TYPE)
+                    pushq_template = InstrGenerator::gen_pushq_gs_rsp_smem_instr(disp32_pos, 0);
+                else
+                    ASSERT(0);
                 disp32_pos += instr_template.length();
                 instr_template += pushq_template;
                 curr_pc = instr_template.length();
@@ -653,14 +716,26 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
                 reloc_vec.push_back(rela_pushq);
             }
             //8. xchg %rax, ($ss_offset-0x8)(%rsp) [recover rax]
-            std::string xchg_template = InstrGenerator::gen_xchg_rax_rsp_smem_instr(disp32_pos, 0);
+            std::string xchg_template;
+            if(ss_type==LKM_OFFSET_SS_TYPE)
+                xchg_template = InstrGenerator::gen_xchg_rax_rsp_smem_instr(disp32_pos, 0);
+            else if(ss_type==LKM_SEG_SS_TYPE)
+                xchg_template = InstrGenerator::gen_xchg_rax_gs_rsp_smem_instr(disp32_pos, 0);
+            else
+                ASSERT(0);
             disp32_pos += instr_template.length();
             instr_template += xchg_template;
             curr_pc = instr_template.length();
             INSTR_RELA rela_xchg = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -8};
             reloc_vec.push_back(rela_xchg);
             //9. jmpq * ($ss_offset-0x8)(%rsp)
-            std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_pos, 0);
+            std::string jmpq_template;
+            if(ss_type==LKM_OFFSET_SS_TYPE)
+                jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_pos, 0);
+            else if(ss_type==LKM_SEG_SS_TYPE)
+                jmpq_template = InstrGenerator::gen_jmpq_gs_rsp_smem_instr(disp32_pos, 0);
+            else
+                ASSERT(0);
             disp32_pos += instr_template.length();
             instr_template += jmpq_template;
             curr_pc = instr_template.length();
@@ -734,7 +809,7 @@ ConditionBrInstr::~ConditionBrInstr()
     ;
 }
 
-std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {  /*            
     * Indicates the instruction is one of:
     * JCXZ(32mode), JECXZ, JRCXZ, JO, JNO, JB, JAE, JZ, JNZ, JBE, JA, JS, JNS, JP, JNP, JL, JGE, JLE, JG, LOOP, LOOPZ, LOOPNZ.                                                            
@@ -823,7 +898,7 @@ RetInstr::~RetInstr()
     ;
 }
 
-std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     std::string instr_template;
     UINT16 curr_pc = 0;
@@ -852,7 +927,13 @@ std::string RetInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec
         instr_template += addq_template;
         //jmpq instruction
         UINT16 disp32_rela_pos;
-        std::string jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_rela_pos, 0);
+        std::string jmpq_template;
+        if(ss_type==LKM_OFFSET_SS_TYPE)
+            jmpq_template = InstrGenerator::gen_jmpq_rsp_smem_instr(disp32_rela_pos, 0);
+        else if(ss_type==LKM_SEG_SS_TYPE)
+            jmpq_template = InstrGenerator::gen_jmpq_gs_rsp_smem_instr(disp32_rela_pos, 0);
+        else
+            ASSERT(0);
         disp32_rela_pos += instr_template.length();
         curr_pc += jmpq_template.length();
 
@@ -875,7 +956,7 @@ SysInstr::~SysInstr()
     ;
 }
 
-std::string SysInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string SysInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     return std::string((const char*)_encode, (SIZE)_dInst.size);
 }
@@ -891,7 +972,7 @@ CmovInstr::~CmovInstr()
     ;
 }
 
-std::string CmovInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string CmovInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     if(is_rip_relative()){
         ASSERTM(_dInst.ops[0].type==O_SMEM || _dInst.ops[0].type==O_MEM  || _dInst.ops[1].type==O_SMEM || _dInst.ops[1].type==O_MEM
@@ -915,7 +996,7 @@ IntInstr::~IntInstr()
     ;
 }
 	
-std::string IntInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const
+std::string IntInstr::generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const
 {
     return std::string((const char*)_encode, (SIZE)_dInst.size);
 }

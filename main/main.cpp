@@ -31,9 +31,9 @@ int main(int argc, char **argv)
         //Module::dump_all_bbl_movable_info();
         // 6. generate bbl template
         Module::init_cvm_from_modules();
-        Module::generate_all_relocation_block();
+        Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
         // 7. output static analysis dbs    
-        
+        CodeVariantManager::store_into_db(Options::_output_db_file_path);
     }
 
     if(Options::_dynamic_shuffle){
@@ -46,9 +46,11 @@ int main(int argc, char **argv)
         PID proc_id = 0;
         P_ADDRX curr_pc = 0;
         SIZE cc_offset = 0, ss_offset = 0;
-        NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset);
+        P_ADDRX gs_base = 0;
+        LKM_SS_TYPE ss_type = LKM_SEG_SS_TYPE;
+        NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset, gs_base, ss_type);
         // 2.generate the first code variant
-        CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset);
+        CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset, gs_base, ss_type);
         CodeVariantManager::start_gen_code_variants();
         CodeVariantManager::wait_for_code_variant_ready(true);
         P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
@@ -69,11 +71,7 @@ int main(int argc, char **argv)
         CodeVariantManager::stop_gen_code_variants();
         // 6.disconnect
         NetLink::disconnect_with_lkm();
-#ifdef TRACE_DEBUG
-        Module::cmp_bbl_list("/home/wangzhe/pprofile/povray_base.cr2.trace.log");
-#endif
     }
-    
     
     return 0;
 }

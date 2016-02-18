@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <time.h>
 
+#include "option.h"
 #include "code_variant_manager.h"
 #include "instr_generator.h"
 
@@ -16,6 +17,7 @@ CodeVariantManager::CVM_MAPS CodeVariantManager::_all_cvm_maps;
 std::string CodeVariantManager::_code_variant_img_path;
 SIZE CodeVariantManager::_cc_offset = 0;
 SIZE CodeVariantManager::_ss_offset = 0;
+P_ADDRX CodeVariantManager::_gs_base = 0;
 P_ADDRX CodeVariantManager::_org_stack_load_base = 0;
 P_ADDRX CodeVariantManager::_ss_load_base = 0;
 S_ADDRX CodeVariantManager::_ss_base = 0;
@@ -408,6 +410,33 @@ S_ADDRX *random(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeV
     return rbbl_array;
 }
 
+S_ADDRX *fallthrough_following(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeVariantManager::RAND_BBL_MAPS movable_rbbls, \
+    SIZE &array_num)
+{
+    array_num = fixed_rbbls.size() + movable_rbbls.size();
+    S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+    //init array
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_iter = fixed_rbbls.begin();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_end = fixed_rbbls.end();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator movable_iter = movable_rbbls.begin();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator movable_end = movable_rbbls.end();
+    
+    for(SIZE index=0; index<array_num; index++){
+        F_SIZE curr_fixed_offset = fixed_iter!=fixed_end ? fixed_iter->first : 0x7fffffff;
+        F_SIZE curr_movable_offset = movable_iter!=movable_end ? movable_iter->first : 0x7fffffff;
+        if(curr_fixed_offset<curr_movable_offset){
+            rbbl_array[index] = (S_ADDRX)fixed_iter->second;
+            fixed_iter++;
+        }else if(curr_fixed_offset>curr_movable_offset){
+            rbbl_array[index] = (S_ADDRX)movable_iter->second;
+            movable_iter++;
+        }else
+            FATAL(1, "Can not be exist the same offset in both fixed_rbbls and movable_rbbls!\n");
+    }
+
+    return rbbl_array;
+}
+
 S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, \
     RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
 {
@@ -507,15 +536,29 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     }
     // 4.place fixed and movable rbbls
     // 4.1 random fixed and movable rbbls
-    SIZE random_array_size;
-    S_ADDRX *random_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, random_array_size);
+    SIZE rbbl_array_size;
+    S_ADDRX *rbbl_array = NULL;
+    if(Options::_need_randomize_rbbl)
+        rbbl_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
+    else
+        rbbl_array = fallthrough_following(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
     // 4.2 place rbbls
-    for(SIZE idx = 0; idx<random_array_size; idx++){
-        RandomBBL *rbbl = (RandomBBL*)random_array[idx];
-        S_SIZE rbbl_size = rbbl->get_template_size();
-        F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
-        rbbl_maps.insert(std::make_pair(rbbl_offset, used_cc_base));
-        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
+    SIZE reduce_num = 0;
+    for(SIZE idx = 0; idx<rbbl_array_size; idx++){
+        RandomBBL *curr_rbbl = (RandomBBL*)rbbl_array[idx];
+        RandomBBL *next_rbbl = idx<(rbbl_array_size-1) ? (RandomBBL*)rbbl_array[idx+1] : NULL;
+        S_SIZE place_size = curr_rbbl->get_template_size();
+        if(next_rbbl){
+            F_SIZE next_rbbl_offset = next_rbbl->get_rbbl_offset();
+            if(next_rbbl_offset==curr_rbbl->get_last_br_target()){
+                place_size -= 5;//JMP_REL32 instruction len
+                reduce_num++;
+            }
+        }
+        F_SIZE curr_rbbl_offset = curr_rbbl->get_rbbl_offset();
+        rbbl_maps.insert(std::make_pair(curr_rbbl_offset, used_cc_base));
+        if(curr_rbbl->has_lock_and_repeat_prefix()){//consider prefix
+            ASSERT(place_size>1);
             S_ADDRX prefix_start = used_cc_base + 1;
 #ifdef TRACE_DEBUG
             if(_org_x_load_base<0x7fffffff)//main executable 
@@ -524,44 +567,15 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
 #ifdef LAST_RBBL_DEBUG
             prefix_start += 22;
 #endif
-            rbbl_maps.insert(std::make_pair(rbbl_offset+1, prefix_start));      
+            rbbl_maps.insert(std::make_pair(curr_rbbl_offset+1, prefix_start));      
         }
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
-        used_cc_base += rbbl_size;
+        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+place_size-1), (S_ADDRX)curr_rbbl));
+        used_cc_base += place_size;
     }
     // 4.3 free array
-    delete []random_array;
-#if 0    
-    for(RAND_BBL_MAPS::iterator iter = _postion_fixed_rbbl_maps.begin(); iter!=_postion_fixed_rbbl_maps.end(); iter++){
-        RandomBBL *rbbl = iter->second;
-        S_SIZE rbbl_size = rbbl->get_template_size();
-        rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
-#ifdef LAST_RBBL_DEBUG
-            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
-#else
-            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
-#endif
-        }
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
-        used_cc_base += rbbl_size;
-    }
+    delete []rbbl_array;
+    //BLUE("Sum: %d, Reduce: %d(%lf)\n", (INT32)rbbl_array_size, (INT32)reduce_num, ((double)reduce_num*100)/(double)rbbl_array_size);
 
-    for(RAND_BBL_MAPS::iterator iter = _movable_rbbl_maps.begin(); iter!=_movable_rbbl_maps.end(); iter++){
-        RandomBBL *rbbl = iter->second;
-        S_SIZE rbbl_size = rbbl->get_template_size();
-        rbbl_maps.insert(std::make_pair(iter->first, used_cc_base));
-        if(rbbl->has_lock_and_repeat_prefix()){//consider prefix
-#ifdef LAST_RBBL_DEBUG
-            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+23));
-#else
-            rbbl_maps.insert(std::make_pair(iter->first+1, used_cc_base+1));
-#endif            
-        }
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+rbbl_size-1), (S_ADDRX)rbbl));
-        used_cc_base += rbbl_size;
-    }
-#endif
     //judge used cc size
     ASSERT((used_cc_base - cc_base)<=_cc_load_size);
     return used_cc_base;
@@ -598,8 +612,8 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
                     F_SIZE rbbl_offset = rbbl->get_rbbl_offset();
                     JMPIN_CC_OFFSET::iterator ret = jmpin_rbbl_offsets.find(rbbl_offset);
                     P_SIZE jmpin_offset = ret!=jmpin_rbbl_offsets.end() ? ret->second : 0;//judge is switch case or not
-                    rbbl->gen_code(cc_base, range_base_addr, range_size, _org_x_load_base, _cc_offset, _ss_offset, \
-                        rbbl_maps, jmpin_offset);
+                    rbbl->gen_code(cc_base, range_base_addr, range_size, _org_x_load_base, _cc_offset, _ss_offset, _gs_base, \
+                        _ss_type, rbbl_maps, jmpin_offset);
                 }
         }
     }
@@ -908,6 +922,16 @@ void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
             *(P_ADDRX *)return_addr_ptr = new_return_addr;
         
         return_addr_ptr -= sizeof(P_ADDRX);
+    }
+}
+
+
+void CodeVariantManager::store_into_db(std::string db_path)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        CodeVariantManager *cvm = iter->second;
+        std::string cvm_name = iter->first;
+
     }
 }
 

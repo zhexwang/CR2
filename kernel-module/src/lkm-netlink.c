@@ -76,3 +76,10 @@ void exit_netlink(void)
     netlink_kernel_release(nl_sk);
 }
 
+LKM_SS_TYPE global_ss_type;
+void set_ss_type(LKM_SS_TYPE ss_type)
+{
+	global_ss_type = ss_type;
+}
+
+

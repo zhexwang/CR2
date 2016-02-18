@@ -7,6 +7,7 @@
 
 #include "type.h"
 #include "elf-parser.h"
+#include "relocation.h"
 
 class CodeVariantManager;
 class Instruction;
@@ -127,7 +128,7 @@ public:
 	static void split_all_modules_into_bbls();
 	static void analysis_all_modules_indirect_jump_targets();
 	static void separate_movable_bbls_from_all_modules();
-	static void generate_all_relocation_block();
+	static void generate_all_relocation_block(LKM_SS_TYPE ss_type);
 	static void init_cvm_from_modules();
 #ifdef TRACE_DEBUG
 	static void cmp_bbl_list(std::string path);
@@ -153,7 +154,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_plt) const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_switch_case, BOOL &is_plt) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
@@ -170,14 +171,21 @@ public:
 			return true;
 		else if(offset==_time_plt)
 			return true;
-#if _VM		
+#if defined(_VM)		
 		else if(offset==0x1653e){
 			if(get_name()=="ld-linux-x86-64.so.2")
 				return true;
 			else
 				return false;
 		}
-#endif		
+#elif defined(_C10)
+		else if(offset==0x1525e){
+			if(get_name()=="ld-linux-x86-64.so.2")
+				return true;
+			else
+				return false;
+		}
+#endif
 		else
 			return false;
 	}
@@ -218,7 +226,7 @@ public:
 		return _elf->is_shared_object();
 	}
 	BOOL is_gs_used();
-	void generate_relocation_block();
+	void generate_relocation_block(LKM_SS_TYPE ss_type);
 	//insert functions
 	void insert_br_target(const F_SIZE target, const F_SIZE src);
 	void insert_call_target(const F_SIZE target);

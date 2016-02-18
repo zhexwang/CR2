@@ -46,7 +46,7 @@ void NetLink::connect_with_lkm()
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
     // 6.connect with lkm
-    MESG_BAG mesg = {CONNECT, 0, 0, 0, 0, "Shuffle process is ready!"};
+    MESG_BAG mesg = {CONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Shuffle process is ready!"};
     NetLink::send_mesg(mesg);
 }
 
@@ -61,7 +61,7 @@ void NetLink::send_mesg(MESG_BAG mesg)
 void NetLink::send_cv_ready_mesg(BOOL is_cv1, long new_pc)
 {
     int cvn_ready = is_cv1 ? CV1_IS_READY : CV2_IS_READY;
-    MESG_BAG msg_content = {cvn_ready, 0, new_pc, 0, 0, "Code variant is ready!"};
+    MESG_BAG msg_content = {cvn_ready, 0, new_pc, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Code variant is ready!"};
     send_mesg(msg_content);
 }
 
@@ -73,7 +73,8 @@ MESG_BAG NetLink::recv_mesg()
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }
 
-void NetLink::recv_init_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset)
+void NetLink::recv_init_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offset, \
+    SIZE &ss_offset, P_ADDRX &gs_base, LKM_SS_TYPE &ss_type)
 {
 	BLUE("Waiting for init message from kernel: ");
     recvmsg(sock_fd, &msg, 0);
@@ -83,6 +84,8 @@ void NetLink::recv_init_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offse
     curr_pc = (P_ADDRX)mesg.new_ip;
     cc_offset = mesg.cc_offset;
     ss_offset = mesg.ss_offset;
+    gs_base = mesg.gs_base;
+    ss_type = mesg.lkm_ss_type;
     BLUE("%s\n", mesg.mesg);
     return ;
 }
@@ -112,7 +115,7 @@ BOOL NetLink::recv_cv_request_mesg(P_ADDRX &curr_pc, BOOL &need_cv1)
 
 void NetLink::disconnect_with_lkm()
 {
-    MESG_BAG out_mesg = {DISCONNECT, 0, 0, 0, 0, "Shuffle process is exit!"};
+    MESG_BAG out_mesg = {DISCONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Shuffle process is exit!"};
     send_mesg(out_mesg);
 	free(nlh);
     close(sock_fd);

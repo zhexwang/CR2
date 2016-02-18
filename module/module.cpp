@@ -73,15 +73,17 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_plt) const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_switch_case, BOOL &is_plt) const
 {
     JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
     if(it!=_indirect_jump_maps.end()){
         is_memset = it->second.type==MEMSET_JMP ? true : false;
+        is_switch_case = it->second.type==SWITCH_CASE_ABSOLUTE || it->second.type==SWITCH_CASE_OFFSET ? true : false;
         is_plt = it->second.type==PLT_JMP ? true : false;
         return it->second.targets;
     }else{
         is_memset = false;
+        is_switch_case = false;
         is_plt = false;
         return std::set<F_SIZE>();
     }
@@ -301,12 +303,14 @@ void Module::init_cvm_from_modules()
     for(; it!=_all_module_maps.end(); it++){
         Module *module = it->second;
         CodeVariantManager *cvm = new CodeVariantManager(module->get_path());
-        it->second->set_cvm(cvm);
+        module->set_cvm(cvm);
     }
 }
 
-void Module::generate_relocation_block()
+void Module::generate_relocation_block(LKM_SS_TYPE ss_type)
 {
+    ASSERT(ss_type==LKM_OFFSET_SS_TYPE || !is_gs_used());
+    _cvm->set_ss_type(ss_type);
     //position fixed bbl
     for(BBL_SET::const_iterator iter = _pos_fixed_bbls.begin(); iter!=_pos_fixed_bbls.end(); iter++){
         BasicBlock *bbl = *iter;
@@ -316,7 +320,7 @@ void Module::generate_relocation_block()
         F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         BOOL has_fallthrough_bbl = bbl->has_fallthrough_bbl();
-        std::string bbl_template = bbl->generate_code_template(rela_info);
+        std::string bbl_template = bbl->generate_code_template(rela_info, ss_type);
         RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, \
             rela_info, bbl_template);
         rela_info.clear();
@@ -331,8 +335,8 @@ void Module::generate_relocation_block()
         F_SIZE bbl_end = bbl_offset + bbl->get_bbl_size();
         BOOL has_lock_and_repeat_prefix = bbl->has_lock_and_repeat_prefix();
         BOOL has_fallthrough_bbl = bbl->has_fallthrough_bbl();
-        std::string bbl_template = bbl->generate_code_template(rela_info);
-        RandomBBL *rbbl = new RandomBBL(bbl_offset, bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, \
+        std::string bbl_template = bbl->generate_code_template(rela_info, ss_type);
+        RandomBBL *rbbl = new RandomBBL( bbl_offset, bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, \
             rela_info, bbl_template);
         rela_info.clear();
         _cvm->insert_movable_random_bbl(bbl_offset, rbbl);
@@ -350,12 +354,12 @@ void Module::generate_relocation_block()
     }
 }
 
-void Module::generate_all_relocation_block()
+void Module::generate_all_relocation_block(LKM_SS_TYPE ss_type)
 {
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
         Module *module = it->second;
-        module->generate_relocation_block();
+        module->generate_relocation_block(ss_type);
     }
 }
 
@@ -796,7 +800,7 @@ void Module::separate_movable_bbls()
 void Module::special_handling_in_cpp_exception()
 {
     _unmatched_rets.clear();
-#if _VM
+#ifdef _VM
     //1. should read elf _gcc_exception section to get these information(Dwarf)! We leave it in future 
     if(get_name()=="omnetpp_base.cr2"){
         BasicBlock *catch_bbl = find_bbl_by_offset(0x3cc7f, false);
@@ -824,6 +828,34 @@ void Module::special_handling_in_cpp_exception()
         _unmatched_rets.insert(0x103d4);
         _unmatched_rets.insert(0x10586);
     }
+#elif defined(_C10)
+    //1. should read elf _gcc_exception section to get these information(Dwarf)! We leave it in future 
+    if(get_name()=="omnetpp_base.cr2"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x3def4, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+    }/*else if(get_name()=="povray_base.cr2"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x87de1, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+        catch_bbl = find_bbl_by_offset(0x8778e, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+    }*/
+    //2. tag the unmatched return instruction in _Unwind_RaiseException and _Unwind_Resume
+    if(get_name()=="libgcc_s.so.1"){
+        _unmatched_rets.insert(0xfa16);
+    }
+
 #endif
 }
 

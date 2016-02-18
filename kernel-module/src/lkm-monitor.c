@@ -70,7 +70,7 @@ void init_monitor_app_list(void)
 	monitor_app_list[26] = "namd_base.cr2";//444
 	monitor_app_list[27] = "soplex_base.cr2";//450
 	monitor_app_list[28] = "dealII_base.cr2";//447
-	monitor_app_list[29] = "povray_base.cr2";//453
+	//monitor_app_list[29] = "povray_base.cr2";//453
 }
 
 //-------------APP slot----------------------//
@@ -286,7 +286,7 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 {
 	int connect = curr_cc_id==0 ? CURR_IS_CV1_NEED_CV2 : CURR_IS_CV2_NEED_CV1;
 	struct pt_regs *regs = task_pt_regs(ts);
-	MESG_BAG msg = {connect, ts->pid, regs->ip, CC_OFFSET, SS_OFFSET, "need rerandomization!"};
+	MESG_BAG msg = {connect, ts->pid, regs->ip, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "need rerandomization!"};
 	
 	if(connect_with_shuffle_process!=DISCONNECT){
 		nl_send_msg(shuffle_process_pid, msg);

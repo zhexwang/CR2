@@ -116,6 +116,14 @@ std::string InstrGenerator::gen_xchg_rax_rsp_smem_instr(UINT16 &disp32_pos, INT3
     return std::string((const INT8*)array, 8);
 }
 
+std::string InstrGenerator::gen_xchg_rax_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[9] = {0x65, 0x48, 0x87, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 5;
+    return std::string((const INT8*)array, 9);
+}
+
 std::string InstrGenerator::gen_movq_rax_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
 {
     UINT8 array[8] = {0x48, 0x8b, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
@@ -130,6 +138,14 @@ std::string InstrGenerator::gen_movq_rsp_smem_rax_instr(UINT16 &disp32_pos, INT3
         (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
     disp32_pos = 4;
     return std::string((const INT8*)array, 8);
+}
+
+std::string InstrGenerator::gen_movq_gs_rsp_smem_rax_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[9] = {0x65, 0x48, 0x89, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 5;
+    return std::string((const INT8*)array, 9);
 }
 
 std::string InstrGenerator::gen_nop_instr()
@@ -350,6 +366,18 @@ std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, 
     return std::string((const INT8*)array, 11);
 }
 
+std::string InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
+    UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[12] = {0x65, 0xc7, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), (UINT8)((disp32>>16)&0xff),\
+        (UINT8)((disp32>>24)&0xff), (UINT8)(imm32&0xff), (UINT8)((imm32>>8)&0xff), (UINT8)((imm32>>16)&0xff), \
+        (UINT8)((imm32>>24)&0xff)};
+    imm32_pos = 8;
+    disp32_pos = 4;
+
+    return std::string((const INT8*)array, 12);
+}
+
 std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
     UINT16 &disp8_pos, INT8 disp8)
 {
@@ -368,8 +396,6 @@ std::string InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, 
     return std::string((const INT8*)array, 7);
 }
 
-
-
 std::string InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
     UINT16 &disp32_pos, INT32 disp32)
 {
@@ -381,6 +407,17 @@ std::string InstrGenerator::gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, 
     return std::string((const INT8*)array, 12);
 }
 
+std::string InstrGenerator::gen_movq_imm32_to_gs_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, \
+    UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[13] = {0x65, 0x48, 0xc7, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff), (UINT8)(imm32&0xff), (UINT8)((imm32>>8)&0xff),\
+        (UINT8)((imm32>>16)&0xff), (UINT8)((imm32>>24)&0xff)};
+    imm32_pos = 9;
+    disp32_pos = 5;
+    return std::string((const INT8*)array, 13);
+}
+
 std::string InstrGenerator::gen_pushq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
 {
     UINT8 array[7] = {0xff, 0xb4, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
@@ -389,12 +426,28 @@ std::string InstrGenerator::gen_pushq_rsp_smem_instr(UINT16 &disp32_pos, INT32 d
     return std::string((const INT8 *)array, 7);
 }
 
+std::string InstrGenerator::gen_pushq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[8] = {0x65, 0xff, 0xb4, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 4;
+    return std::string((const INT8 *)array, 8);
+}
+
 std::string InstrGenerator::gen_popq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
 {
     UINT8 array[7] = {0x8f, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
         (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
     disp32_pos = 3;
     return std::string((const INT8 *)array, 7);
+}
+
+std::string InstrGenerator::gen_popq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[8] = {0x65, 0x8f, 0x84, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), \
+        (UINT8)((disp32>>16)&0xff), (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 4;
+    return std::string((const INT8 *)array, 8);
 }
 
 std::string InstrGenerator::gen_pushq_imm32_instr(UINT16 &imm32_pos, INT32 imm32)
@@ -541,6 +594,14 @@ std::string InstrGenerator::gen_jmpq_rsp_smem_instr(UINT16 &disp32_pos, INT32 di
         (UINT8)((disp32>>24)&0xff)};
     disp32_pos = 3;
     return std::string((const INT8 *)array, 7);
+}
+
+std::string InstrGenerator::gen_jmpq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32)
+{
+    UINT8 array[8] = {0x65, 0xff, 0xa4, 0x24, (UINT8)(disp32&0xff), (UINT8)((disp32>>8)&0xff), (UINT8)((disp32>>16)&0xff), \
+        (UINT8)((disp32>>24)&0xff)};
+    disp32_pos = 4;
+    return std::string((const INT8 *)array, 8);
 }
 
 std::string InstrGenerator::convert_cond_br_relx_to_rel32(const UINT8 *instcode, UINT32 inst_size, UINT16 &rel32_pos, INT32 rel32)

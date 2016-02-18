@@ -8,7 +8,7 @@
 #include "relocation.h"
 
 class Module;
-//TODO: lock prefix
+
 class Instruction
 {
 	friend class Disassembler;
@@ -308,7 +308,7 @@ public:
 	{
 		return _dInst.disp;
 	}
-	virtual std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const =0;
+	virtual std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const =0;
 	// dump function
 	void dump_pinst(const P_ADDRX load_base) const;
 	void dump_file_inst() const;
@@ -353,7 +353,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class DirectCallInstr: public Instruction
@@ -391,7 +391,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class IndirectCallInstr: public Instruction
@@ -431,7 +431,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class DirectJumpInstr: public Instruction
@@ -471,7 +471,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class IndirectJumpInstr: public Instruction
@@ -513,7 +513,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class ConditionBrInstr: public Instruction
@@ -551,7 +551,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class RetInstr: public Instruction
@@ -593,7 +593,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class SysInstr: public Instruction
@@ -631,7 +631,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return true;}
 	BOOL is_cmov() const {return false;}	
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class CmovInstr: public Instruction
@@ -669,7 +669,7 @@ public:
 	BOOL is_int() const {return false;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return true;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 
 class IntInstr: public Instruction
@@ -707,6 +707,6 @@ public:
 	BOOL is_int() const {return true;}
 	BOOL is_sys() const {return false;}
 	BOOL is_cmov() const {return false;}
-	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec) const;
+	std::string generate_instr_template(std::vector<INSTR_RELA> &reloc_vec, LKM_SS_TYPE ss_type) const;
 };
 

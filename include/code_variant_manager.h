@@ -35,6 +35,7 @@ protected:
 	RAND_BBL_MAPS _movable_rbbl_maps;
 	JMPIN_TARGETS_MAPS _switch_case_jmpin_rbbl_maps;
 	std::string _elf_real_name;
+	LKM_SS_TYPE _ss_type;
 	/********generate code information********/
     CC_LAYOUT _cc_layout1;
 	CC_LAYOUT _cc_layout2;
@@ -73,6 +74,7 @@ protected:
 	static std::string _code_variant_img_path;
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
+	static P_ADDRX _gs_base;
 public:
 	//get functions
 	CodeVariantManager(std::string module_path);
@@ -86,11 +88,15 @@ public:
 	static void stop_gen_code_variants();
 	static P_ADDRX get_new_pc_from_old_all(P_ADDRX old_pc, BOOL first_cc_is_new);
 	static void modify_new_ra_in_ss(BOOL first_cc_is_new);
-	static void init_protected_proc_info(PID protected_pid, SIZE cc_offset, SIZE ss_offset)
+	static void init_protected_proc_info(PID protected_pid, SIZE cc_offset, SIZE ss_offset, P_ADDRX gs_base, LKM_SS_TYPE ss_type)
 	{
-		FATAL(ss_offset==0, "Current version only support shadow stack based on offset without gs segmentation!\n");
+		FATAL(ss_type==LKM_SEG_SS_PP_TYPE, "Current version do not support shadow stack++!\n");
+	    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
+	        FATAL(iter->second->_ss_type!=ss_type, "LKM shadow stack type is unconsistent with CVM!\n");
+		
 		_cc_offset = cc_offset;
 		_ss_offset = ss_offset;
+		_gs_base = gs_base;
 		parse_proc_maps(protected_pid);
 		init_cc_and_ss();
 	}
@@ -101,6 +107,7 @@ public:
 	static void wait_for_code_variant_ready(BOOL is_first_cc);
 	static void consume_cv(BOOL is_first_cc);
 	static void clear_all_cv(BOOL is_first_cc);
+	static void store_into_db(std::string db_path);
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
@@ -126,6 +133,10 @@ public:
 	void insert_switch_case_jmpin_rbbl(F_SIZE src_bbl_offset, TARGET_SET targets)
 	{
 		_switch_case_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
+	}
+	void set_ss_type(LKM_SS_TYPE ss_type)
+	{
+		_ss_type = ss_type;
 	}
 protected:	
 	static void add_cvm(CodeVariantManager *cvm)

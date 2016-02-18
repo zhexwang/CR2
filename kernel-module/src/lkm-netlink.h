@@ -1,14 +1,35 @@
 #ifndef __LKM_NETLINK_H__
 #define __LKM_NETLINK_H__
 
+
+/*
+ * When lkm_ss_type==LKM_OFFSET_SS_TYPE, ss_offset represents the offset between shadow stack and original stack!
+ *                  gs base = 0
+ * When lkm_ss_type==LKM_SEG_SS_TYPE, ss_offset represents the offset between shadow stack and original stack!
+ *                  gs base !=0 
+ * When lkm_ss_type==LKM_SEG_SS_PP_TYPE, ss_offset represents the offset between shadow stack and original stack!
+ *                  gs base !=0
+ */
+// Front section is return addresses and the lower section is index of return addresses
+
+typedef enum LKM_SS_TYPE{
+	LKM_OFFSET_SS_TYPE = 0,
+	LKM_SEG_SS_TYPE,
+	LKM_SEG_SS_PP_TYPE,
+	LKM_SS_TYPE_NUM,
+}LKM_SS_TYPE;
+
 typedef struct{
 	int connect;
 	int proctected_procid;
 	long new_ip;
 	long cc_offset;
 	long ss_offset;
+	long gs_base;
+	LKM_SS_TYPE lkm_ss_type;
 	char mesg[256];
 }MESG_BAG;
+
 
 #define DISCONNECT           0 //send by shuffle process
 #define CONNECT              1 //send by shuffle process
@@ -22,5 +43,6 @@ typedef struct{
 extern void nl_send_msg(int target_pid, MESG_BAG mesg_bag);
 extern void init_netlink(void);
 extern void exit_netlink(void);
-
+extern LKM_SS_TYPE global_ss_type;
+extern void set_ss_type(LKM_SS_TYPE ss_type);
 #endif

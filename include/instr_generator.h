@@ -25,10 +25,14 @@ public:
 	static std::string gen_popfw();
 	//xchg %rax, disp32(%rsp)
 	static std::string gen_xchg_rax_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	//xchg %rax, gs:disp32(%rsp)
+	static std::string gen_xchg_rax_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//movq %rax, disp32(%rsp)
 	static std::string gen_movq_rax_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//movq disp32(%rsp), %rax
 	static std::string gen_movq_rsp_smem_rax_instr(UINT16 &disp32_pos, INT32 disp32);
+	//movq gs:disp32(%rsp), %rax
+	static std::string gen_movq_gs_rsp_smem_rax_instr(UINT16 &disp32_pos, INT32 disp32);
 	//nop
 	static std::string gen_nop_instr();
 	//addq %rax, $imm32
@@ -41,18 +45,28 @@ public:
 	static std::string gen_retq_instr();
 	//movl disp32(%rsp), $imm32
 	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
+	//movl gs:disp32(%rsp), $imm32
+	static std::string gen_movl_imm32_to_gs_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
 	//movl (%rsp), $imm32
 	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32);
 	//movl disp8(%rsp), $imm32
 	static std::string gen_movl_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp8_pos, INT8 disp8);
 	//movq disp32(%rsp), $imm32
 	static std::string gen_movq_imm32_to_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
+	//movq gs:disp32(%rsp), $imm32
+	static std::string gen_movq_imm32_to_gs_rsp_smem_instr(UINT16 &imm32_pos, INT32 imm32, UINT16 &disp32_pos, INT32 disp32);
 	//pushq disp32(%rsp)
 	static std::string gen_pushq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	//pushq gs:disp32(%rsp)
+	static std::string gen_pushq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//popq disp32(%rsp)
 	static std::string gen_popq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	//popq gs:disp32(%rsp)
+	static std::string gen_popq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//jmpq disp32(%rsp)
-	static std::string gen_jmpq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	static std::string gen_jmpq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	//jmpq gs:disp32(%rsp)
+	static std::string gen_jmpq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//jmp rel32
 	static std::string gen_jump_rel32_instr(UINT16 &rel32_pos, INT32 rel32);
 	//jmp rel8

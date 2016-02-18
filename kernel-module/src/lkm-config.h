@@ -7,7 +7,7 @@
 #define CC_MULTIPULE (8)
 #define SS_OFFSET (1ul<<30)
 #define SS_MULTIPULE (20)
-
+#define GS_BASE (0x400000) //only used for LKM_SEG_SS_TYPE, it is not suitable to LKM_SEG_SS_PP_TYPE
 /*********When you change machine, you should modify the below info ***********/
 #ifdef _VM
 	const static ulong orig_sys_call_table = (0xffffffff81801400);		// the system call table
@@ -30,6 +30,6 @@
 //we only support run less than 4 same protected application at the same time
 #define MAX_APP_SLOT_LIST_NUM  MAX_APP_LIST_NUM*4
 
-#define TRACE_DEBUG
-#define LAST_RBBL_DEBUG
+//#define TRACE_DEBUG
+//#define LAST_RBBL_DEBUG
 #endif

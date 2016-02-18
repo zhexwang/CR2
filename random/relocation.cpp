@@ -4,7 +4,7 @@
 
 RandomBBL::RandomBBL(F_SIZE origin_start, F_SIZE origin_end, BOOL has_lock_and_repeat_prefix, BOOL has_fallthrough_bbl, \
     std::vector<BBL_RELA> reloc_info, std::string random_template)
-    : _origin_bbl_start(origin_start), _origin_bbl_end(origin_end), _has_lock_and_repeat_prefix(has_lock_and_repeat_prefix), \
+    :_origin_bbl_start(origin_start), _origin_bbl_end(origin_end), _has_lock_and_repeat_prefix(has_lock_and_repeat_prefix), \
         _has_fallthrough_bbl(has_fallthrough_bbl), _reloc_table(reloc_info), _random_template(random_template)
 {
     ;
@@ -23,21 +23,33 @@ static inline S_ADDRX get_saddr_from_offset(F_SIZE offset, RBBL_CC_MAPS &rbbl_ma
 }
 
 void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_ADDRX orig_x_load_base, \
-    P_SIZE cc_offset, P_SIZE ss_offset, RBBL_CC_MAPS &rbbl_maps, P_SIZE jmpin_offset)
+    P_SIZE cc_offset, P_SIZE ss_offset, P_ADDRX gs_base, LKM_SS_TYPE ss_type, RBBL_CC_MAPS &rbbl_maps, P_SIZE jmpin_offset)
 {
     //code cache address in protected process
     P_ADDRX cc_load_base = orig_x_load_base + cc_offset;
+    P_SIZE virtual_ss_offset = 0;//virtual shadow stack offset is used to relocate the instruction
+    switch(ss_type){
+        case LKM_OFFSET_SS_TYPE: virtual_ss_offset = ss_offset; break;
+        case LKM_SEG_SS_TYPE: virtual_ss_offset = ss_offset + gs_base; ASSERT(gs_base!=0); break;
+        case LKM_SEG_SS_PP_TYPE: virtual_ss_offset = ss_offset + gs_base; ASSERT(gs_base!=0); break;
+        default:
+            ASSERTM(0, "Unkown shadow stack type %d\n", ss_type);
+    }
     //the address of rbbl in protected process
     P_ADDRX curr_rbbl_in_prot = gen_addr - cc_base + cc_load_base;
     //the load address of origin bbl in protected process
     P_ADDRX curr_bbl_in_prot = orig_x_load_base + _origin_bbl_start;
     //1. copy template to target address
-    SIZE template_size = _random_template.size();
-    ASSERT(gen_size>=template_size);
-    _random_template.copy((INT8 *)gen_addr, template_size);
+    ASSERT(gen_size>=_random_template.size() || gen_size==(_random_template.size()-5));//optimize
+    _random_template.copy((INT8 *)gen_addr, gen_size);
     //2. relocate the rbbl
     for(BBL_RELA_VEC_ITER iter = _reloc_table.begin(); iter!=_reloc_table.end(); iter++){
         BBL_RELA &rela = *iter;
+        //last relocation is reduced by optimzation
+        if(rela.r_byte_pos>=gen_size){
+            ASSERT(rela.r_byte_pos==(gen_size+1));//JMP_REL32
+            break;
+        }
         S_ADDRX reloc_addr = rela.r_byte_pos + gen_addr;
         switch(rela.r_type){
             case RIP_RELA_TYPE:  
@@ -66,7 +78,7 @@ void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_A
             case SS_RELA_TYPE:
                 {
                     ASSERTM(rela.r_byte_size==4, "we only handle 32bits displacement!\n");
-                    INT32 new_disp32 = (INT32)(rela.r_addend - ss_offset);
+                    INT32 new_disp32 = (INT32)(rela.r_addend - virtual_ss_offset);
                     *(INT32*)reloc_addr = new_disp32;
                 }
                 break;

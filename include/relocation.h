@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include "type.h"
+#include "netlink.h"
 
 enum RELA_TYPE{
 	RIP_RELA_TYPE = 0,   //RIP_RELATIVE instruction
@@ -102,7 +103,22 @@ public:
 	 *        ss_offset represents the offset between the shadow stack with main stack
 	 */
 	void gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_ADDRX orig_x_load_base, P_SIZE cc_offset, P_SIZE ss_offset, \
-		RBBL_CC_MAPS &rbbl_maps, P_SIZE jmpin_offset);
+		P_ADDRX gs_base, LKM_SS_TYPE ss_type, RBBL_CC_MAPS &rbbl_maps, P_SIZE jmpin_offset);
+	//This function is used to judge the last br target is fallthrough rbbl or not, if the fallthrough rbbl is follow by current rbbl,
+	//we have the chance to reduce the last jmp rel32 instruction!
+	F_SIZE get_last_br_target() const
+	{
+		#define REL32_LEN 4
+		BBL_RELA_VEC::const_reverse_iterator iter = _reloc_table.rbegin();
+		if(iter!=_reloc_table.rend()){
+			BBL_RELA rela = *iter;
+			if((rela.r_type==BRANCH_RELA_TYPE) && (rela.r_byte_pos==(_random_template.length()-REL32_LEN)) && (rela.r_byte_size==4))
+				return rela.r_value;
+			else
+				return 0;
+		}else
+			return 0;
+	}
 	void dump_template(P_ADDRX relocation_base);
 	void dump_relocation();
 };

@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/vmalloc.h>
+#include <asm/prctl.h>
 
 #include "lkm-config.h"
 #include "lkm-utility.h"
@@ -76,7 +77,8 @@ void send_init_mesg_to_shuffle_process(struct task_struct *ts)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
-	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, CC_OFFSET, SS_OFFSET, "init code cache and request code variant!"};
+	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, \
+			"init code cache and request code variant!"};
 
 	if(connect_with_shuffle_process!=DISCONNECT){
 		nl_send_msg(shuffle_process_pid, msg);
@@ -93,10 +95,15 @@ void send_init_mesg_to_shuffle_process(struct task_struct *ts)
 long set_program_start(struct task_struct *ts, char *orig_encode)
 {
 	int index;
+	int ret;
 	char *target_encode = (char*)set_app_start(ts);
 	//rewrite the checkpoint encode
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
+	//set gs base
+	ret = orig_arch_prctl(ARCH_SET_GS, GS_BASE);
+	if(ret!=0)
+		PRINTK("[LKM] set gs base error!\n");
 	//send msg to generate the cc and get the pc
 	send_init_mesg_to_shuffle_process(ts);
 	//protect the origin x region
@@ -124,7 +131,7 @@ void replace_at_base_in_aux(ulong orig_interp_base, ulong new_interp_base, struc
 	while(interp_base!=orig_interp_base){
 		get_user(interp_base, auxv_rsp);
 		auxv_rsp++;
-		if(interp_base==AT_SYSINFO){
+		if(interp_base==AT_SYSINFO){//close vdso area
 			auxv_sysinfo = auxv_rsp;
 			get_user(sysinfo_val, auxv_rsp);
 			put_user(0, auxv_rsp);
@@ -329,11 +336,11 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	if(is_monitor_app(current->comm)){
 		init_app_slot(current);
 		remmap_interp_and_allocate_cc(current);
-#if defined(LAST_RBBL_DEBUG)&&defined(TRACE_DEBUG)	
+#if defined(LAST_RBBL_DEBUG) || defined(TRACE_DEBUG)	
 		mmap_last_rbbl_debug_page(0x100000, 0x1000);
 #endif
 #ifdef TRACE_DEBUG
-		allocate_trace_debug_buffer(0x50000000, 0x20000000);
+		allocate_trace_debug_buffer(0x50000000, 0x50000000);
 		put_user(debug_buf_base, ptr);
 		put_user(xchg_rsp_base, ptr2);
 #endif		
@@ -343,7 +350,7 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 
 void send_exit_mesg_to_shuffle_process(struct task_struct *ts)
 {
-	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, "protected process is out!"};
+	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "protected process is out!"};
 	if(connect_with_shuffle_process!=DISCONNECT)
 		nl_send_msg(shuffle_process_pid, msg);
 	
