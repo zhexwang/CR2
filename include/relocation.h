@@ -120,6 +120,7 @@ public:
 			return 0;
 	}
 	SIZE store_rbbl(S_ADDRX s_addrx);
+	static RandomBBL *read_rbbl(S_ADDRX r_addrx, SIZE &used_size);
 	void dump_template(P_ADDRX relocation_base);
 	void dump_relocation();
 };

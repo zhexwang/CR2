@@ -941,15 +941,67 @@ void CodeVariantManager::recycle()
 /************DB SEG*************/
 /* 32BIT SEG TYPE + 32BIT NUM  */
 /*******************************/
-static INT32 db_seg_movable = 0;
-static INT32 db_seg_fixed = 1;
-static INT32 db_seg_all_jmpin = 2;
+static UINT32 db_seg_movable = 0;
+static UINT32 db_seg_fixed = 1;
+static UINT32 db_seg_all_jmpin = 2;
 //db_seg_jmpin: the offset of jmpin src, it must be larger than 2
 
-static SIZE read_rbbls(S_ADDRX r_addrx, CodeVariantManager::RAND_BBL_MAPS &rbbl_maps, BOOL is_movable)
+static SIZE read_rbbls(S_ADDRX r_addrx, CodeVariantManager *cvm, BOOL is_movable)
 {
-    SIZE used_size = 0;
-    return used_size;
+    S_ADDRX start_addrx = r_addrx;
+    UINT32 *ptr_32 = NULL;
+    //1. read seg type
+    ptr_32 = (UINT32*)r_addrx;
+    INT32 should_type = is_movable ? db_seg_movable : db_seg_fixed;
+    INT32 seg_type = *ptr_32++;
+    FATAL(should_type!=seg_type, "seg type (%d) is wrong, should be %d!\n", seg_type, should_type);
+    //2. read rbbl num
+    SIZE rbbl_sum = *ptr_32++;
+    r_addrx = (S_ADDRX)ptr_32;
+    //3. store all rbbls
+    for(SIZE index = 0; index<rbbl_sum; index++){
+        //3.1 read rbbl
+        SIZE used_size = 0;
+        RandomBBL *rbbl = RandomBBL::read_rbbl(r_addrx, used_size);
+        ASSERT(used_size!=0 && rbbl);
+        r_addrx += used_size;
+        //3.2 insert
+        if(is_movable)
+            cvm->insert_movable_random_bbl(rbbl->get_rbbl_offset(), rbbl);
+        else
+            cvm->insert_fixed_random_bbl(rbbl->get_rbbl_offset(), rbbl);
+    }
+    //4. return
+    return r_addrx - start_addrx;
+
+}
+
+static SIZE read_switch_case_info(S_ADDRX r_addrx, CodeVariantManager *cvm)
+{
+    UINT32 *ptr_32 = NULL;
+    //1. read seg type
+    ptr_32 = (UINT32*)r_addrx;
+    UINT32 seg_type = *ptr_32++;
+    FATAL(seg_type!=db_seg_all_jmpin, "type unmatched!\n");
+    //2. read jmpin sum
+    SIZE jmpin_sum = *ptr_32++;
+    //3. read all jmpins
+    for(SIZE index = 0; index<jmpin_sum; index++){
+        //3.1 read jmpin offset
+        F_SIZE jmpin_offset = *ptr_32++;
+        //3.2 read target sum
+        SIZE target_sum = *ptr_32++;
+        //3.3 read all targets
+        CodeVariantManager::TARGET_SET target_set;
+        for(SIZE idx = 0; idx<target_sum; idx++)
+            target_set.insert((F_SIZE)*ptr_32++);
+        //3.4 insert
+        cvm->insert_switch_case_jmpin_rbbl(jmpin_offset, target_set);
+        target_set.clear();
+    }
+
+    //4. return
+    return (S_ADDRX)ptr_32 - r_addrx;
 }
 
 static SIZE store_rbbls(S_ADDRX s_addrx, CodeVariantManager::RAND_BBL_MAPS &rbbl_maps, BOOL is_movable)
@@ -1004,35 +1056,133 @@ static SIZE store_switch_case_info(S_ADDRX s_addrx, CodeVariantManager::JMPIN_TA
     return (S_ADDRX)ptr_32 - s_addrx;
 }
 
-void CodeVariantManager::init_from_db(std::string db_path)
+void handle_directory_path(std::string &db_path)
 {
+    //judge the directory is exist or not
+    struct stat fileStat;
+    FATAL(stat(db_path.c_str(), &fileStat)!=0 || !S_ISDIR(fileStat.st_mode), "%s is not legal directory path!\n", db_path.c_str());
+    //add '/' to db path
+    if(db_path[db_path.length()-1]!='/')
+        db_path += '/';
+}
 
+static void find_dependence_lib_to_init_cvm(std::string elf_path)
+{
+    // get the path of all dependence libraries
+    // 1.generate command string
+    char command[128];
+    sprintf(command, "/usr/bin/ldd %s", elf_path.c_str());
+    char type[3] = "r";
+    // 2.get stream of command's output
+    FILE *p_stream = popen(command, type);
+    ASSERTM(p_stream, "popen() error!\n");
+    // 4.parse the stream to get dependence libraries
+    SIZE len = 500;
+    char *line_buf = new char[len];
+    while(getline(&line_buf, &len, p_stream)!=-1) {  
+        char name[100];
+        char path[100];
+        char *pos = NULL;
+        P_ADDRX addr;
+        // get name and path of images
+        if((pos = strstr(line_buf, "ld-linux-x86-64"))!=NULL){
+            sscanf(line_buf, "%s (0x%lx)\n", path, &addr);
+            sscanf(pos, "%s (0x%lx)", name, &addr);
+        }else if((pos = strstr(line_buf, "linux-vdso"))!=NULL){
+            sscanf(line_buf, "%s => (0x%lx)\n", name, &addr);
+            path[0] = '\0';
+        }else if((pos = strstr(line_buf, "statically"))!=NULL){
+            path[0] = '\0';
+            name[0] = '\0';
+        }else{    
+            sscanf(line_buf, "%s => %s (0x%lx)\n", name, path, &addr);
+            ASSERTM(strstr(path, name), "Name(%s) is not in Path(%s)\n", name, path);
+        }
+        //construct the CodeVariantManager
+        if((path[0]!='\0'))
+            new CodeVariantManager(std::string(path));
+    }
+    free(line_buf);
+    // 5.close stream
+    pclose(p_stream);
+}
+
+static std::string get_ss_suffix(LKM_SS_TYPE ss_type)
+{
+    switch(ss_type){
+        case LKM_OFFSET_SS_TYPE:
+            return std::string(".oss");
+        case LKM_SEG_SS_TYPE:
+            return std::string(".sss");
+        case LKM_SEG_SS_PP_TYPE:
+            return std::string(".pss");
+        default:
+            ASSERTM(0, "Unkown shadow stack type %d!\n", ss_type);
+            return std::string("");
+    }
+}
+
+void CodeVariantManager::init_from_db(std::string elf_path, std::string db_path, LKM_SS_TYPE ss_type)
+{
+    //1. judge the directory is exist or not
+    handle_directory_path(db_path);
+    //2. construct all cvms
+    new CodeVariantManager(elf_path);
+    find_dependence_lib_to_init_cvm(elf_path);
+    //3. read db to initialize the code variant manager
+     //3.1 prepare shadow stack suffix
+    std::string ss_suffix = get_ss_suffix(ss_type);
+     //3.2 read db to init all cvms
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        CodeVariantManager *cvm = iter->second;
+        //3.2.1 construct the db path
+        std::string cvm_name = cvm->get_name();
+        std::string cvm_db_path = db_path + cvm_name + ss_suffix;
+        //3.2.2 open db file
+        INT32 fd = open(cvm_db_path.c_str(), O_RDWR);
+        FATAL(fd==-1, "Open db file %s failed!\n", cvm_db_path.c_str());
+        //3.2.3 get map size
+        struct stat statbuf;
+        INT32 ret = fstat(fd, &statbuf);
+        FATAL(ret!=0, "Get %s information failed!\n", cvm_db_path.c_str());
+        SIZE map_size = X86_PAGE_ALIGN_CEIL(statbuf.st_size);
+        //3.2.4 map the file
+        void *buf_start = mmap(NULL, map_size, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
+        ASSERT(buf_start!=MAP_FAILED);
+        S_ADDRX read_ptr = (S_ADDRX)buf_start;
+        
+        //3.2.5 read cvm information
+        cvm->set_ss_type(ss_type);
+         //3.2.5.1 read postion fixed rbbl
+        read_ptr += read_rbbls(read_ptr, cvm, false);
+         //3.2.5.2 read movable rbbls
+        read_ptr += read_rbbls(read_ptr, cvm, true);
+         //3.2.5.3 read switch_case jmpin targets
+        read_ptr += read_switch_case_info(read_ptr, cvm);
+         
+        ASSERT(read_ptr==(statbuf.st_size+(S_ADDRX)buf_start));
+        //3.2.6 unmap 
+        ret = munmap(buf_start, map_size);
+        ASSERT(ret==0);
+        //3.2.7 close the file
+        close(fd);
+    }
 }
 
 void CodeVariantManager::store_into_db(std::string db_path)
 {
+    //judge the directory is exist or not
+    handle_directory_path(db_path);
+    //record all information
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         CodeVariantManager *cvm = iter->second;
         //1. prepare shadow stack suffix
-        std::string ss_suffix;
-        switch(cvm->_ss_type){
-            case LKM_OFFSET_SS_TYPE:
-                ss_suffix = ".oss";
-                break;
-            case LKM_SEG_SS_TYPE:
-                ss_suffix = ".sss";
-                break;
-            case LKM_SEG_SS_PP_TYPE:
-                ss_suffix = ".pss";
-            default:
-                ASSERTM(0, "Unkown shadow stack type %d!\n", cvm->_ss_type);
-        }
-        
+        std::string ss_suffix = get_ss_suffix(cvm->_ss_type);
         //2. store all modules
         #define BUF_SIZE (1ull<<32)
          //2.1 construct the db path for each cvm
         std::string cvm_name = cvm->get_name();
-        std::string cvm_db_path = db_path+cvm_name+ss_suffix;
+        std::string cvm_db_path = db_path + cvm_name+ss_suffix;
          //2.2 remove the old db 
         remove(cvm_db_path.c_str());
          //2.3 create db
@@ -1052,12 +1202,15 @@ void CodeVariantManager::store_into_db(std::string db_path)
         void *buf_start = mmap(NULL, BUF_SIZE, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
         ASSERT(buf_start!=MAP_FAILED);
         S_ADDRX store_ptr = (S_ADDRX)buf_start;
+         //2.7 protect the last page
+        ret = mprotect((void*)((S_ADDRX)buf_start+BUF_SIZE-X86_PAGE_SIZE), X86_PAGE_SIZE, PROT_NONE);
+        FATAL(ret!=0, "protect the last page error!\n");
         
         //3. store cvm information
          //3.1 store postion fixed rbbl
         store_ptr += store_rbbls(store_ptr, cvm->_postion_fixed_rbbl_maps, false);
          //3.2 store movable rbbls
-        store_ptr += store_rbbls(store_ptr, cvm->_movable_rbbl_maps, false);
+        store_ptr += store_rbbls(store_ptr, cvm->_movable_rbbl_maps, true);
          //3.3 store switch_case jmpin targets
         store_ptr += store_switch_case_info(store_ptr, cvm->_switch_case_jmpin_rbbl_maps);
         
@@ -1065,7 +1218,6 @@ void CodeVariantManager::store_into_db(std::string db_path)
         ret = munmap(buf_start, BUF_SIZE);
         ASSERT(ret==0);
         SIZE used_size = store_ptr-(S_ADDRX)buf_start;
-        ASSERT(used_size<=BUF_SIZE);
         ret = ftruncate(fd, used_size);
         FATAL(ret!=0, "Dwindle %s failed!\n", cvm_db_path.c_str());   
         

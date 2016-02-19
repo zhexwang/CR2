@@ -153,6 +153,43 @@ void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_A
     }
 }
 
+RandomBBL *RandomBBL::read_rbbl(S_ADDRX r_addrx, SIZE &used_size)
+{
+    UINT32 *ptr_32 = NULL;
+    UINT8 *ptr_8 = NULL;
+    UINT16 *ptr_16 = NULL;
+    BBL_RELA *ptr_rela = NULL;
+    //1. read bbl start
+    ptr_32 = (UINT32*)r_addrx;
+    F_SIZE origin_bbl_start = (F_SIZE)*ptr_32++;
+    //2. read bbl end
+    F_SIZE origin_bbl_end = (F_SIZE)*ptr_32++;
+    //3. read prefix    
+    ptr_8 = (UINT8*)ptr_32;
+    BOOL has_lock_and_repeat_prefix = *ptr_8++;
+    //4. read fallthrough    
+    BOOL has_fallthrough_bbl = *ptr_8++;
+    //5. read relocation information
+     //5.1 read table size
+    ptr_16 = (UINT16*)ptr_8;
+    SIZE table_size = *ptr_16++;
+    BBL_RELA_VEC reloc_vec;
+     //5.2 read reloction
+    ptr_rela = (BBL_RELA*)ptr_16;
+    for(SIZE index = 0; index<table_size; index++)
+        reloc_vec.push_back(*ptr_rela++);
+    //6. read template information
+     //6.1 read template size
+    ptr_16 = (UINT16*)ptr_rela;
+    SIZE template_len = (SIZE)*ptr_16++;
+     //6.2 read template byte
+    std::string random_template = std::string((const INT8 *)ptr_16, template_len);
+    //7. set used size
+    used_size = (S_ADDRX)ptr_16 + template_len - r_addrx;
+    
+    return new RandomBBL(origin_bbl_start, origin_bbl_end, has_lock_and_repeat_prefix, has_fallthrough_bbl, reloc_vec, random_template);
+}
+
 SIZE RandomBBL::store_rbbl(S_ADDRX s_addrx)
 {
     UINT32 *ptr_32 = NULL;

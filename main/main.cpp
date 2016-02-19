@@ -43,7 +43,7 @@ int main(int argc, char **argv)
         if(!Options::_static_analysis){
             //read input relocation dbs
             FATAL(!Options::_has_input_db_file, "Need has input db files to initialize the CVM!\n");
-            CodeVariantManager::init_from_db(Options::_input_db_file_path);
+            CodeVariantManager::init_from_db(Options::_elf_path.c_str(), Options::_input_db_file_path, LKM_SEG_SS_TYPE);
         }else if(!Options::_has_output_db_file){
             // generate bbl template
             Module::init_cvm_from_modules();
