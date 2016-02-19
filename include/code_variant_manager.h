@@ -79,6 +79,8 @@ public:
 	//get functions
 	CodeVariantManager(std::string module_path);
 	~CodeVariantManager();
+	static void recycle();
+	static void init_from_db(std::string db_path);
 	static RandomBBL *find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
 	static RandomBBL *find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
 	static P_ADDRX find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);

@@ -29,17 +29,25 @@ int main(int argc, char **argv)
         }
         //Module::dump_all_indirect_jump_result();
         //Module::dump_all_bbl_movable_info();
-        // 6. generate bbl template
-        Module::init_cvm_from_modules();
-        Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
-        // 7. output static analysis dbs    
-        CodeVariantManager::store_into_db(Options::_output_db_file_path);
+        if(Options::_has_output_db_file){
+            // 6. generate bbl template
+            Module::init_cvm_from_modules();
+            Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
+            // 7. output static analysis dbs    
+            CodeVariantManager::store_into_db(Options::_output_db_file_path);
+        }
     }
 
     if(Options::_dynamic_shuffle){
+        //init code variant manager
         if(!Options::_static_analysis){
             //read input relocation dbs
-            NOT_IMPLEMENTED(wangzhe);
+            FATAL(!Options::_has_input_db_file, "Need has input db files to initialize the CVM!\n");
+            CodeVariantManager::init_from_db(Options::_input_db_file_path);
+        }else if(!Options::_has_output_db_file){
+            // generate bbl template
+            Module::init_cvm_from_modules();
+            Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
         }
         // 1.init netlink and get protected process's information
         NetLink::connect_with_lkm();
@@ -69,7 +77,9 @@ int main(int argc, char **argv)
         };
         // 5.stop gen code variants
         CodeVariantManager::stop_gen_code_variants();
-        // 6.disconnect
+        // 6.recycle 
+        CodeVariantManager::recycle();
+        // 7.disconnect
         NetLink::disconnect_with_lkm();
     }
     

@@ -837,23 +837,24 @@ void Module::special_handling_in_cpp_exception()
             erase_movable_bbl(catch_bbl);
             insert_fixed_bbl(catch_bbl);
         }
-    }/*else if(get_name()=="povray_base.cr2"){
-        BasicBlock *catch_bbl = find_bbl_by_offset(0x87de1, false);
+    }else if(get_name()=="povray_base.cr2"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x8a2ff, false);
         ASSERT(catch_bbl);
         if(is_movable_bbl(catch_bbl)){
             erase_movable_bbl(catch_bbl);
             insert_fixed_bbl(catch_bbl);
         }
-        catch_bbl = find_bbl_by_offset(0x8778e, false);
+        catch_bbl = find_bbl_by_offset(0x89bee, false);
         ASSERT(catch_bbl);
         if(is_movable_bbl(catch_bbl)){
             erase_movable_bbl(catch_bbl);
             insert_fixed_bbl(catch_bbl);
         }
-    }*/
+    }
     //2. tag the unmatched return instruction in _Unwind_RaiseException and _Unwind_Resume
     if(get_name()=="libgcc_s.so.1"){
         _unmatched_rets.insert(0xfa16);
+        _unmatched_rets.insert(0xfbe6);
     }
 
 #endif

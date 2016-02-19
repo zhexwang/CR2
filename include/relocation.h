@@ -119,6 +119,7 @@ public:
 		}else
 			return 0;
 	}
+	SIZE store_rbbl(S_ADDRX s_addrx);
 	void dump_template(P_ADDRX relocation_base);
 	void dump_relocation();
 };

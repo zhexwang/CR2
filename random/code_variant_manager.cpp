@@ -97,17 +97,18 @@ static INT32 map_shm_file(std::string shm_path, S_ADDRX &addr, F_SIZE &file_sz)
     return fd;
 }
 
-static void close_shm_file(INT32 fd)
+static void close_shm_file(INT32 fd, std::string shm_path)
 {
+    std::string full_path = "/dev/shm/"+shm_path;
+    INT32 ret = remove(full_path.c_str());
+    FATAL(ret==-1, "remove %s failed!\n", shm_path.c_str());
     close(fd);
 }
 
 CodeVariantManager::~CodeVariantManager()
 {
-    close_shm_file(_cc_fd);
-    //close_shm_file(_ss_fd);
+    close_shm_file(_cc_fd, _cc_shm_path);
     munmap((void*)_cc1_base, _cc_load_size*2);
-    //munmap((void*)_ss_base, _ss_load_size);
 }
 
 void CodeVariantManager::init_cc()
@@ -925,13 +926,151 @@ void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
     }
 }
 
+void CodeVariantManager::recycle()
+{
+    //1. recycle code cache and shm files
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        CodeVariantManager *cvm = iter->second;
+        delete cvm;
+    }
+    //2. recycle shadow stack and shm files
+    close_shm_file(_ss_fd, _ss_shm_path);
+    munmap((void*)_ss_base, _ss_load_size);
+}
+
+/************DB SEG*************/
+/* 32BIT SEG TYPE + 32BIT NUM  */
+/*******************************/
+static INT32 db_seg_movable = 0;
+static INT32 db_seg_fixed = 1;
+static INT32 db_seg_all_jmpin = 2;
+//db_seg_jmpin: the offset of jmpin src, it must be larger than 2
+
+static SIZE read_rbbls(S_ADDRX r_addrx, CodeVariantManager::RAND_BBL_MAPS &rbbl_maps, BOOL is_movable)
+{
+    SIZE used_size = 0;
+    return used_size;
+}
+
+static SIZE store_rbbls(S_ADDRX s_addrx, CodeVariantManager::RAND_BBL_MAPS &rbbl_maps, BOOL is_movable)
+{
+    S_ADDRX start_addrx = s_addrx;
+    UINT32 *ptr_32 = NULL;
+    //1. store seg type
+    ptr_32 = (UINT32*)s_addrx;
+    *ptr_32++ = is_movable ? db_seg_movable : db_seg_fixed;
+    //2. store rbbl num
+    SIZE rbbl_num = rbbl_maps.size();
+    ASSERT(rbbl_num<=UINT_MAX);
+    *ptr_32++ = (UINT32)rbbl_num;
+    s_addrx = (S_ADDRX)ptr_32;
+    //3. store all rbbls
+    for(CodeVariantManager::RAND_BBL_MAPS::iterator iter = rbbl_maps.begin(); iter!=rbbl_maps.end(); iter++){
+        RandomBBL *rbbl = iter->second;
+        s_addrx += rbbl->store_rbbl(s_addrx);
+    }
+    //4. return
+    return s_addrx - start_addrx;
+}
+
+static SIZE store_switch_case_info(S_ADDRX s_addrx, CodeVariantManager::JMPIN_TARGETS_MAPS &jmpin_maps)
+{
+    UINT32 *ptr_32 = NULL;
+    //1. store seg type
+    ptr_32 = (UINT32*)s_addrx;
+    *ptr_32++ = db_seg_all_jmpin;
+    //2. store jmpin num
+    SIZE jmpin_num = jmpin_maps.size();
+    *ptr_32++ = (UINT32)jmpin_num;
+    //3. store all jmpins
+    for(CodeVariantManager::JMPIN_ITERATOR iter = jmpin_maps.begin(); iter!=jmpin_maps.end(); iter++){
+        F_SIZE jmpin_offset = iter->first;
+        CodeVariantManager::TARGET_SET &target_set = iter->second;
+        SIZE target_num = target_set.size();
+        //3.1 store jmpin offset
+        ASSERT(jmpin_offset<=UINT_MAX);
+        *ptr_32++ = (UINT32)jmpin_offset;
+        //3.2 store target num
+        ASSERT(target_num<=UINT_MAX);
+        *ptr_32++ = (UINT32)target_num;
+        //3.3 store all targets
+        for(CodeVariantManager::TARGET_ITERATOR it = target_set.begin(); it!=target_set.end(); it++){
+            F_SIZE target_offset = *it;
+            ASSERT(target_offset<=UINT_MAX);
+            *ptr_32++ = (UINT32)target_offset;
+        }
+    }
+    //4. return
+    return (S_ADDRX)ptr_32 - s_addrx;
+}
+
+void CodeVariantManager::init_from_db(std::string db_path)
+{
+
+}
 
 void CodeVariantManager::store_into_db(std::string db_path)
 {
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         CodeVariantManager *cvm = iter->second;
-        std::string cvm_name = iter->first;
-
+        //1. prepare shadow stack suffix
+        std::string ss_suffix;
+        switch(cvm->_ss_type){
+            case LKM_OFFSET_SS_TYPE:
+                ss_suffix = ".oss";
+                break;
+            case LKM_SEG_SS_TYPE:
+                ss_suffix = ".sss";
+                break;
+            case LKM_SEG_SS_PP_TYPE:
+                ss_suffix = ".pss";
+            default:
+                ASSERTM(0, "Unkown shadow stack type %d!\n", cvm->_ss_type);
+        }
+        
+        //2. store all modules
+        #define BUF_SIZE (1ull<<32)
+         //2.1 construct the db path for each cvm
+        std::string cvm_name = cvm->get_name();
+        std::string cvm_db_path = db_path+cvm_name+ss_suffix;
+         //2.2 remove the old db 
+        remove(cvm_db_path.c_str());
+         //2.3 create db
+        INT32 fd = creat(cvm_db_path.c_str(), S_IRUSR|S_IWUSR);
+        FATAL(fd==-1, "Create %s failed!\n", cvm_db_path.c_str());    
+        close(fd);
+         //2.4 open db file
+        fd = open(cvm_db_path.c_str(), O_RDWR);
+        FATAL(fd==-1, "Can not open %s\n", cvm_db_path.c_str());     
+         //2.5 enlarge the file      
+        struct stat statbuf;
+        INT32 ret = fstat(fd, &statbuf);
+        FATAL(ret!=0, "Get %s information failed!\n", cvm_db_path.c_str());
+        ret = ftruncate(fd, BUF_SIZE);
+        FATAL(ret!=0, "Enlarge %s failed!\n", cvm_db_path.c_str());    
+         //2.6 map the buffer with the db file
+        void *buf_start = mmap(NULL, BUF_SIZE, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
+        ASSERT(buf_start!=MAP_FAILED);
+        S_ADDRX store_ptr = (S_ADDRX)buf_start;
+        
+        //3. store cvm information
+         //3.1 store postion fixed rbbl
+        store_ptr += store_rbbls(store_ptr, cvm->_postion_fixed_rbbl_maps, false);
+         //3.2 store movable rbbls
+        store_ptr += store_rbbls(store_ptr, cvm->_movable_rbbl_maps, false);
+         //3.3 store switch_case jmpin targets
+        store_ptr += store_switch_case_info(store_ptr, cvm->_switch_case_jmpin_rbbl_maps);
+        
+        //4. unmap and dwindle the file
+        ret = munmap(buf_start, BUF_SIZE);
+        ASSERT(ret==0);
+        SIZE used_size = store_ptr-(S_ADDRX)buf_start;
+        ASSERT(used_size<=BUF_SIZE);
+        ret = ftruncate(fd, used_size);
+        FATAL(ret!=0, "Dwindle %s failed!\n", cvm_db_path.c_str());   
+        
+        //5. close the file
+        close(fd);
     }
 }
 

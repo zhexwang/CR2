@@ -55,10 +55,6 @@ void Options::check(char *cr2)
             PRINT("%s: invalid option -- when using static analysis, you should specified a binary (Forget -I)\n", cr2);
             exit(-1);
         }
-        if(!_has_output_db_file){
-            PRINT("%s: invalid option -- when using static analysis, you should specified a output db file path (Forget -o)\n", cr2);
-            exit(-1);
-        }
     }
     if(_dynamic_shuffle){
         if(!_static_analysis){

@@ -153,6 +153,44 @@ void RandomBBL::gen_code(S_ADDRX cc_base, S_ADDRX gen_addr, S_SIZE gen_size, P_A
     }
 }
 
+SIZE RandomBBL::store_rbbl(S_ADDRX s_addrx)
+{
+    UINT32 *ptr_32 = NULL;
+    UINT8 *ptr_8 = NULL;
+    UINT16 *ptr_16 = NULL;
+    BBL_RELA *ptr_rela = NULL;
+    //1. store bbl start
+    ptr_32 = (UINT32*)s_addrx;
+    *ptr_32++ = (UINT32)_origin_bbl_start;
+    //2. store bbl end
+    *ptr_32++ = (UINT32)_origin_bbl_end;
+    //3. store prefix    
+    ptr_8 = (UINT8*)ptr_32;
+    *ptr_8++ = (UINT8)_has_lock_and_repeat_prefix;
+    //4. store fallthrough    
+    *ptr_8++ = (UINT8)_has_fallthrough_bbl;
+    //5. store relocation information
+    //5.1 store table size
+    SIZE table_size = _reloc_table.size();
+    ASSERT(table_size<USHRT_MAX);
+    ptr_16 = (UINT16*)ptr_8;
+    *ptr_16++ = (UINT16)table_size;
+    //5.2 store reloction
+    ptr_rela = (BBL_RELA*)ptr_16;
+    for(BBL_RELA_VEC::iterator iter = _reloc_table.begin(); iter!=_reloc_table.end(); iter++)
+        *ptr_rela++ = *iter;
+    //6. store template information
+    //6.1 store template size
+    SIZE template_len = _random_template.length();
+    ASSERT(template_len<USHRT_MAX);
+    ptr_16 = (UINT16*)ptr_rela;
+    *ptr_16++ = (UINT16)template_len;
+    //6.2 store template byte
+    _random_template.copy((INT8 *)ptr_16, template_len);
+    
+    return (S_ADDRX)ptr_16 + template_len - s_addrx;
+}
+
 void RandomBBL::dump_template(P_ADDRX relocation_base)
 {
     ERR("RandomBBL: origin_bbl_range[%lx, %lx) template_size(%d) relocation_num(%d)\n", \

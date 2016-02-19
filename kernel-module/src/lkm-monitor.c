@@ -70,7 +70,7 @@ void init_monitor_app_list(void)
 	monitor_app_list[26] = "namd_base.cr2";//444
 	monitor_app_list[27] = "soplex_base.cr2";//450
 	monitor_app_list[28] = "dealII_base.cr2";//447
-	//monitor_app_list[29] = "povray_base.cr2";//453
+	monitor_app_list[29] = "povray_base.cr2";//453
 }
 
 //-------------APP slot----------------------//
