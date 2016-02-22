@@ -11,7 +11,7 @@ static int __init cr2_module_init(void)
 	init_shuffle_config_list();
 	init_orig_syscall();
 	hook_systable();
-	set_ss_type(LKM_SEG_SS_TYPE);
+	set_ss_type(LKM_OFFSET_SS_TYPE);
     return 0;
 }
 

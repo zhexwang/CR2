@@ -91,7 +91,6 @@ void Disassembler::disassemble_module(Module *module)
             // 4.4.6 record gs segmentation
             if(instr->has_gs_seg()){
                 module->insert_gs_instr_offset(instr_off);
-                ASSERTM(0, "find the instruction (%lx) with gs segmenation in module %s\n", instr_off, module->get_path().c_str());
             }
         }
     }

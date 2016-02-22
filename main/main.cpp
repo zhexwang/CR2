@@ -32,7 +32,7 @@ int main(int argc, char **argv)
         if(Options::_has_output_db_file){
             // 6. generate bbl template
             Module::init_cvm_from_modules();
-            Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
+            Module::generate_all_relocation_block(LKM_OFFSET_SS_TYPE);
             // 7. output static analysis dbs    
             CodeVariantManager::store_into_db(Options::_output_db_file_path);
         }
@@ -42,12 +42,11 @@ int main(int argc, char **argv)
         //init code variant manager
         if(!Options::_static_analysis){
             //read input relocation dbs
-            FATAL(!Options::_has_input_db_file, "Need has input db files to initialize the CVM!\n");
-            CodeVariantManager::init_from_db(Options::_elf_path.c_str(), Options::_input_db_file_path, LKM_SEG_SS_TYPE);
+            CodeVariantManager::init_from_db(Options::_elf_path.c_str(), Options::_input_db_file_path, LKM_OFFSET_SS_TYPE);
         }else if(!Options::_has_output_db_file){
             // generate bbl template
             Module::init_cvm_from_modules();
-            Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
+            Module::generate_all_relocation_block(LKM_OFFSET_SS_TYPE);
         }
         // 1.init netlink and get protected process's information
         NetLink::connect_with_lkm(Options::_elf_path);
@@ -55,7 +54,7 @@ int main(int argc, char **argv)
         P_ADDRX curr_pc = 0;
         SIZE cc_offset = 0, ss_offset = 0;
         P_ADDRX gs_base = 0;
-        LKM_SS_TYPE ss_type = LKM_SEG_SS_TYPE;
+        LKM_SS_TYPE ss_type = LKM_OFFSET_SS_TYPE;
         BOOL init_success = false;
         init_success = NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset, gs_base, ss_type);
         if(!init_success)
