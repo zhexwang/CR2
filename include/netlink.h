@@ -2,6 +2,7 @@
 
 #include <sys/socket.h>
 #include <linux/netlink.h>
+#include <string>
 
 #include "type.h"
 
@@ -28,6 +29,7 @@ typedef struct{
 	long ss_offset;
 	long gs_base;
 	LKM_SS_TYPE lkm_ss_type;
+	char app_name[256];
 	char mesg[256];
 }MESG_BAG;
 
@@ -39,6 +41,7 @@ typedef struct{
 #define CURR_IS_CV1_NEED_CV2 5 //send by kernel module
 #define P_PROCESS_IS_IN      6 //send by kernel module
 #define P_PROCESS_IS_OUT     7 //send by kernel module
+#define WRONG_APP            8 //send by kernel module
 
 class NetLink
 {
@@ -50,14 +53,14 @@ protected:
 	static int sock_fd;
 	static struct msghdr msg;
 public:
-	static void connect_with_lkm();
+	static void connect_with_lkm(std::string elf_path);
 	static void send_mesg(MESG_BAG mesg);
-	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc);
+	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, std::string elf_path);
 	static MESG_BAG recv_mesg();
-	static void recv_init_mesg(PID &protected_id, S_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset, \
+	static BOOL recv_init_mesg(PID &protected_id, S_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset, \
 		 P_ADDRX &gs_base, LKM_SS_TYPE &ss_type);
 	//if protected process is out, the return value is false
 	static BOOL recv_cv_request_mesg(P_ADDRX &curr_pc, BOOL &need_cv1);
-	static void disconnect_with_lkm();
+	static void disconnect_with_lkm(std::string elf_path);
 };
 

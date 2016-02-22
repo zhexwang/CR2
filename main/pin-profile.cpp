@@ -50,49 +50,7 @@ PinProfile::~PinProfile()
     delete []_img_branch_targets;
 }
 
-static string get_real_path(const char *file_path)
-{
-    #define PATH_LEN 1024
-    #define INCREASE_IDX ++idx;idx%=2
-    #define OTHER_IDX (idx==0 ? 1 : 0)
-    #define CURR_IDX idx
-    
-    char path[2][PATH_LEN];
-    for(INT32 i=0; i<2; i++)
-        memset(path[i], '\0', PATH_LEN);
-    INT32 idx = 0;
-    INT32 ret = 0;
-    struct stat statbuf;
-    //init
-    strcpy(path[CURR_IDX], file_path);
-    //loop to find real path
-    while(1){
-        ret = lstat(path[CURR_IDX], &statbuf);
-        if(ret!=0)//lstat failed
-            break;
-        if(S_ISLNK(statbuf.st_mode)){
-            ret = readlink(path[CURR_IDX], path[OTHER_IDX], PATH_LEN);
-            PERROR(ret>0, "readlink error!\n");
-            INCREASE_IDX;
-        }else
-            break;
-    }
-    
-    return string(path[CURR_IDX]); 
-}
-
-static string get_real_name_from_path(string path)
-{
-    string real_path = get_real_path(path.c_str());
-    UINT32 found = real_path.find_last_of("/");
-    string name;
-    if(found==string::npos)
-        name = real_path;
-    else
-        name = real_path.substr(found+1);
-
-    return name;
-}
+extern string get_real_name_from_path(string path);
 
 void PinProfile::read_image_info(ifstream &ifs)
 {
@@ -158,10 +116,8 @@ void PinProfile::map_modules()
 {
     Module::MODULE_MAP_ITERATOR it = Module::_all_module_maps.begin();
     for(; it!=Module::_all_module_maps.end(); it++){
-        // get real path
-        string real_path = get_real_path(it->second->get_path().c_str());
         // get name
-        string name = get_real_name_from_path(real_path);
+        string name = get_real_name_from_path(it->second->get_path());
         // match _all_modules to _module_maps**;    
         INT32 index = get_img_index_by_name(name);
         FATAL(index==-1, "map failed!\n");

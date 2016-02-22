@@ -8,6 +8,7 @@ static int __init cr2_module_init(void)
     PRINTK("CR2 Kernel Module launched!\n");
 	init_netlink();
 	init_monitor_app_list();
+	init_shuffle_config_list();
 	init_orig_syscall();
 	hook_systable();
 	set_ss_type(LKM_SEG_SS_TYPE);

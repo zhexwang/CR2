@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "string.h"
 #include "netlink.h"
 #include "utility.h"
 
@@ -17,7 +18,9 @@ struct iovec NetLink::iov = {0};
 int NetLink::sock_fd = -1;
 struct msghdr NetLink::msg = {0};
 
-void NetLink::connect_with_lkm()
+extern std::string get_real_name_from_path(std::string path);
+
+void NetLink::connect_with_lkm(std::string elf_path)
 {
 	// 1.open socket
     sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
@@ -46,7 +49,10 @@ void NetLink::connect_with_lkm()
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
     // 6.connect with lkm
-    MESG_BAG mesg = {CONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Shuffle process is ready!"};
+    std::string name = get_real_name_from_path(elf_path);
+    MESG_BAG mesg = {CONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Connect with LKM"};
+    ASSERT(name.length()<=256);
+    strcpy(mesg.app_name, name.c_str());
     NetLink::send_mesg(mesg);
 }
 
@@ -58,10 +64,12 @@ void NetLink::send_mesg(MESG_BAG mesg)
     sendmsg(sock_fd, &msg, 0);
 }
 
-void NetLink::send_cv_ready_mesg(BOOL is_cv1, long new_pc)
+void NetLink::send_cv_ready_mesg(BOOL is_cv1, long new_pc, std::string elf_path)
 {
+    std::string name = get_real_name_from_path(elf_path);
     int cvn_ready = is_cv1 ? CV1_IS_READY : CV2_IS_READY;
-    MESG_BAG msg_content = {cvn_ready, 0, new_pc, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Code variant is ready!"};
+    MESG_BAG msg_content = {cvn_ready, 0, new_pc, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Code variant is ready!"};
+    strcpy(msg_content.app_name, name.c_str());
     send_mesg(msg_content);
 }
 
@@ -73,21 +81,28 @@ MESG_BAG NetLink::recv_mesg()
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }
 
-void NetLink::recv_init_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offset, \
+BOOL NetLink::recv_init_mesg(PID &protected_id, P_ADDRX &curr_pc, SIZE &cc_offset, \
     SIZE &ss_offset, P_ADDRX &gs_base, LKM_SS_TYPE &ss_type)
 {
 	BLUE("Waiting for init message from kernel: ");
     recvmsg(sock_fd, &msg, 0);
     MESG_BAG mesg = *(MESG_BAG*)NLMSG_DATA(nlh);
-    ASSERT(mesg.connect==P_PROCESS_IS_IN);
-    protected_id = (PID)mesg.proctected_procid;
-    curr_pc = (P_ADDRX)mesg.new_ip;
-    cc_offset = mesg.cc_offset;
-    ss_offset = mesg.ss_offset;
-    gs_base = mesg.gs_base;
-    ss_type = mesg.lkm_ss_type;
+    BOOL ret = true;
+    if(mesg.connect==P_PROCESS_IS_IN){
+        protected_id = (PID)mesg.proctected_procid;
+        curr_pc = (P_ADDRX)mesg.new_ip;
+        cc_offset = mesg.cc_offset;
+        ss_offset = mesg.ss_offset;
+        gs_base = mesg.gs_base;
+        ss_type = mesg.lkm_ss_type;
+    }else if(mesg.connect==WRONG_APP)
+        ret = false;
+    else{
+        ASSERTM(0, "Unkown connect type from kernel module %d\n", mesg.connect);
+        ret = false;
+    }
     BLUE("%s\n", mesg.mesg);
-    return ;
+    return ret;
 }
 
 BOOL NetLink::recv_cv_request_mesg(P_ADDRX &curr_pc, BOOL &need_cv1)
@@ -113,9 +128,11 @@ BOOL NetLink::recv_cv_request_mesg(P_ADDRX &curr_pc, BOOL &need_cv1)
     }
 }
 
-void NetLink::disconnect_with_lkm()
+void NetLink::disconnect_with_lkm(std::string elf_path)
 {
-    MESG_BAG out_mesg = {DISCONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "Shuffle process is exit!"};
+    std::string app_name = get_real_name_from_path(elf_path);
+    MESG_BAG out_mesg = {DISCONNECT, 0, 0, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Shuffle process is exit!"};
+    strcpy(out_mesg.app_name, app_name.c_str());
     send_mesg(out_mesg);
 	free(nlh);
     close(sock_fd);

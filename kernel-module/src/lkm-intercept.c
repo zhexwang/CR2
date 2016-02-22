@@ -16,7 +16,6 @@
 #include "lkm-file.h"
 
 char *get_start_encode_and_set_entry(struct task_struct *ts, long program_entry);
-volatile char start_flag = 0;
 /*
 	mov %eax, $231//exit_group
 	syscall
@@ -45,11 +44,11 @@ ulong is_code_cache(char *name)
 	else
 		return 0;
 }
-extern long connect_with_shuffle_process;
 
-void protect_orig_x_region(struct task_struct *ts)
+void protect_orig_x_region(struct task_struct *ts, char app_slot_idx)
 {
-	if(connect_with_shuffle_process!=DISCONNECT){
+	int shuffle_pid = get_shuffle_pid(app_slot_idx);
+	if(shuffle_pid!=0){
 		struct mm_struct *mm = ts->mm;
 		struct vm_area_struct *list = mm->mmap, *ptr = list;
 		do{
@@ -71,28 +70,29 @@ void protect_orig_x_region(struct task_struct *ts)
 	}
 }
 
-extern int shuffle_process_pid;
-extern long new_ip;
-void send_init_mesg_to_shuffle_process(struct task_struct *ts)
+void send_init_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
+	volatile char *start_flag = get_start_flag(app_slot_idx);
+	int shuffle_pid = get_shuffle_pid(app_slot_idx);
 	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, \
-			"init code cache and request code variant!"};
-
-	if(connect_with_shuffle_process!=DISCONNECT){
-		nl_send_msg(shuffle_process_pid, msg);
-		start_flag = 1;
-		while(start_flag){
+			"\0", "init code cache and request code variant!"};
+	strcpy(msg.app_name, ts->comm);
+	
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+		*start_flag = 1;
+		while(*start_flag){
 			schedule();
 		}
-		regs->ip = new_ip;
+		regs->ip = get_shuffle_pc(app_slot_idx);
 	}else
 		regs->ip = curr_ip;
 }
 
 //set checkpoint to check the program is begin to execute __start function
-long set_program_start(struct task_struct *ts, char *orig_encode)
+long set_program_start(struct task_struct *ts, char *orig_encode, char app_slot_idx)
 {
 	int index;
 	int ret;
@@ -105,9 +105,9 @@ long set_program_start(struct task_struct *ts, char *orig_encode)
 	if(ret!=0)
 		PRINTK("[LKM] set gs base error!\n");
 	//send msg to generate the cc and get the pc
-	send_init_mesg_to_shuffle_process(ts);
+	send_init_mesg_to_shuffle_process(ts, app_slot_idx);
 	//protect the origin x region
-	protect_orig_x_region(current);
+	protect_orig_x_region(current, app_slot_idx);
 	
 	return _START_RAX;
 }
@@ -348,11 +348,12 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	return ret;
 }
 
-void send_exit_mesg_to_shuffle_process(struct task_struct *ts)
+void send_exit_mesg_to_shuffle_process(struct task_struct *ts, int shuffle_pid)
 {
-	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "protected process is out!"};
-	if(connect_with_shuffle_process!=DISCONNECT)
-		nl_send_msg(shuffle_process_pid, msg);
+	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "protected process is out!"};
+	strcpy(msg.app_name, ts->comm);
+	if(shuffle_pid!=0)
+		nl_send_msg(shuffle_pid, msg);
 	
 	return ;
 }
@@ -360,14 +361,20 @@ void send_exit_mesg_to_shuffle_process(struct task_struct *ts)
 asmlinkage long intercept_exit_group(ulong error)
 {	
 	char *start_encode;
-	if(is_monitor_app(current->comm)){
-		start_encode = is_checkpoint(current);
+	char app_slot_idx;
+	int shuffle_pid;
+	char monitor_idx = is_monitor_app(current->comm);
+	if(monitor_idx!=0){
+		start_encode = is_checkpoint(current, &app_slot_idx);
 		
 		if(start_encode){
-			return set_program_start(current, start_encode);
+			shuffle_pid = connect_one_shuffle(monitor_idx, app_slot_idx);
+			set_shuffle_pid(app_slot_idx, shuffle_pid);
+			return set_program_start(current, start_encode, app_slot_idx);
 		}else{
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
-			send_exit_mesg_to_shuffle_process(current);
+			shuffle_pid  = get_shuffle_pid(app_slot_idx);
+			send_exit_mesg_to_shuffle_process(current, shuffle_pid);
 			free_app_slot(current);
 		}
 	}

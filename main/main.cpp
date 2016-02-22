@@ -50,13 +50,16 @@ int main(int argc, char **argv)
             Module::generate_all_relocation_block(LKM_SEG_SS_TYPE);
         }
         // 1.init netlink and get protected process's information
-        NetLink::connect_with_lkm();
+        NetLink::connect_with_lkm(Options::_elf_path);
         PID proc_id = 0;
         P_ADDRX curr_pc = 0;
         SIZE cc_offset = 0, ss_offset = 0;
         P_ADDRX gs_base = 0;
         LKM_SS_TYPE ss_type = LKM_SEG_SS_TYPE;
-        NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset, gs_base, ss_type);
+        BOOL init_success = false;
+        init_success = NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset, gs_base, ss_type);
+        if(!init_success)
+            return -1;
         // 2.generate the first code variant
         CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset, gs_base, ss_type);
         CodeVariantManager::start_gen_code_variants();
@@ -64,7 +67,7 @@ int main(int argc, char **argv)
         P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
         ASSERT(new_pc!=0);
         // 3.send message to switch to the new generated code variant
-        NetLink::send_cv_ready_mesg(true, new_pc);
+        NetLink::send_cv_ready_mesg(true, new_pc, Options::_elf_path);
         // 4.loop to listen for rereandomization and exit
         BOOL need_cv1 = false;
         while(NetLink::recv_cv_request_mesg(curr_pc, need_cv1)){
@@ -72,7 +75,7 @@ int main(int argc, char **argv)
             new_pc = CodeVariantManager::get_new_pc_from_old_all(curr_pc, need_cv1);
             ASSERT(new_pc!=0);
             CodeVariantManager::modify_new_ra_in_ss(need_cv1);
-            NetLink::send_cv_ready_mesg(need_cv1, new_pc);
+            NetLink::send_cv_ready_mesg(need_cv1, new_pc, Options::_elf_path);
             CodeVariantManager::consume_cv(need_cv1 ? false : true);
         };
         // 5.stop gen code variants
@@ -80,7 +83,7 @@ int main(int argc, char **argv)
         // 6.recycle 
         CodeVariantManager::recycle();
         // 7.disconnect
-        NetLink::disconnect_with_lkm();
+        NetLink::disconnect_with_lkm(Options::_elf_path);
     }
     
     return 0;

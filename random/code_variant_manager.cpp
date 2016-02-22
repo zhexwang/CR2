@@ -27,7 +27,7 @@ INT32 CodeVariantManager::_ss_fd = -1;
 BOOL CodeVariantManager::_is_cv1_ready = false;
 BOOL CodeVariantManager::_is_cv2_ready = false;
 
-static std::string get_real_path(const char *file_path)
+std::string get_real_path(const char *file_path)
 {
     #define PATH_LEN 1024
     #define INCREASE_IDX ++idx;idx%=2
@@ -58,7 +58,7 @@ static std::string get_real_path(const char *file_path)
     return std::string(path[CURR_IDX]); 
 }
 
-static std::string get_real_name_from_path(std::string path)
+std::string get_real_name_from_path(std::string path)
 {
     std::string real_path = get_real_path(path.c_str());
     UINT32 found = real_path.find_last_of("/");

@@ -6,6 +6,7 @@
 
 #include "lkm-utility.h"
 #include "lkm-netlink.h"
+#include "lkm-monitor.h"
 
 #define NETLINK_USER 31
 
@@ -34,24 +35,45 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
 		PRINTK("Send mesg to user(%d): %s\n", target_pid, mesg_bag.mesg);
 }
 
-extern char start_flag;
-long connect_with_shuffle_process = 0;
-int shuffle_process_pid = 0;
-long new_ip = 0;
-
 void nl_recv_msg(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh;
     int pid;
+	char *mesg = NULL;
+	char *app_name = NULL;
+	char monitor_idx = 0;
+	char app_slot_idx = 0;
+	volatile char *start_flag = NULL;
+	MESG_BAG wrong_msg = {WRONG_APP, 0, 0, 0, 0, 0, 0, "\0", "Wrong app!"};
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid; /*pid of sending process */
-	shuffle_process_pid = pid;
-	PRINTK("Recieve mesg from user(%d): %s\n", pid, ((MESG_BAG*)nlmsg_data(nlh))->mesg);
-	connect_with_shuffle_process = ((MESG_BAG*)nlmsg_data(nlh))->connect;
-	if(connect_with_shuffle_process!=DISCONNECT)
-		new_ip = ((MESG_BAG*)nlmsg_data(nlh))->new_ip;
-	
-	start_flag = 0;
+	mesg = ((MESG_BAG*)nlmsg_data(nlh))->mesg;
+	app_name = ((MESG_BAG*)nlmsg_data(nlh))->app_name;
+	strcpy(wrong_msg.app_name, app_name);
+	PRINTK("Recieve mesg from user(%d): %s\n", pid, mesg);
+	monitor_idx = is_monitor_app(app_name);
+	if(monitor_idx!=0){
+		switch(((MESG_BAG*)nlmsg_data(nlh))->connect){
+			case CONNECT:
+				insert_shuffle_info(monitor_idx, pid);
+				break;
+			case DISCONNECT:
+				free_one_shuffle_info(monitor_idx, pid);
+				break;
+			case CV1_IS_READY: case CV2_IS_READY:
+				app_slot_idx = get_app_slot_idx_from_shuffle_config(monitor_idx, pid);
+				start_flag = get_start_flag(app_slot_idx);
+				set_shuffle_pc(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->new_ip);
+				*start_flag = 0;
+				break;
+			default:
+				PRINTK("Unkown connect type %d sent by shuffle process\n", ((MESG_BAG*)nlmsg_data(nlh))->connect);
+		}
+	}else{
+		PRINTK("%s is not our monitor app!\n", app_name);
+		nl_send_msg(pid, wrong_msg);
+	}
+
 	return ;
 }
 

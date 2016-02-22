@@ -27,6 +27,7 @@ typedef struct{
 	long ss_offset;
 	long gs_base;
 	LKM_SS_TYPE lkm_ss_type;
+	char app_name[256];
 	char mesg[256];
 }MESG_BAG;
 
@@ -39,6 +40,7 @@ typedef struct{
 #define CURR_IS_CV1_NEED_CV2 5 //send by kernel module
 #define P_PROCESS_IS_IN      6 //send by kernel module
 #define P_PROCESS_IS_OUT     7 //send by kernel module
+#define WRONG_APP            8 //send by kernel module
 
 extern void nl_send_msg(int target_pid, MESG_BAG mesg_bag);
 extern void init_netlink(void);

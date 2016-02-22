@@ -75,10 +75,10 @@ long allocate_ss_fixed(long orig_stack_start, long orig_stack_end)
 	long ss_start = orig_stack_end - SS_OFFSET - ss_size;
 	long ss_ret = 0;
 	char shm_path[256];
-	int curr_gid = current->tgid;
+	int curr_pid = current->pid;
 	char *file_name = get_filename_from_path(current->comm);
 	
-	sprintf(shm_path, "/dev/shm/%d-%s.ss", curr_gid, file_name);
+	sprintf(shm_path, "/dev/shm/%d-%s.ss", curr_pid, file_name);
 	ss_fd = open_shm_file(shm_path);
 	orig_ftruncate(ss_fd, ss_size);
 	ss_ret = orig_mmap(ss_start, ss_size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FIXED, ss_fd, 0);
