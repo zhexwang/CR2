@@ -47,4 +47,5 @@ extern void init_netlink(void);
 extern void exit_netlink(void);
 extern LKM_SS_TYPE global_ss_type;
 extern void set_ss_type(LKM_SS_TYPE ss_type);
+extern int need_set_gs(void);
 #endif

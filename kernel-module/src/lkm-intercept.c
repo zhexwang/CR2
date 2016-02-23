@@ -101,9 +101,11 @@ long set_program_start(struct task_struct *ts, char *orig_encode, char app_slot_
 	for(index=0; index<CHECK_ENCODE_LEN; index++)
 		put_user(orig_encode[index], target_encode+index);
 	//set gs base
-	ret = orig_arch_prctl(ARCH_SET_GS, GS_BASE);
-	if(ret!=0)
-		PRINTK("[LKM] set gs base error!\n");
+	if(need_set_gs()){
+		ret = orig_arch_prctl(ARCH_SET_GS, GS_BASE);
+		if(ret!=0)
+			PRINTK("[LKM] set gs base error!\n");
+	}
 	//send msg to generate the cc and get the pc
 	send_init_mesg_to_shuffle_process(ts, app_slot_idx);
 	//protect the origin x region

@@ -104,4 +104,8 @@ void set_ss_type(LKM_SS_TYPE ss_type)
 	global_ss_type = ss_type;
 }
 
+int need_set_gs(void)
+{
+	return global_ss_type!=LKM_OFFSET_SS_TYPE;
+}
 
