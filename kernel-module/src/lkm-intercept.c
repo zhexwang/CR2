@@ -346,10 +346,6 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	long *ptr = (long*)0x100000;
 	long *ptr2 = (long*)0x100008;
 #endif
-	if(is_monitor_app(get_filename_from_path(filename))){
-		PRINTK("[LKM]execve(%s)\n", filename);
-		//setup_shuffle_process(filename, envp);
-	}
 
 	ret = orig_execve(filename, argv, envp);
 

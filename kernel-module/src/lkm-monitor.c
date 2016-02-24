@@ -217,6 +217,7 @@ APP_SLOT app_slot_list[MAX_APP_SLOT_LIST_NUM];
 char init_app_slot(struct task_struct *ts)
 {
 	int index = 0;
+	PRINTK("execve %s\n", ts->comm);
 	// 1.find a free slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(app_slot_list[index].tgid==0){
