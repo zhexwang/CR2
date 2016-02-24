@@ -6,6 +6,7 @@
 #include <linux/file.h>
 #include <linux/vmalloc.h>
 #include <asm/prctl.h>
+#include <linux/slab.h>
 
 #include "lkm-config.h"
 #include "lkm-utility.h"
@@ -316,7 +317,25 @@ void mmap_last_rbbl_debug_page(ulong debug_base, ulong debug_size)
 	long ret = orig_mmap(debug_base, debug_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
 	PRINTK("[LKM]mmap last rbbl debug page %lx-%lx\n", ret, ret+debug_size);
 }
-
+/*
+static void setup_shuffle_process(const char __user* path, const char __user* const __user* cmdEnvp)
+{
+	int result = 0;
+	int index = 0;
+	char *cmdPath = "...";
+	char* cmdArgv[]={cmdPath, (char*)path, NULL};
+	result = call_usermodehelper(cmdPath, cmdArgv, (char**)cmdEnvp, UMH_NO_WAIT);
+	//print cmd
+	while(cmdArgv[index])
+		PRINTK("%s ", cmdArgv[index++]);
+		
+	//print state
+	if(result<0)
+		PRINTK(" failed!\n");
+	else
+		PRINTK(" successed!\n");
+}
+*/
 asmlinkage long intercept_execve(const char __user* filename, const char __user* const __user* argv,\
                     const char __user* const __user* envp)
 {
@@ -327,12 +346,11 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 	long *ptr = (long*)0x100000;
 	long *ptr2 = (long*)0x100008;
 #endif
-	if(is_monitor_app(current->comm)){
-		PRINTK("[LKM]execve(%s)\n", current->comm);
-		//TODO: send mesg to setup shuffle process
-		PRINTK("need send mesg to setup shuffle process! not implemented!\n");
+	if(is_monitor_app(get_filename_from_path(filename))){
+		PRINTK("[LKM]execve(%s)\n", filename);
+		//setup_shuffle_process(filename, envp);
 	}
-	
+
 	ret = orig_execve(filename, argv, envp);
 
 	if(is_monitor_app(current->comm)){

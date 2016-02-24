@@ -1,3 +1,5 @@
+#include <linux/moduleparam.h>
+
 #include "lkm-utility.h"
 #include "lkm-monitor.h"
 #include "lkm-hook.h"

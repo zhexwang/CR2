@@ -9,6 +9,7 @@
 #include "lkm-file.h"
 #include "lkm-hook.h"
 #include "lkm-netlink.h"
+#include "lkm-monitor.h"
 
 char* monitor_app_list[MAX_APP_LIST_NUM];
 
@@ -75,6 +76,7 @@ void free_one_shuffle_info(char monitor_list_idx, int shuffle_pid)
 int connect_one_shuffle(char monitor_list_idx, char app_slot_idx)
 {
 	int index;
+
 	spin_lock(&shuffle_config_lock);
 	for(index = 0; index < MAX_SHUFFLE_NUM_FOR_ONE_APP; index++){
 		//find a free
@@ -87,6 +89,7 @@ int connect_one_shuffle(char monitor_list_idx, char app_slot_idx)
 	}
 	PRINTK("find no free shuffle config list %s\n", __FUNCTION__);
 	spin_unlock(&shuffle_config_lock);
+	
 	return 0;
 }
 
@@ -104,6 +107,7 @@ char get_app_slot_idx_from_shuffle_config(char monitor_list_idx, int shuffle_pid
 	spin_unlock(&shuffle_config_lock);
 	return -1;
 }
+
 /**
  * checking if the intercepted app is the one we want to monitor
  **/
