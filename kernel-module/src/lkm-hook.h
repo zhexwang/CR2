@@ -3,6 +3,7 @@
 
 #include <asm/page.h>
 #include <linux/socket.h>
+#include <linux/signal.h>
 
 // ---------- hack function typdef------------- //
 typedef asmlinkage long (*MMAP_FUNC_TYPE)(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff);
@@ -75,6 +76,20 @@ typedef asmlinkage long (*MQTIMEDSEND_FUNC_TYPE)(mqd_t mqdes, const char __user 
 extern MQTIMEDRECEIVE_FUNC_TYPE orig_mq_timedreceive;
 extern MQTIMEDSEND_FUNC_TYPE orig_mq_timedsend;
 
+
+// ---------------Signal syscall-----------------------//
+
+typedef asmlinkage long (*RTSIGACTION_FUNC_TYPE)(int sig, const struct sigaction __user *act, struct sigaction __user *oact, size_t sigsetsize); 
+typedef asmlinkage long (*SIGALTSTACK_FUNC_TYPE)(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss);
+
+extern RTSIGACTION_FUNC_TYPE orig_rt_sigaction;
+extern SIGALTSTACK_FUNC_TYPE orig_sigaltstack;
+
+//new kernel versioin does not use signal system call
+//typedef asmlinkage long (*SIGNAL_FUNC_TYPE)(int sig, __sighandler_t handler);
+//extern SIGNAL_FUNC_TYPE orig_signal;
+
+// ---------------fork/vfork/clone syscall-----------------------//
 
 extern void hook_systable(void);
 extern void stop_hook(void);

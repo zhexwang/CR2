@@ -29,8 +29,10 @@ EXTERN_INTERCPET_FUNC(pwritev);
 EXTERN_INTERCPET_FUNC(mq_timedreceive);
 EXTERN_INTERCPET_FUNC(mq_timedsend);
 
+//-------------Signal syscall intercept function-------------//
 
 
+extern asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss);
 
 
 #endif

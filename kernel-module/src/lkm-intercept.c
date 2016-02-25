@@ -399,3 +399,9 @@ asmlinkage long intercept_exit_group(ulong error)
 }
 
 
+
+asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss)
+{
+	return orig_sigaltstack(uss, uoss);
+}
+

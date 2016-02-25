@@ -39,6 +39,11 @@ PWRITEV_FUNC_TYPE orig_pwritev = NULL;
 MQTIMEDRECEIVE_FUNC_TYPE orig_mq_timedreceive = NULL;
 MQTIMEDSEND_FUNC_TYPE orig_mq_timedsend = NULL;
 
+//signal
+RTSIGACTION_FUNC_TYPE orig_rt_sigaction = NULL;
+void *orig_stub_sigaltstack = NULL;
+SIGALTSTACK_FUNC_TYPE orig_sigaltstack = NULL;
+
 /***********************System call table operation*************************/
 // ---------- write to read-only memory with CR0-WP bit manipulation
 static inline unsigned long readcr0(void) {
@@ -73,12 +78,72 @@ static inline void *get_orig_syscall_addr(ulong index)
 	ulong *table = (ulong*)orig_sys_call_table;
 	return (void*)(*(table + index));
 }
-//-----------Sys stub execve special handling---------------------//
-static long call_proceeded_addr = 0;
+//-----------Sys stub sigaltstack special handling----------------//
+
+static long ss_call_proceeded_addr = 0;
+static long ss_internal_call_addr = 0;
 #ifdef _C10
-	int call_proceded_encode = 0x249c8b4c;//mov 0x98(%rsp),%r11
+	int ss_call_proceded_encode = 0x000028e9;
+	int ss_internal_call_proceded_encode = 0x24548d48;
+#endif
+
+static void *get_orig_sigaltstack_from_stub_sigaltstack(void *stub_sigaltstack) 
+{
+	int call_offset = 0, internal_call_offset = 0;
+	
+	char *pos = (char*)stub_sigaltstack;
+	long ss_internal_call_proceeded_addr = 0;
+	//int count = 0;//(use to dump)
+	while(*(int*)pos!=ss_call_proceded_encode){
+		if(*(int*)pos==ss_internal_call_proceded_encode)
+			ss_internal_call_proceeded_addr = (long)pos;
+		pos++;
+		//count++;
+		//if(count==8){
+		//	PRINTK("0x%lx\n", *(long*)pos);
+		//	count=0;
+		//}
+	}
+	//PRINTK("0x%lx, %d\n", *(long*)((long)pos-count), count);
+	ss_call_proceeded_addr = (long)pos;
+	call_offset = *(int*)(ss_call_proceeded_addr-4);
+	internal_call_offset = *(int*)(ss_internal_call_proceeded_addr-4);
+	
+	ss_internal_call_addr = ss_internal_call_proceeded_addr+(long)internal_call_offset;
+	//PRINTK("internal call addr : %lx\n", ss_internal_call_addr);
+	return (void*)(ss_call_proceeded_addr+(long)call_offset);
+}
+
+#ifdef _C10
+static long intercept_sigaltstack_addr = (long)intercept_sigaltstack;
 #else
-	int call_proceded_encode = 0x24448948;//movq %rax, RAX(%rsp)
+//the first instruction of hook_execve is callnext, we should cross this instruction!
+static long intercept_sigaltstack_addr = (long)intercept_sigaltstack+5;
+#endif
+extern void intercept_stub_sigaltstack(void); 
+void hook_sigaltstack_template(void)
+{
+	asm volatile(
+			".globl intercept_stub_sigaltstack \n"
+			"intercept_stub_sigaltstack:"
+			"subq    $0x30, %%rsp  \n\t"
+			"callq   *%0 \n\t"
+			"lea     0x8(%%rsp),%%rdx \n\t"
+			"callq   *%1 \n\t"
+			"jmpq    *%2 \n\t"
+			:
+			:"m"(ss_internal_call_addr), "m"(intercept_sigaltstack_addr), "m"(ss_call_proceeded_addr)
+		   );
+
+	return ;
+}
+
+//-----------Sys stub execve special handling---------------------//
+static long se_call_proceeded_addr = 0;
+#ifdef _C10
+	int se_call_proceded_encode = 0x249c8b4c;//mov 0x98(%rsp),%r11
+#else
+	int se_call_proceded_encode = 0x24448948;//movq %rax, RAX(%rsp)
 #endif
 
 static void *get_orig_execve_from_stub_execve(void *stub_execve) 
@@ -88,7 +153,7 @@ static void *get_orig_execve_from_stub_execve(void *stub_execve)
 	char *pos = (char*)stub_execve;
 	//int count = 0;//(use to dump stub_execve)
 	//PRINTK("0x%lx\n", *(long*)pos);
-	while(*(int*)pos!=call_proceded_encode){
+	while(*(int*)pos!=se_call_proceded_encode){
 		pos++;
 		//count++;
 		//if(count==8){
@@ -97,10 +162,10 @@ static void *get_orig_execve_from_stub_execve(void *stub_execve)
 		//}
 	}
 	//PRINTK("0x%lx, %d\n", *(long*)((long)pos-count), count);
-	call_proceeded_addr = (long)pos;
-	call_offset = *(int*)(call_proceeded_addr-4);
+	se_call_proceeded_addr = (long)pos;
+	call_offset = *(int*)(se_call_proceeded_addr-4);
 	
-	return (void*)(call_proceeded_addr+(long)call_offset);
+	return (void*)(se_call_proceeded_addr+(long)call_offset);
 }
 
 #ifdef _C10
@@ -140,7 +205,7 @@ void hook_execve_template(void)
 			"callq   *%0 \n\t"
 			"jmpq    *%1 \n\t"
 			:
-			:"m"(intercept_execve_addr), "m"(call_proceeded_addr)
+			:"m"(intercept_execve_addr), "m"(se_call_proceeded_addr)
 		   );
 
 	return ;
@@ -249,6 +314,10 @@ void init_orig_syscall(void)
 	orig_pwritev = get_orig_syscall_addr(__NR_pwritev);
 	orig_mq_timedreceive = get_orig_syscall_addr(__NR_mq_timedreceive);
 	orig_mq_timedsend = get_orig_syscall_addr(__NR_mq_timedsend);
+	//signal
+	orig_rt_sigaction = get_orig_syscall_addr(__NR_rt_sigaction);
+	orig_stub_sigaltstack = get_orig_syscall_addr(__NR_sigaltstack);
+	orig_sigaltstack = get_orig_sigaltstack_from_stub_sigaltstack(orig_stub_sigaltstack);
 	/*
     PRINTK("Origin SyS_mmap: %p\n", orig_mmap);	
 	PRINTK("Origin SyS_munmap: %p\n", orig_munmap);	
@@ -274,7 +343,9 @@ void init_orig_syscall(void)
 	PRINTK("Origin SyS_pwritev: %p\n", orig_pwritev);	
 	PRINTK("Origin SyS_mq_timedreceive: %p\n", orig_mq_timedreceive);	
 	PRINTK("Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);	*/
-
+	PRINTK("Origin SyS_rt_sigaction: %p\n", orig_rt_sigaction);	
+	PRINTK("Origin SyS_stub_sigaltstack: %p\n", orig_stub_sigaltstack);	
+	PRINTK("Origin SyS_sigaltstack: %p\n", orig_sigaltstack);	
 }
 
 void hook_systable(void)
@@ -297,6 +368,8 @@ void hook_systable(void)
 	rewrite_systable_entry(__NR_pwritev, (void*)hook_pwritev);	
 	rewrite_systable_entry(__NR_mq_timedreceive, (void*)hook_mq_timedreceive);	
 	rewrite_systable_entry(__NR_mq_timedsend, (void*)hook_mq_timedsend);	
+	//hack signal
+	rewrite_systable_entry(__NR_sigaltstack, (void*)intercept_stub_sigaltstack);
 										
 	return ;
 }
@@ -322,7 +395,8 @@ void stop_hook(void)
 	rewrite_systable_entry(__NR_pwritev, (void*)orig_pwritev);	
 	rewrite_systable_entry(__NR_mq_timedreceive, (void*)orig_mq_timedreceive);	
 	rewrite_systable_entry(__NR_mq_timedsend, (void*)orig_mq_timedsend);
-	
+	//write back signal
+	rewrite_systable_entry(__NR_sigaltstack, (void*)orig_stub_sigaltstack);
 	return ;	
 }
 
