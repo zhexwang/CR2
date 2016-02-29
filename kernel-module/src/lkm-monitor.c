@@ -171,6 +171,8 @@ void init_monitor_app_list(void)
 	monitor_app_list[28] = "soplex_base.cr2";//450
 	monitor_app_list[29] = "dealII_base.cr2";//447
 	monitor_app_list[30] = "povray_base.cr2";//453
+	//test
+	monitor_app_list[31] = "a.out";
 }
 
 //-------------APP slot----------------------//
@@ -213,6 +215,16 @@ typedef struct{
 }APP_SLOT;
 
 APP_SLOT app_slot_list[MAX_APP_SLOT_LIST_NUM];
+
+int get_cc_id(struct task_struct *ts)
+{
+	int index = 0;
+	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
+		if(app_slot_list[index].tgid==ts->tgid)
+			return app_slot_list[index].cc_id;
+	}
+	return -1;
+}
 
 char init_app_slot(struct task_struct *ts)
 {

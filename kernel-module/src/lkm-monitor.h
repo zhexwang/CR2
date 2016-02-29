@@ -12,6 +12,7 @@ extern char get_app_slot_idx_from_shuffle_config(char monitor_list_idx, int shuf
 extern char is_monitor_app(const char *name);
 extern void init_monitor_app_list(void);
 
+extern int get_cc_id(struct task_struct *ts);
 extern char init_app_slot(struct task_struct *ts);
 extern void free_app_slot(struct task_struct *ts);
 extern void set_io_in(struct task_struct *ts, int sys_no, char value);

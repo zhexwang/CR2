@@ -33,15 +33,17 @@ typedef struct{
 	char mesg[256];
 }MESG_BAG;
 
-#define DISCONNECT           0 //send by shuffle process
-#define CONNECT              1 //send by shuffle process
-#define CV1_IS_READY         2 //send by shuffle process
-#define CV2_IS_READY         3 //send by shuffle process
-#define CURR_IS_CV2_NEED_CV1 4 //send by kernel module
-#define CURR_IS_CV1_NEED_CV2 5 //send by kernel module
-#define P_PROCESS_IS_IN      6 //send by kernel module
-#define P_PROCESS_IS_OUT     7 //send by kernel module
-#define WRONG_APP            8 //send by kernel module
+#define DISCONNECT            0 //send by shuffle process
+#define CONNECT               1 //send by shuffle process
+#define CV1_IS_READY          2 //send by shuffle process
+#define CV2_IS_READY          3 //send by shuffle process
+#define SIGACTION_HANDLED     4 //send by shuffle process
+#define CURR_IS_CV2_NEED_CV1  5 //send by kernel module
+#define CURR_IS_CV1_NEED_CV2  6 //send by kernel module
+#define P_PROCESS_IS_IN       7 //send by kernel module
+#define P_PROCESS_IS_OUT      8 //send by kernel module
+#define SIGACTION_DETECTED    9 //send by kernel module
+#define WRONG_APP             10 //send by kernel module
 
 class NetLink
 {
@@ -57,10 +59,8 @@ public:
 	static void send_mesg(MESG_BAG mesg);
 	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, std::string elf_path);
 	static MESG_BAG recv_mesg();
-	static BOOL recv_init_mesg(PID &protected_id, S_ADDRX &curr_pc, SIZE &cc_offset, SIZE &ss_offset, \
-		 P_ADDRX &gs_base, LKM_SS_TYPE &ss_type);
+	static void send_sigaction_handled_mesg(long new_pc, std::string elf_path);
 	//if protected process is out, the return value is false
-	static BOOL recv_cv_request_mesg(P_ADDRX &curr_pc, BOOL &need_cv1);
 	static void disconnect_with_lkm(std::string elf_path);
 };
 

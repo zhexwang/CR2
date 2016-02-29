@@ -16,7 +16,7 @@ public:
 	}  
 	Range(T low, T high) : _mLow(low), _mHigh(high)
 	{  // [low,high]
-		;
+		ASSERT(high>=low);
 	}
 
 	bool operator<(const Range& rhs) const

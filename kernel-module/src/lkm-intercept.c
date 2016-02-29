@@ -402,6 +402,59 @@ asmlinkage long intercept_exit_group(ulong error)
 
 asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss)
 {
+	char monitor_idx = is_monitor_app(current->comm);
+	if(monitor_idx!=0){
+		PRINTK("%s had set signal stack by itself! We do not handle this case now!\n", current->comm);
+		//mmap ss_size
+
+		//allocate shadow stack
+
+		//send message
+	}
+	
 	return orig_sigaltstack(uss, uoss);
+}
+
+void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, ulong handler_addr, ulong sigreturn_addr)
+{
+	struct pt_regs *regs = task_pt_regs(ts);
+	volatile char *start_flag = get_start_flag(app_slot_idx);
+	MESG_BAG msg = {SIGACTION_DETECTED, ts->pid, regs->ip, handler_addr, sigreturn_addr, \
+		GS_BASE, global_ss_type, "\0", "handle sigaction handler and sigreturn!"};
+	strcpy(msg.app_name, ts->comm);
+	nl_send_msg(shuffle_pid, msg);
+	
+	*start_flag = 1;
+	while(*start_flag){
+		schedule();
+	}
+	regs->ip = get_shuffle_pc(app_slot_idx);
+	
+	return ;
+}
+
+asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, struct sigaction __user *oact, size_t sigsetsize)
+{
+	char monitor_idx = is_monitor_app(current->comm);
+	int shuffle_pid = 0;
+	char app_slot_idx = 0;
+	long ret;
+	if(monitor_idx!=0){
+		PRINTK("%s had rt_sigaction\n", current->comm);
+		//modify the handler address and sigreturn address
+		app_slot_idx = get_app_slot_idx(current->tgid);
+		shuffle_pid = get_shuffle_pid(app_slot_idx);
+		if(shuffle_pid!=0){
+			send_sigaction_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, (ulong)act->sa_handler, (ulong)act->sa_restorer);
+			act->sa_handler = (__sighandler_t)((long)act->sa_handler + CC_OFFSET);
+		}
+	}
+
+	ret = orig_rt_sigaction(sig, act, oact, sigsetsize);
+
+	if(monitor_idx!=0 && shuffle_pid!=0)
+		act->sa_handler = (__sighandler_t)((long)act->sa_handler - CC_OFFSET);
+
+	return ret;
 }
 

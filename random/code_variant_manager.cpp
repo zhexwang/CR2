@@ -26,6 +26,7 @@ std::string CodeVariantManager::_ss_shm_path;
 INT32 CodeVariantManager::_ss_fd = -1;
 BOOL CodeVariantManager::_is_cv1_ready = false;
 BOOL CodeVariantManager::_is_cv2_ready = false;
+CodeVariantManager::SIG_HANDLERS CodeVariantManager::_sig_handlers;
 
 std::string get_real_path(const char *file_path)
 {
@@ -118,6 +119,8 @@ void CodeVariantManager::init_cc()
     _cc_fd = map_shm_file(_cc_shm_path, _cc1_base, map_size);
     ASSERT(map_size==(_cc_load_size*2));
     _cc2_base = _cc1_base+map_size/2;  
+    _cc1_used_base = _cc1_base;
+    _cc2_used_base = _cc2_base;
 }
 
 void CodeVariantManager::init_cc_and_ss()
@@ -549,6 +552,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         RandomBBL *curr_rbbl = (RandomBBL*)rbbl_array[idx];
         RandomBBL *next_rbbl = idx<(rbbl_array_size-1) ? (RandomBBL*)rbbl_array[idx+1] : NULL;
         S_SIZE place_size = curr_rbbl->get_template_size();
+        
         if(next_rbbl){
             F_SIZE next_rbbl_offset = next_rbbl->get_rbbl_offset();
             if(next_rbbl_offset==curr_rbbl->get_last_br_target()){
@@ -570,8 +574,12 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
 #endif
             rbbl_maps.insert(std::make_pair(curr_rbbl_offset+1, prefix_start));      
         }
-        cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+place_size-1), (S_ADDRX)curr_rbbl));
-        used_cc_base += place_size;
+
+        if(place_size>0){
+            cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+place_size-1), (S_ADDRX)curr_rbbl));
+            used_cc_base += place_size;
+        }else
+            ASSERT(place_size==0);
     }
     // 4.3 free array
     delete []rbbl_array;
@@ -641,13 +649,14 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
     CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
     RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
     JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
+    S_ADDRX &cc_used_base = is_first_cc ? _cc1_used_base : _cc2_used_base;
     // 1.clean code cache
     clean_cc(is_first_cc);
     // 2.arrange the code layout
-    arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
+    cc_used_base = arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
     // 3.generate the code
     relocate_rbbls_and_tramps(cc_layout, cc_base, rbbl_maps, jmpin_rbbl_offsets);
-
+    
     return ;
 }
 
@@ -655,11 +664,13 @@ void CodeVariantManager::generate_all_code_variant(BOOL is_first_cc)
 {
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
         iter->second->generate_code_variant(is_first_cc);
-    
+
+    patch_all_sigaction_entry(is_first_cc);
     return ;
 }
 
 static BOOL need_stop = false;
+static BOOL need_pause = false;
 pthread_t child_thread;
 
 void CodeVariantManager::start_gen_code_variants()
@@ -674,6 +685,16 @@ void CodeVariantManager::stop_gen_code_variants()
     pthread_join(child_thread, NULL);
 }
 
+void CodeVariantManager::pause_gen_code_variants()
+{
+    need_pause = true;
+}
+
+void CodeVariantManager::continue_gen_code_variants()
+{
+    need_pause = false;
+}
+
 void* CodeVariantManager::generate_code_variant_concurrently(void *arg)
 {
     while(!need_stop){
@@ -686,9 +707,22 @@ void* CodeVariantManager::generate_code_variant_concurrently(void *arg)
             generate_all_code_variant(false);
             _is_cv2_ready = true;
         }
+        
+        while(need_pause)
+            sched_yield();
+        
         sched_yield();
     }
     return NULL;
+}
+
+void CodeVariantManager::clear_sighandler(BOOL is_first_cc)
+{
+    for(SIG_HANDLERS::iterator iter = _sig_handlers.begin(); iter!=_sig_handlers.end(); iter++){
+        SIG_INFO &sig_info = iter->second;
+        BOOL &handled = is_first_cc ? sig_info.cv1_handled : sig_info.cv2_handled;
+        handled = false;
+    }
 }
 
 void CodeVariantManager::clear_cv(BOOL is_first_cc)
@@ -696,9 +730,13 @@ void CodeVariantManager::clear_cv(BOOL is_first_cc)
     CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
     RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
     JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
+    S_ADDRX &cc_used_base = is_first_cc ? _cc1_used_base : _cc2_used_base;
+    S_ADDRX &cc_base = is_first_cc ? _cc1_base : _cc2_base;
     cc_layout.clear();
     rbbl_maps.clear();
     jmpin_rbbl_offsets.clear();
+    cc_used_base = cc_base;
+    clear_sighandler(is_first_cc);
 }
 
 void CodeVariantManager::clear_all_cv(BOOL is_first_cc)
@@ -731,8 +769,6 @@ void CodeVariantManager::wait_for_code_variant_ready(BOOL is_first_cc)
 
 RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc)
 {
-    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
-    
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         RandomBBL *rbbl = iter->second->find_rbbl_from_paddrx(p_addr, is_first_cc);
         if(rbbl)
@@ -743,8 +779,6 @@ RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is
 
 RandomBBL *CodeVariantManager::find_rbbl_from_all_saddrx(S_ADDRX s_addr, BOOL is_first_cc)
 {
-    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
-    
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         RandomBBL *rbbl = iter->second->find_rbbl_from_saddrx(s_addr, is_first_cc);
         if(rbbl)
@@ -805,8 +839,6 @@ RandomBBL *CodeVariantManager::find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_fir
 
 P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
 {
-    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
-
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_orig(orig_p_addrx, is_first_cc);
         if(ret_addrx!=0)
@@ -817,8 +849,6 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_orig(P_ADDRX orig_p_addrx, B
 
 S_ADDRX CodeVariantManager::find_cc_saddrx_from_all_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc)
 {
-    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
-
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_saddrx_from_orig(orig_p_addrx, is_first_cc);
         if(ret_addrx!=0)
@@ -863,8 +893,6 @@ P_ADDRX CodeVariantManager::find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_fi
 
 P_ADDRX CodeVariantManager::find_cc_paddrx_from_all_rbbls(RandomBBL *rbbl, BOOL is_first_cc)
 {
-    ASSERT(is_first_cc ? _is_cv1_ready : _is_cv2_ready);
-
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
         P_ADDRX ret_addrx = iter->second->find_cc_paddrx_from_rbbl(rbbl, is_first_cc);
         if(ret_addrx!=0)
@@ -1224,5 +1252,129 @@ void CodeVariantManager::store_into_db(std::string db_path)
         //5. close the file
         close(fd);
     }
+}
+
+S_ADDRX patch_sigreturn_ss_template(S_ADDRX cc_used_base, LKM_SS_TYPE ss_type, SIZE ss_offset, P_ADDRX gs_base, \
+    P_ADDRX sigreturn_paddrx, S_ADDRX handler_saddrx)
+{
+    //generate template
+    P_SIZE virtual_ss_offset = 0;//virtual shadow stack offset is used to relocate the instruction
+    switch(ss_type){
+        case LKM_OFFSET_SS_TYPE: virtual_ss_offset = ss_offset; break;
+        case LKM_SEG_SS_TYPE: virtual_ss_offset = ss_offset + gs_base; ASSERT(gs_base!=0); break;
+        case LKM_SEG_SS_PP_TYPE: virtual_ss_offset = ss_offset + gs_base; ASSERT(gs_base!=0); break;
+        default:
+            ASSERTM(0, "Unkown shadow stack type %d\n", ss_type);
+    }
+    UINT16 imm32_pos, disp32_pos;
+    INT32 high32 = (sigreturn_paddrx>>32)&0xffffffff;
+    INT32 low32 = (INT32)sigreturn_paddrx;
+    //movl ($ss_offset)(%rsp), 0xffffffff&(sigreturn_paddrx>>32)
+    std::string movl_l32_template;
+    if(ss_type==LKM_OFFSET_SS_TYPE)
+        movl_l32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_pos, low32, disp32_pos, (INT32)(-virtual_ss_offset));
+    else if(ss_type==LKM_SEG_SS_TYPE)
+        movl_l32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_pos, low32, disp32_pos, (INT32)(-virtual_ss_offset));
+    else
+        ASSERT(0);
+    S_SIZE instr_len = movl_l32_template.length();
+    movl_l32_template.copy((char*)cc_used_base, instr_len);
+    cc_used_base += instr_len;
+    //movl ($ss_offset+4)(%rsp), 0xffffffff&(sigreturn_paddrx)
+    std::string movl_h32_template;
+    if(ss_type==LKM_OFFSET_SS_TYPE)
+        movl_h32_template = InstrGenerator::gen_movl_imm32_to_rsp_smem_instr(imm32_pos, high32, disp32_pos, (INT32)(4-virtual_ss_offset));
+    else if(ss_type==LKM_SEG_SS_TYPE)
+        movl_h32_template = InstrGenerator::gen_movl_imm32_to_gs_rsp_smem_instr(imm32_pos, high32, disp32_pos, (INT32)(4-virtual_ss_offset));
+    else
+        ASSERT(0);
+    instr_len = movl_h32_template.length();
+    movl_h32_template.copy((char*)cc_used_base, instr_len);
+    cc_used_base += instr_len;
+    //jmp rel32
+    std::string jmp_rel32_template = InstrGenerator::gen_jump_rel32_instr(disp32_pos, 0);
+    S_ADDRX relocate_saddrx = disp32_pos + cc_used_base;
+    instr_len = jmp_rel32_template.length();
+    jmp_rel32_template.copy((char*)cc_used_base, instr_len);
+    cc_used_base += instr_len;
+    *(INT32*)relocate_saddrx = handler_saddrx - cc_used_base;
+
+    return cc_used_base;
+}
+
+void CodeVariantManager::patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler_paddrx, P_ADDRX sigreturn_paddrx)
+{
+    CC_LAYOUT &cc_layout = is_first_cc ? _cc_layout1 : _cc_layout2;
+    S_ADDRX base_saddrx = is_first_cc ? _cc1_base : _cc2_base;
+    RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
+    S_ADDRX &cc_used_base = is_first_cc ? _cc1_used_base : _cc2_used_base;
+    
+    if(handler_paddrx>=_org_x_load_base && handler_paddrx<(_org_x_load_base + _org_x_load_size)){
+        //1. get offset 
+        F_SIZE handler_offset = handler_paddrx - _org_x_load_base;
+        ASSERTM(_postion_fixed_rbbl_maps.find(handler_offset)!=_postion_fixed_rbbl_maps.end(),\
+            "signal handler entry basic block must be position fixed!\n");
+        //2. get handler addr in code variant
+        RBBL_CC_MAPS::iterator handler_iter = rbbl_maps.find(handler_offset);
+        ASSERT(handler_iter!=rbbl_maps.end());
+        //3. get handler's trampoline addr
+        S_ADDRX tramp_saddrx = handler_offset + base_saddrx;
+        CC_LAYOUT_ITER cc_iter = cc_layout.upper_bound(Range<S_ADDRX>(tramp_saddrx));
+        if(cc_iter!=cc_layout.end() && tramp_saddrx<=(--cc_iter)->first.high() && tramp_saddrx>=cc_iter->first.low()){
+            S_ADDRX start = cc_iter->first.low();
+            ASSERTM(cc_iter->second==TRAMP_JMP32_PTR && *(UINT8*)start==JMP32_OPCODE, "Must be trampoline32!\n");
+            ASSERT(start==tramp_saddrx);
+            INT32 offset32 = *(INT32*)(start+OFFSET_POS);
+            S_ADDRX target_saddrx = start + JMP32_LEN + offset32;
+            ASSERT(target_saddrx==handler_iter->second);                    
+            //modify the trampoline32
+            *(INT32*)(start+OFFSET_POS) = cc_used_base - JMP32_LEN - start;
+            //patch template
+            cc_used_base = patch_sigreturn_ss_template(cc_used_base, _ss_type, _ss_offset, _gs_base, sigreturn_paddrx, target_saddrx);
+        }else
+            ASSERTM(0, "must have trampoline32\n");
+    }
+}
+
+void CodeVariantManager::patch_all_sigaction_entry(BOOL is_first_cc)
+{
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        CodeVariantManager *cvm = iter->second;
+        for(SIG_HANDLERS::iterator it = _sig_handlers.begin(); it!=_sig_handlers.end(); it++){
+            SIG_INFO &sig_info = it->second;
+            BOOL &handled = is_first_cc ? sig_info.cv1_handled : sig_info.cv2_handled;
+            if(!handled){
+                P_ADDRX handler_paddrx = sig_info.sighandler;
+                P_ADDRX sigreturn_paddrx = find_cc_paddrx_from_all_orig(sig_info.sigreturn, is_first_cc);
+                cvm->patch_sigaction_entry(is_first_cc, handler_paddrx, sigreturn_paddrx);
+                handled = true;
+            }
+        }
+    }
+}
+
+P_ADDRX CodeVariantManager::handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc)
+{
+    if(sighandler_is_registered(orig_sighandler_addr, orig_sigreturn_addr))
+        return old_pc;
+    else{
+        //wait all ready to make sure patch code cache safely
+        wait_for_code_variant_ready(true);
+        wait_for_code_variant_ready(false);
+        //1. pause gen code variants
+        pause_gen_code_variants();
+        //2. record sighandler and sigreturn
+        SIG_INFO sig_info = {orig_sighandler_addr, orig_sigreturn_addr, false, false};
+        _sig_handlers.insert(std::make_pair(orig_sighandler_addr, sig_info));
+        //3. patch template into sighandler
+        patch_all_sigaction_entry(true);
+        patch_all_sigaction_entry(false);
+        //4. continue to gen code
+        continue_gen_code_variants();
+        //5. wait code variants
+        wait_for_code_variant_ready(true);
+        wait_for_code_variant_ready(false);
+        return old_pc;
+    }       
 }
 

@@ -31,7 +31,7 @@ EXTERN_INTERCPET_FUNC(mq_timedsend);
 
 //-------------Signal syscall intercept function-------------//
 
-
+extern asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, struct sigaction __user *oact, size_t sigsetsize);
 extern asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss);
 
 

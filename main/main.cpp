@@ -50,32 +50,43 @@ int main(int argc, char **argv)
         }
         // 1.init netlink and get protected process's information
         NetLink::connect_with_lkm(Options::_elf_path);
-        PID proc_id = 0;
-        P_ADDRX curr_pc = 0;
-        SIZE cc_offset = 0, ss_offset = 0;
-        P_ADDRX gs_base = 0;
-        LKM_SS_TYPE ss_type = LKM_OFFSET_SS_TYPE;
-        BOOL init_success = false;
-        init_success = NetLink::recv_init_mesg(proc_id, curr_pc, cc_offset, ss_offset, gs_base, ss_type);
-        if(!init_success)
+        MESG_BAG mesg = NetLink::recv_mesg();
+        if(mesg.connect!=P_PROCESS_IS_IN){
             return -1;
+        }
         // 2.generate the first code variant
-        CodeVariantManager::init_protected_proc_info(proc_id, cc_offset, ss_offset, gs_base, ss_type);
+        CodeVariantManager::init_protected_proc_info(mesg.proctected_procid, mesg.cc_offset, mesg.ss_offset, mesg.gs_base, mesg.lkm_ss_type);
         CodeVariantManager::start_gen_code_variants();
         CodeVariantManager::wait_for_code_variant_ready(true);
-        P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(curr_pc, true);
+        P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
         ASSERT(new_pc!=0);
         // 3.send message to switch to the new generated code variant
         NetLink::send_cv_ready_mesg(true, new_pc, Options::_elf_path);
         // 4.loop to listen for rereandomization and exit
-        BOOL need_cv1 = false;
-        while(NetLink::recv_cv_request_mesg(curr_pc, need_cv1)){
-            CodeVariantManager::wait_for_code_variant_ready(need_cv1);
-            new_pc = CodeVariantManager::get_new_pc_from_old_all(curr_pc, need_cv1);
-            ASSERT(new_pc!=0);
-            CodeVariantManager::modify_new_ra_in_ss(need_cv1);
-            NetLink::send_cv_ready_mesg(need_cv1, new_pc, Options::_elf_path);
-            CodeVariantManager::consume_cv(need_cv1 ? false : true);
+        while(1){
+            // block to recv message from kernel module
+            MESG_BAG mesg = NetLink::recv_mesg();
+            
+            if(mesg.connect==P_PROCESS_IS_OUT)
+                break;
+            else if(mesg.connect==CURR_IS_CV1_NEED_CV2 || mesg.connect==CURR_IS_CV2_NEED_CV1){
+                //handle rerandomization
+                BOOL need_cv1 = mesg.connect==CURR_IS_CV2_NEED_CV1;
+                CodeVariantManager::wait_for_code_variant_ready(need_cv1);
+                new_pc = CodeVariantManager::get_new_pc_from_old_all(mesg.new_ip, need_cv1);
+                ASSERT(new_pc!=0);
+                CodeVariantManager::modify_new_ra_in_ss(need_cv1);
+                NetLink::send_cv_ready_mesg(need_cv1, new_pc, Options::_elf_path);
+                CodeVariantManager::consume_cv(need_cv1 ? false : true);
+            }else if(mesg.connect==SIGACTION_DETECTED){
+                //handle sigaction
+                P_ADDRX sighandler_addr = mesg.cc_offset;
+                P_ADDRX sigreturn_addr = mesg.ss_offset;
+                //ERR("Register handler: %lx, sigreturn: %lx\n", sighandler_addr, sigreturn_addr);
+                new_pc = CodeVariantManager::handle_sigaction(sighandler_addr, sigreturn_addr, mesg.new_ip);
+                NetLink::send_sigaction_handled_mesg(new_pc, Options::_elf_path);
+            }else
+                ASSERTM(0, "Unkwon message type %d!\n", mesg.connect);
         };
         // 5.stop gen code variants
         CodeVariantManager::stop_gen_code_variants();

@@ -32,15 +32,18 @@ typedef struct{
 }MESG_BAG;
 
 
-#define DISCONNECT           0 //send by shuffle process
-#define CONNECT              1 //send by shuffle process
-#define CV1_IS_READY         2 //send by shuffle process
-#define CV2_IS_READY         3 //send by shuffle process
-#define CURR_IS_CV2_NEED_CV1 4 //send by kernel module
-#define CURR_IS_CV1_NEED_CV2 5 //send by kernel module
-#define P_PROCESS_IS_IN      6 //send by kernel module
-#define P_PROCESS_IS_OUT     7 //send by kernel module
-#define WRONG_APP            8 //send by kernel module
+#define DISCONNECT            0 //send by shuffle process
+#define CONNECT               1 //send by shuffle process
+#define CV1_IS_READY          2 //send by shuffle process
+#define CV2_IS_READY          3 //send by shuffle process
+#define SIGACTION_HANDLED     4 //send by shuffle process
+#define CURR_IS_CV2_NEED_CV1  5 //send by kernel module
+#define CURR_IS_CV1_NEED_CV2  6 //send by kernel module
+#define P_PROCESS_IS_IN       7 //send by kernel module
+#define P_PROCESS_IS_OUT      8 //send by kernel module
+#define SIGACTION_DETECTED    9 //send by kernel module
+#define WRONG_APP             10 //send by kernel module
+
 
 extern void nl_send_msg(int target_pid, MESG_BAG mesg_bag);
 extern void init_netlink(void);

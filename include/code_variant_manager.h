@@ -25,11 +25,19 @@ class CodeVariantManager
 {
 public:
 	typedef std::map<F_SIZE, RandomBBL*> RAND_BBL_MAPS;
+	typedef std::set<RandomBBL*> RAND_BBL_SET;
 	typedef std::set<F_SIZE> TARGET_SET;
 	typedef TARGET_SET::iterator TARGET_ITERATOR;
 	typedef std::map<F_SIZE, TARGET_SET> JMPIN_TARGETS_MAPS;//first is src_bbl
 	typedef JMPIN_TARGETS_MAPS::iterator JMPIN_ITERATOR;
 	typedef std::map<std::string, CodeVariantManager*> CVM_MAPS;
+	typedef struct{
+		P_ADDRX sighandler;
+		P_ADDRX sigreturn;
+		BOOL cv1_handled;
+		BOOL cv2_handled;
+	}SIG_INFO;
+	typedef std::map<P_ADDRX, SIG_INFO> SIG_HANDLERS;
 protected:
 	RAND_BBL_MAPS _postion_fixed_rbbl_maps;
 	RAND_BBL_MAPS _movable_rbbl_maps;
@@ -39,6 +47,8 @@ protected:
 	/********generate code information********/
     CC_LAYOUT _cc_layout1;
 	CC_LAYOUT _cc_layout2;
+	S_ADDRX _cc1_used_base;
+	S_ADDRX _cc2_used_base;
     //store the mapping which maps from binary offset to cc address
     RBBL_CC_MAPS _rbbl_maps1;
 	RBBL_CC_MAPS _rbbl_maps2;
@@ -75,6 +85,8 @@ protected:
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
 	static P_ADDRX _gs_base;
+	//signal related
+	static SIG_HANDLERS _sig_handlers;
 public:
 	//get functions
 	CodeVariantManager(std::string module_path);
@@ -109,7 +121,8 @@ public:
 	static void wait_for_code_variant_ready(BOOL is_first_cc);
 	static void consume_cv(BOOL is_first_cc);
 	static void clear_all_cv(BOOL is_first_cc);
-	static void store_into_db(std::string db_path);
+	static void store_into_db(std::string db_path);	
+	static P_ADDRX handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc);
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
@@ -141,15 +154,29 @@ public:
 		_ss_type = ss_type;
 	}
 protected:	
+	void patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler_paddrx, P_ADDRX sigreturn_paddrx);
+	static void patch_all_sigaction_entry(BOOL is_first_cc);
 	static void add_cvm(CodeVariantManager *cvm)
 	{
 		_all_cvm_maps.insert(std::make_pair(cvm->get_name(), cvm));
 	}
+	static void pause_gen_code_variants();
+	static void continue_gen_code_variants();
 	//set functions
 	static void parse_proc_maps(PID protected_pid);
 	static void generate_all_code_variant(BOOL is_first_cc);
 	static void *generate_code_variant_concurrently(void *arg);
+	static BOOL sighandler_is_registered(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr)
+	{
+		SIG_HANDLERS::iterator iter = _sig_handlers.find(orig_sighandler_addr);
+		if(iter!=_sig_handlers.end()){
+			FATAL(orig_sigreturn_addr!=iter->second.sigreturn, "register two different sigreturns: %lx(old) %lx(new)\n", iter->second.sigreturn, orig_sigreturn_addr);
+			return true;
+		}else
+			return false;
+	}
 	void clear_cv(BOOL is_first_cc);
+	void clear_sighandler(BOOL is_first_cc);
 	P_ADDRX get_new_pc_from_old(P_ADDRX old_pc, BOOL first_cc_is_new);
 	P_ADDRX find_cc_paddrx_from_rbbl(RandomBBL *rbbl, BOOL is_first_cc);
 	P_ADDRX find_cc_paddrx_from_orig(P_ADDRX orig_p_addrx, BOOL is_first_cc);
