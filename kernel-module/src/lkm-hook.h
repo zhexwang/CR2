@@ -91,6 +91,10 @@ extern SIGALTSTACK_FUNC_TYPE orig_sigaltstack;
 
 // ---------------fork/vfork/clone syscall-----------------------//
 
+typedef asmlinkage long (*CLONE_FUNC_TYPE)(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
+	int __user * child_tidptr, int tls_val);
+extern CLONE_FUNC_TYPE orig_clone;
+
 extern void hook_systable(void);
 extern void stop_hook(void);
 extern void init_orig_syscall(void);

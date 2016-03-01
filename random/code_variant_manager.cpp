@@ -19,11 +19,7 @@ SIZE CodeVariantManager::_cc_offset = 0;
 SIZE CodeVariantManager::_ss_offset = 0;
 P_ADDRX CodeVariantManager::_gs_base = 0;
 P_ADDRX CodeVariantManager::_org_stack_load_base = 0;
-P_ADDRX CodeVariantManager::_ss_load_base = 0;
-S_ADDRX CodeVariantManager::_ss_base = 0;
-P_SIZE CodeVariantManager::_ss_load_size = 0;
-std::string CodeVariantManager::_ss_shm_path;
-INT32 CodeVariantManager::_ss_fd = -1;
+CodeVariantManager::SS_MAPS CodeVariantManager::_ss_maps;
 BOOL CodeVariantManager::_is_cv1_ready = false;
 BOOL CodeVariantManager::_is_cv2_ready = false;
 CodeVariantManager::SIG_HANDLERS CodeVariantManager::_sig_handlers;
@@ -123,17 +119,11 @@ void CodeVariantManager::init_cc()
     _cc2_used_base = _cc2_base;
 }
 
-void CodeVariantManager::init_cc_and_ss()
+void CodeVariantManager::init_all_cc()
 {
     // map cc
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
         iter->second->init_cc();
-    // map ss
-    S_SIZE map_size;
-    S_ADDRX map_start;
-    _ss_fd = map_shm_file(_ss_shm_path, map_start, map_size);
-    _ss_base = map_start + map_size;
-    ASSERT(map_size==_ss_load_size);
 }
 
 typedef struct mapsRow{
@@ -225,7 +215,7 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
             std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
             if(is_shared(currentRow)){//shadow stack
                 if(maps_record_name.find(ss_sufix)!=std::string::npos)
-                    set_ss_load_info(currentRow->end, currentRow->end-currentRow->start, maps_record_name);
+                    create_ss(currentRow->end-currentRow->start, maps_record_name);
             }else{
                 if(strstr(currentRow->pathname, "[stack]"))//stack
                     set_stack_load_base(currentRow->end);
@@ -628,6 +618,30 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
     }
 }
 
+void CodeVariantManager::create_ss(P_SIZE ss_size, std::string ss_shm_path)
+{
+	S_SIZE map_size;
+	S_ADDRX map_start;
+    std::string ss_shm_file = get_real_name_from_path(ss_shm_path);
+	INT32 ss_fd = map_shm_file(ss_shm_file, map_start, map_size);
+	ASSERT(map_size==ss_size);
+    S_SIZE ss_base = map_start + map_size;
+	SS_INFO ss_info = {ss_base, map_size, ss_fd, ss_shm_file};
+    _ss_maps.insert(std::make_pair(ss_shm_path, ss_info));
+}
+
+void CodeVariantManager::free_ss(P_SIZE ss_size, std::string ss_shm_path)
+{
+    SS_MAPS::iterator iter = _ss_maps.find(get_real_name_from_path(ss_shm_path));
+    FATAL(iter==_ss_maps.end(), "free no shadow stack %s\n", ss_shm_path.c_str());
+    SS_INFO &ss_info = iter->second;
+    //free    
+    munmap((void*)(ss_info.ss_base-ss_info.ss_size), ss_info.ss_size);
+    close_shm_file(ss_info.ss_fd, ss_info.shm_file);
+    //erase
+    _ss_maps.erase(iter);
+}
+
 void CodeVariantManager::clean_cc(BOOL is_first_cc)
 {
     S_ADDRX cc_base = is_first_cc ? _cc1_base : _cc2_base;
@@ -941,16 +955,19 @@ void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
 {
     //TODO: we only handle ordinary shadow stack, not shadow stack++
     ASSERT(_is_cv1_ready && _is_cv2_ready);
-    S_ADDRX return_addr_ptr = _ss_base - sizeof(P_ADDRX);
-    
-    while(return_addr_ptr>=(_ss_base-_ss_load_size)){
-        P_ADDRX old_return_addr = *(P_ADDRX *)return_addr_ptr;
-        P_ADDRX new_return_addr = get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
-        //modify old return address to the new return address
-        if(new_return_addr!=0)
-            *(P_ADDRX *)return_addr_ptr = new_return_addr;
+    for(SS_MAPS::iterator iter = _ss_maps.begin(); iter!=_ss_maps.end(); iter++){
+        SS_INFO &info = iter->second;
+        S_ADDRX return_addr_ptr = info.ss_base - sizeof(P_ADDRX);
         
-        return_addr_ptr -= sizeof(P_ADDRX);
+        while(return_addr_ptr>=(info.ss_base-info.ss_size)){
+            P_ADDRX old_return_addr = *(P_ADDRX *)return_addr_ptr;
+            P_ADDRX new_return_addr = get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
+            //modify old return address to the new return address
+            if(new_return_addr!=0)
+                *(P_ADDRX *)return_addr_ptr = new_return_addr;
+            
+            return_addr_ptr -= sizeof(P_ADDRX);
+        }
     }
 }
 
@@ -962,8 +979,11 @@ void CodeVariantManager::recycle()
         delete cvm;
     }
     //2. recycle shadow stack and shm files
-    close_shm_file(_ss_fd, _ss_shm_path);
-    munmap((void*)_ss_base, _ss_load_size);
+    for(SS_MAPS::iterator iter = _ss_maps.begin(); iter!=_ss_maps.end(); iter++){
+        SS_INFO &info = iter->second;
+        close_shm_file(info.ss_fd, info.shm_file);
+        munmap((void*)(info.ss_base-info.ss_size), info.ss_size);
+    }
 }
 
 /************DB SEG*************/

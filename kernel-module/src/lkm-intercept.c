@@ -374,11 +374,31 @@ void send_exit_mesg_to_shuffle_process(struct task_struct *ts, int shuffle_pid)
 	return ;
 }
 
+void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, long stack_len, char *shm_file)
+{
+	struct pt_regs *regs = task_pt_regs(ts);
+	volatile char *start_flag = get_start_flag(app_slot_idx);
+	MESG_BAG msg = {FREE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
+	strcpy(msg.app_name, ts->comm);
+	strcpy(msg.mesg, shm_file);
+	nl_send_msg(shuffle_pid, msg);
+	
+	*start_flag = 1;
+	while(*start_flag){
+		schedule();
+	}
+	regs->ip = get_shuffle_pc(app_slot_idx);
+	
+	return ;	
+}
+
 asmlinkage long intercept_exit_group(ulong error)
 {	
 	char *start_encode;
 	char app_slot_idx;
 	int shuffle_pid;
+	char *stack_shm = NULL;
+	long stack_len = 0;
 	char monitor_idx = is_monitor_app(current->comm);
 	if(monitor_idx!=0){
 		start_encode = is_checkpoint(current, &app_slot_idx);
@@ -389,9 +409,19 @@ asmlinkage long intercept_exit_group(ulong error)
 			return set_program_start(current, start_encode, app_slot_idx);
 		}else{
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
+			app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
 			shuffle_pid  = get_shuffle_pid(app_slot_idx);
-			send_exit_mesg_to_shuffle_process(current, shuffle_pid);
-			free_app_slot(current);
+			if(shuffle_pid!=-1){
+				PRINTK("[%d, %d]app_slot_idx: %d, shuffle pid: %d\n", current->pid, pid_vnr(task_pgrp(current)), app_slot_idx, shuffle_pid);
+				if(pid_vnr(task_pgrp(current))!=current->pid){//exit curr process, so we only need clear shadow stack
+					stack_shm = get_stack_shm_info(current, &stack_len);
+					send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
+					free_stack_info(current);
+				}else{//exit process group
+					send_exit_mesg_to_shuffle_process(current, shuffle_pid);
+					free_app_slot(current);
+				}
+			}
 		}
 	}
 
@@ -439,12 +469,13 @@ asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, st
 	int shuffle_pid = 0;
 	char app_slot_idx = 0;
 	long ret;
+	struct pt_regs *regs = task_pt_regs(current);
 	if(monitor_idx!=0){
-		PRINTK("%s had rt_sigaction\n", current->comm);
+		PRINTK("[%d]%s had rt_sigaction, pc = %lx\n", current->pid, current->comm, regs->ip);
 		//modify the handler address and sigreturn address
-		app_slot_idx = get_app_slot_idx(current->tgid);
+		app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
 		shuffle_pid = get_shuffle_pid(app_slot_idx);
-		if(shuffle_pid!=0){
+		if(shuffle_pid!=0 && act && act->sa_handler!=SIG_IGN && act->sa_handler!=SIG_DFL && act->sa_handler!=SIG_ERR){
 			send_sigaction_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, (ulong)act->sa_handler, (ulong)act->sa_restorer);
 			act->sa_handler = (__sighandler_t)((long)act->sa_handler + CC_OFFSET);
 		}
@@ -452,9 +483,81 @@ asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, st
 
 	ret = orig_rt_sigaction(sig, act, oact, sigsetsize);
 
-	if(monitor_idx!=0 && shuffle_pid!=0)
+	if(monitor_idx!=0 && shuffle_pid!=0 && act && act->sa_handler!=SIG_IGN && act->sa_handler!=SIG_DFL && act->sa_handler!=SIG_ERR)
 		act->sa_handler = (__sighandler_t)((long)act->sa_handler - CC_OFFSET);
 
+	return ret;
+}
+
+void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, long stack_len, char *shm_file)
+{
+	struct pt_regs *regs = task_pt_regs(ts);
+	volatile char *start_flag = get_start_flag(app_slot_idx);
+	MESG_BAG msg = {CREATE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
+	strcpy(msg.app_name, ts->comm);
+	strcpy(msg.mesg, shm_file);
+	nl_send_msg(shuffle_pid, msg);
+	
+	*start_flag = 1;
+	while(*start_flag){
+		schedule();
+	}
+	regs->ip = get_shuffle_pc(app_slot_idx);
+	
+	return ;	
+}
+
+asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
+	int __user * child_tidptr, int tls_val)
+{
+	long ret = 0;
+	long ss_ret = 0;
+	long curr_stack_start = 0;
+	long curr_stack_end = 0;
+	void *bk_buf;
+	long stack_len = 0;
+	char app_slot_idx;
+	int shuffle_pid = 0;
+	char *shm_file = NULL;
+	char monitor_idx = is_monitor_app(current->comm);
+	if(monitor_idx!=0){
+		app_slot_idx = get_ss_info(current, &curr_stack_start, &curr_stack_end);		
+		shuffle_pid = get_shuffle_pid(app_slot_idx);
+		if(shuffle_pid!=-1){
+			//backup the shadow stack information
+			stack_len = curr_stack_end - curr_stack_start;
+			bk_buf = vmalloc(stack_len);
+			if(!bk_buf)
+				PRINTK("error! failed to allocate memory!\n");
+			copy_from_user(bk_buf, (void*)curr_stack_start, stack_len);
+			//need rerandomization
+			rerandomization(current);
+			//lock
+			lock_app_slot();
+		}
+	}
+	
+	ret = orig_clone(clone_flags, newsp, parent_tidptr, child_tidptr, tls_val);
+	//child process had returned to ret_from_fork, so we only intercept the parent process
+
+	if(monitor_idx!=0){	
+		if(shuffle_pid!=-1){
+			//modify the child shadow stack belonged info
+			modify_stack_belong(current, current->pid, ret);
+			unlock_app_slot();
+			//allocate the new shadow stack for parent process
+			ss_ret = reallocate_ss(curr_stack_start, curr_stack_end);
+			PRINTK("reallocate shadow stack %lx [%lx-%lx]\n", ss_ret, curr_stack_start, curr_stack_end);
+			//initialize the shadow stack
+			copy_to_user((void*)curr_stack_start, bk_buf, stack_len);
+			vfree(bk_buf);
+			shm_file = get_stack_shm_info(current, &stack_len);
+			//send message to shuffle process
+			send_ss_create_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, shm_file);
+			PRINTK("[%d, %d]%s clone %ld\n", current->pid, pid_vnr(task_pgrp(current)), current->comm, ret);
+		}
+	}
+	
 	return ret;
 }
 

@@ -33,6 +33,7 @@ EXTERN_INTERCPET_FUNC(mq_timedsend);
 
 extern asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, struct sigaction __user *oact, size_t sigsetsize);
 extern asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss);
-
+extern asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
+	int __user * child_tidptr, int tls_val);
 
 #endif

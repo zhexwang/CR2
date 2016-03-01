@@ -85,6 +85,16 @@ int main(int argc, char **argv)
                 //ERR("Register handler: %lx, sigreturn: %lx\n", sighandler_addr, sigreturn_addr);
                 new_pc = CodeVariantManager::handle_sigaction(sighandler_addr, sigreturn_addr, mesg.new_ip);
                 NetLink::send_sigaction_handled_mesg(new_pc, Options::_elf_path);
+            }else if(mesg.connect==CREATE_SS){
+                SIZE ss_len = mesg.cc_offset;
+                std::string shm_path = std::string(mesg.mesg);
+                CodeVariantManager::create_ss(ss_len, shm_path);
+                NetLink::send_ss_handled_mesg(mesg.new_ip, Options::_elf_path);
+            }else if(mesg.connect==FREE_SS){
+                SIZE ss_len = mesg.cc_offset;
+                std::string shm_path = std::string(mesg.mesg);
+                CodeVariantManager::free_ss(ss_len, shm_path);
+                NetLink::send_ss_handled_mesg(mesg.new_ip, Options::_elf_path);
             }else
                 ASSERTM(0, "Unkwon message type %d!\n", mesg.connect);
         };

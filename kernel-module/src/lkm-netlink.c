@@ -30,7 +30,7 @@ void nl_send_msg(int target_pid, MESG_BAG mesg_bag)
 
     res = nlmsg_unicast(nl_sk, skb_out, target_pid);
     if (res < 0)
-        PRINTK("Error while sending to user in %s\n", __FUNCTION__);
+        PRINTK("Error while sending to user (%d) in %s\n", target_pid, __FUNCTION__);
 	else
 		PRINTK("Send mesg to user(%d): %s\n", target_pid, mesg_bag.mesg);
 }
@@ -60,7 +60,7 @@ void nl_recv_msg(struct sk_buff *skb)
 			case DISCONNECT:
 				free_one_shuffle_info(monitor_idx, pid);
 				break;
-			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED:
+			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED: case SS_HANDLED:
 				app_slot_idx = get_app_slot_idx_from_shuffle_config(monitor_idx, pid);
 				start_flag = get_start_flag(app_slot_idx);
 				set_shuffle_pc(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->new_ip);

@@ -38,12 +38,15 @@ typedef struct{
 #define CV1_IS_READY          2 //send by shuffle process
 #define CV2_IS_READY          3 //send by shuffle process
 #define SIGACTION_HANDLED     4 //send by shuffle process
-#define CURR_IS_CV2_NEED_CV1  5 //send by kernel module
-#define CURR_IS_CV1_NEED_CV2  6 //send by kernel module
-#define P_PROCESS_IS_IN       7 //send by kernel module
-#define P_PROCESS_IS_OUT      8 //send by kernel module
-#define SIGACTION_DETECTED    9 //send by kernel module
-#define WRONG_APP             10 //send by kernel module
+#define SS_HANDLED            5 //send by shuffle process
+#define CURR_IS_CV2_NEED_CV1  6 //send by kernel module
+#define CURR_IS_CV1_NEED_CV2  7 //send by kernel module
+#define P_PROCESS_IS_IN       8 //send by kernel module
+#define P_PROCESS_IS_OUT      9 //send by kernel module
+#define SIGACTION_DETECTED    10//send by kernel module
+#define CREATE_SS             11//send by kernel module
+#define FREE_SS               12//send by kernel module
+#define WRONG_APP             13//send by kernel module
 
 class NetLink
 {
@@ -60,6 +63,7 @@ public:
 	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, std::string elf_path);
 	static MESG_BAG recv_mesg();
 	static void send_sigaction_handled_mesg(long new_pc, std::string elf_path);
+	static void send_ss_handled_mesg(long new_pc, std::string elf_path);
 	//if protected process is out, the return value is false
 	static void disconnect_with_lkm(std::string elf_path);
 };

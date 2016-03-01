@@ -38,6 +38,13 @@ public:
 		BOOL cv2_handled;
 	}SIG_INFO;
 	typedef std::map<P_ADDRX, SIG_INFO> SIG_HANDLERS;
+	typedef struct{
+		S_ADDRX ss_base;
+		S_SIZE ss_size;
+		INT32 ss_fd;
+		std::string shm_file;
+	}SS_INFO;
+	typedef std::map<std::string, SS_INFO> SS_MAPS;
 protected:
 	RAND_BBL_MAPS _postion_fixed_rbbl_maps;
 	RAND_BBL_MAPS _movable_rbbl_maps;
@@ -73,12 +80,8 @@ protected:
 	P_SIZE _cc_load_size;
 	//main stack and shadow stack
 	static P_ADDRX _org_stack_load_base;
-	static P_ADDRX _ss_load_base;
-	static P_SIZE _ss_load_size;
 	//shadow stack
-	static S_ADDRX _ss_base;
-	static std::string _ss_shm_path;
-	static INT32 _ss_fd;
+	static SS_MAPS _ss_maps;
 	//static vars
 	static CVM_MAPS _all_cvm_maps;
 	static std::string _code_variant_img_path;
@@ -111,8 +114,8 @@ public:
 		_cc_offset = cc_offset;
 		_ss_offset = ss_offset;
 		_gs_base = gs_base;
-		parse_proc_maps(protected_pid);
-		init_cc_and_ss();
+		parse_proc_maps(protected_pid);//has already create shadow stack
+		init_all_cc();
 	}
 	static BOOL is_code_variant_ready(BOOL is_first_cc)
 	{
@@ -153,6 +156,8 @@ public:
 	{
 		_ss_type = ss_type;
 	}
+	static void create_ss(P_SIZE ss_size, std::string ss_shm_path);
+	static void free_ss(P_SIZE ss_size, std::string ss_shm_path);
 protected:	
 	void patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler_paddrx, P_ADDRX sigreturn_paddrx);
 	static void patch_all_sigaction_entry(BOOL is_first_cc);
@@ -189,7 +194,7 @@ protected:
 	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	//init cc and ss
 	void init_cc();
-	static void init_cc_and_ss();
+	static void init_all_cc();
 	void set_x_load_base(P_ADDRX load_base, P_SIZE load_size)
 	{
 		_org_x_load_base = load_base;
@@ -205,13 +210,6 @@ protected:
 	static void set_stack_load_base(P_ADDRX stack_load_base)
 	{
 		_org_stack_load_base = stack_load_base;
-		ASSERT(_ss_load_base==(_org_stack_load_base-_ss_offset));
-	}
-	static void set_ss_load_info(P_ADDRX ss_load_base, P_SIZE ss_size, std::string ss_shm_path)
-	{
-		_ss_load_base = ss_load_base;
-		_ss_load_size = ss_size;
-		_ss_shm_path = ss_shm_path;
 	}
 	//get functions
 	std::string get_name()
