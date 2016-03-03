@@ -36,4 +36,6 @@ extern asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *us
 extern asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
 	int __user * child_tidptr, int tls_val);
 
+//---------------------setsid------------------------------//
+extern asmlinkage long intercept_setsid(void);
 #endif

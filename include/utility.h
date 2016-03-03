@@ -28,7 +28,7 @@
 #define NOT_IMPLEMENTED(who)        do{ERR("%s() in %s:%-4d is not implemented by %s\n", __FUNCTION__, __FILE__, __LINE__, #who); abort();} while (0)
 
 //#define TRACE_DEBUG
-//#define LAST_RBBL_DEBUG
+#define LAST_RBBL_DEBUG
 
 #else
 #define ASSERT(cond) 

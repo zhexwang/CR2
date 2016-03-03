@@ -89,6 +89,14 @@ void NetLink::send_ss_handled_mesg(long new_pc, std::string elf_path)
     send_mesg(msg_content);
 }
 
+void NetLink::send_dlopen_handled_mesg(long new_pc, std::string elf_path)
+{
+    std::string name = get_real_name_from_path(elf_path);
+    MESG_BAG msg_content = {DLOPEN_HANDLED, 0, new_pc, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Dlopen is handled!"};
+    strcpy(msg_content.app_name, name.c_str());
+    send_mesg(msg_content);
+}
+
 MESG_BAG NetLink::recv_mesg()
 {
 	BLUE("Waiting for message from kernel: ");

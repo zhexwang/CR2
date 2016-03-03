@@ -130,6 +130,7 @@ public:
 	static void separate_movable_bbls_from_all_modules();
 	static void generate_all_relocation_block(LKM_SS_TYPE ss_type);
 	static void init_cvm_from_modules();
+	static Module *get_module_by_name(const char* name);
 #ifdef TRACE_DEBUG
 	static void cmp_bbl_list(std::string path);
 #endif
@@ -174,6 +175,11 @@ public:
 #if defined(_VM)		
 		else if(offset==0x1653e){
 			if(get_name()=="ld-linux-x86-64.so.2")
+				return true;
+			else
+				return false;
+		}else if(offset==0x1f480){
+			if(get_name()=="libc.so.6")
 				return true;
 			else
 				return false;

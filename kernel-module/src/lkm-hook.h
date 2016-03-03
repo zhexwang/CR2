@@ -95,6 +95,11 @@ typedef asmlinkage long (*CLONE_FUNC_TYPE)(unsigned long clone_flags, unsigned l
 	int __user * child_tidptr, int tls_val);
 extern CLONE_FUNC_TYPE orig_clone;
 
+//--------------------setsid syscall-----------------------------//
+typedef asmlinkage long (*SETSID_FUNC_TYPE)(void);
+extern SETSID_FUNC_TYPE orig_setsid;
+
+
 extern void hook_systable(void);
 extern void stop_hook(void);
 extern void init_orig_syscall(void);

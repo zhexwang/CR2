@@ -247,10 +247,31 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
         _dInst.meta &= (~0x7);//FC_NONE        
         _dInst.addr = instr_off;
         dinstcount = 1;
+    }else if(code[0]==0xc7 && code[1]==0xf8 && (*(INT32*)&code[2])==0){//xbeginq
+        _dInst.size = 6;
+        _dInst.opcode = I_UNDEFINED;
+        _dInst.flags = 0;
+        _dInst.meta &= (~0x7);//FC_NONE        
+        _dInst.addr = instr_off;
+        dinstcount = 1;
+    }else if(code[0]==0xc6 && code[1]==0xf8){//xabort
+        _dInst.size = 3;
+        _dInst.opcode = I_UNDEFINED;
+        _dInst.flags = 0;
+        _dInst.meta &= (~0x7);//FC_NONE        
+        _dInst.addr = instr_off;
+        dinstcount = 1;
+    }else if(code[0]==0x0f && code[1]==0x1 && code[2]==0xd5){//xend
+        _dInst.size = 3;
+        _dInst.opcode = I_UNDEFINED;
+        _dInst.flags = 0;
+        _dInst.meta &= (~0x7);//FC_NONE        
+        _dInst.addr = instr_off;
+        dinstcount = 1;
     }else//special handling vfmaddsd
         distorm_decompose(&_ci, &_dInst, 1, &dinstcount);
     ASSERT(_dInst.addr == instr_off);
-    
+
     if(dinstcount==1){
 		switch(META_GET_FC(_dInst.meta)){
             case FC_NONE:
@@ -321,7 +342,7 @@ Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const
                 return new SequenceInstr(_dInst, module);
             }
         }
-        
+
         return NULL;
     }
 }

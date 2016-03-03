@@ -627,7 +627,7 @@ void CodeVariantManager::create_ss(P_SIZE ss_size, std::string ss_shm_path)
 	ASSERT(map_size==ss_size);
     S_SIZE ss_base = map_start + map_size;
 	SS_INFO ss_info = {ss_base, map_size, ss_fd, ss_shm_file};
-    _ss_maps.insert(std::make_pair(ss_shm_path, ss_info));
+    _ss_maps.insert(std::make_pair(ss_shm_file, ss_info));
 }
 
 void CodeVariantManager::free_ss(P_SIZE ss_size, std::string ss_shm_path)
@@ -640,6 +640,31 @@ void CodeVariantManager::free_ss(P_SIZE ss_size, std::string ss_shm_path)
     close_shm_file(ss_info.ss_fd, ss_info.shm_file);
     //erase
     _ss_maps.erase(iter);
+}
+
+void handle_directory_path(std::string &db_path);
+
+void CodeVariantManager::handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, P_SIZE cc_size, \
+    std::string db_path, LKM_SS_TYPE ss_type, std::string lib_path, std::string shm_path)
+{
+    handle_directory_path(db_path);
+    //1.wait for all ready
+    wait_for_code_variant_ready(true);
+    wait_for_code_variant_ready(false);
+    //2.pause gen code variants
+    pause_gen_code_variants();
+    //3.init cvm and generate code variant
+    ASSERTM(!CodeVariantManager::is_added(lib_path), "Should not be handled!\n");
+    CodeVariantManager *cvm = new CodeVariantManager(lib_path);
+    cvm->read_db_files(db_path, ss_type);
+    P_ADDRX cc_base = orig_x_base + CodeVariantManager::_cc_offset;
+    cvm->set_x_load_base(orig_x_base, orig_x_end - orig_x_base);
+    cvm->set_cc_load_info(cc_base, cc_size, get_real_name_from_path(shm_path));
+    cvm->init_cc();
+    cvm->generate_code_variant(true);
+    cvm->generate_code_variant(false);
+    //4.continue 
+    continue_gen_code_variants();
 }
 
 void CodeVariantManager::clean_cc(BOOL is_first_cc)
@@ -971,6 +996,12 @@ void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
     }
 }
 
+BOOL CodeVariantManager::is_added(const std::string elf_path)
+{
+    CVM_MAPS::iterator it = _all_cvm_maps.find(get_real_name_from_path(elf_path));
+    return it!=_all_cvm_maps.end();
+}
+
 void CodeVariantManager::recycle()
 {
     //1. recycle code cache and shm files
@@ -1114,7 +1145,7 @@ void handle_directory_path(std::string &db_path)
         db_path += '/';
 }
 
-static void find_dependence_lib_to_init_cvm(std::string elf_path)
+static void find_dependence_lib_to_init_cvm(std::string elf_path, std::vector<CodeVariantManager*> &cvm_vec)
 {
     // get the path of all dependence libraries
     // 1.generate command string
@@ -1147,8 +1178,8 @@ static void find_dependence_lib_to_init_cvm(std::string elf_path)
             ASSERTM(strstr(path, name), "Name(%s) is not in Path(%s)\n", name, path);
         }
         //construct the CodeVariantManager
-        if((path[0]!='\0'))
-            new CodeVariantManager(std::string(path));
+        if((path[0]!='\0') && !CodeVariantManager::is_added(std::string(path)))
+            cvm_vec.push_back(new CodeVariantManager(std::string(path)));
     }
     free(line_buf);
     // 5.close stream
@@ -1170,50 +1201,55 @@ static std::string get_ss_suffix(LKM_SS_TYPE ss_type)
     }
 }
 
+void CodeVariantManager::read_db_files(std::string db_path, LKM_SS_TYPE ss_type)
+{
+    //1. prepare shadow stack suffix
+    std::string ss_suffix = get_ss_suffix(ss_type);
+    //2. construct the db path
+    std::string cvm_db_path = db_path + get_name() + ss_suffix;
+    //3. open db file
+    INT32 fd = open(cvm_db_path.c_str(), O_RDWR);
+    FATAL(fd==-1, "Open db file %s failed!\n", cvm_db_path.c_str());
+    //4. get map size
+    struct stat statbuf;
+    INT32 ret = fstat(fd, &statbuf);
+    FATAL(ret!=0, "Get %s information failed!\n", cvm_db_path.c_str());
+    SIZE map_size = X86_PAGE_ALIGN_CEIL(statbuf.st_size);
+    //5. map the file
+    void *buf_start = mmap(NULL, map_size, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
+    ASSERT(buf_start!=MAP_FAILED);
+    S_ADDRX read_ptr = (S_ADDRX)buf_start;
+    
+    //6. read cvm information
+    set_ss_type(ss_type);
+     //6.1 read postion fixed rbbl
+    read_ptr += read_rbbls(read_ptr, this, false);
+     //6.2 read movable rbbls
+    read_ptr += read_rbbls(read_ptr, this, true);
+     //6.3 read switch_case jmpin targets
+    read_ptr += read_switch_case_info(read_ptr, this);
+     
+    ASSERT(read_ptr==(statbuf.st_size+(S_ADDRX)buf_start));
+    //7. unmap 
+    ret = munmap(buf_start, map_size);
+    ASSERT(ret==0);
+    //8. close the file
+    close(fd);
+}
+
 void CodeVariantManager::init_from_db(std::string elf_path, std::string db_path, LKM_SS_TYPE ss_type)
 {
     //1. judge the directory is exist or not
     handle_directory_path(db_path);
     //2. construct all cvms
-    new CodeVariantManager(elf_path);
-    find_dependence_lib_to_init_cvm(elf_path);
+    std::vector<CodeVariantManager*> init_cvm_vec;
+    if(!CodeVariantManager::is_added(elf_path))
+        init_cvm_vec.push_back(new CodeVariantManager(elf_path));
+    find_dependence_lib_to_init_cvm(elf_path, init_cvm_vec);
     //3. read db to initialize the code variant manager
-     //3.1 prepare shadow stack suffix
-    std::string ss_suffix = get_ss_suffix(ss_type);
-     //3.2 read db to init all cvms
-    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
-        CodeVariantManager *cvm = iter->second;
-        //3.2.1 construct the db path
-        std::string cvm_name = cvm->get_name();
-        std::string cvm_db_path = db_path + cvm_name + ss_suffix;
-        //3.2.2 open db file
-        INT32 fd = open(cvm_db_path.c_str(), O_RDWR);
-        FATAL(fd==-1, "Open db file %s failed!\n", cvm_db_path.c_str());
-        //3.2.3 get map size
-        struct stat statbuf;
-        INT32 ret = fstat(fd, &statbuf);
-        FATAL(ret!=0, "Get %s information failed!\n", cvm_db_path.c_str());
-        SIZE map_size = X86_PAGE_ALIGN_CEIL(statbuf.st_size);
-        //3.2.4 map the file
-        void *buf_start = mmap(NULL, map_size, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
-        ASSERT(buf_start!=MAP_FAILED);
-        S_ADDRX read_ptr = (S_ADDRX)buf_start;
-        
-        //3.2.5 read cvm information
-        cvm->set_ss_type(ss_type);
-         //3.2.5.1 read postion fixed rbbl
-        read_ptr += read_rbbls(read_ptr, cvm, false);
-         //3.2.5.2 read movable rbbls
-        read_ptr += read_rbbls(read_ptr, cvm, true);
-         //3.2.5.3 read switch_case jmpin targets
-        read_ptr += read_switch_case_info(read_ptr, cvm);
-         
-        ASSERT(read_ptr==(statbuf.st_size+(S_ADDRX)buf_start));
-        //3.2.6 unmap 
-        ret = munmap(buf_start, map_size);
-        ASSERT(ret==0);
-        //3.2.7 close the file
-        close(fd);
+    for(std::vector<CodeVariantManager*>::iterator iter = init_cvm_vec.begin(); iter!=init_cvm_vec.end(); iter++){
+        CodeVariantManager *cvm = *iter;
+        cvm->read_db_files(db_path, ss_type);       
     }
 }
 
@@ -1328,7 +1364,7 @@ void CodeVariantManager::patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler
     S_ADDRX base_saddrx = is_first_cc ? _cc1_base : _cc2_base;
     RBBL_CC_MAPS &rbbl_maps = is_first_cc ? _rbbl_maps1 : _rbbl_maps2;
     S_ADDRX &cc_used_base = is_first_cc ? _cc1_used_base : _cc2_used_base;
-    
+
     if(handler_paddrx>=_org_x_load_base && handler_paddrx<(_org_x_load_base + _org_x_load_size)){
         //1. get offset 
         F_SIZE handler_offset = handler_paddrx - _org_x_load_base;
@@ -1358,17 +1394,17 @@ void CodeVariantManager::patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler
 
 void CodeVariantManager::patch_all_sigaction_entry(BOOL is_first_cc)
 {
-    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
-        CodeVariantManager *cvm = iter->second;
-        for(SIG_HANDLERS::iterator it = _sig_handlers.begin(); it!=_sig_handlers.end(); it++){
-            SIG_INFO &sig_info = it->second;
-            BOOL &handled = is_first_cc ? sig_info.cv1_handled : sig_info.cv2_handled;
-            if(!handled){
-                P_ADDRX handler_paddrx = sig_info.sighandler;
-                P_ADDRX sigreturn_paddrx = find_cc_paddrx_from_all_orig(sig_info.sigreturn, is_first_cc);
+    for(SIG_HANDLERS::iterator it = _sig_handlers.begin(); it!=_sig_handlers.end(); it++){
+        SIG_INFO &sig_info = it->second;
+        BOOL &handled = is_first_cc ? sig_info.cv1_handled : sig_info.cv2_handled;
+        if(!handled){
+            P_ADDRX handler_paddrx = sig_info.sighandler;
+            P_ADDRX sigreturn_paddrx = find_cc_paddrx_from_all_orig(sig_info.sigreturn, is_first_cc);
+            for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+                CodeVariantManager *cvm = iter->second;
                 cvm->patch_sigaction_entry(is_first_cc, handler_paddrx, sigreturn_paddrx);
-                handled = true;
             }
+            handled = true;
         }
     }
 }

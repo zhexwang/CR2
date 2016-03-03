@@ -413,10 +413,12 @@ asmlinkage long intercept_exit_group(ulong error)
 			shuffle_pid  = get_shuffle_pid(app_slot_idx);
 			if(shuffle_pid!=-1){
 				PRINTK("[%d, %d]app_slot_idx: %d, shuffle pid: %d\n", current->pid, pid_vnr(task_pgrp(current)), app_slot_idx, shuffle_pid);
-				if(pid_vnr(task_pgrp(current))!=current->pid){//exit curr process, so we only need clear shadow stack
+				if(decrease_process_sum(current)!=0){//exit curr process, so we only need clear shadow stack
 					stack_shm = get_stack_shm_info(current, &stack_len);
-					send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
-					free_stack_info(current);
+					if(stack_shm){
+						send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
+						free_stack_info(current);
+					}
 				}else{//exit process group
 					send_exit_mesg_to_shuffle_process(current, shuffle_pid);
 					free_app_slot(current);
@@ -523,7 +525,7 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	if(monitor_idx!=0){
 		app_slot_idx = get_ss_info(current, &curr_stack_start, &curr_stack_end);		
 		shuffle_pid = get_shuffle_pid(app_slot_idx);
-		if(shuffle_pid!=-1){
+		if(shuffle_pid!=0){
 			//backup the shadow stack information
 			stack_len = curr_stack_end - curr_stack_start;
 			bk_buf = vmalloc(stack_len);
@@ -532,6 +534,8 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 			copy_from_user(bk_buf, (void*)curr_stack_start, stack_len);
 			//need rerandomization
 			rerandomization(current);
+			//increase num
+			increase_process_sum(current);
 			//lock
 			lock_app_slot();
 		}
@@ -541,7 +545,7 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	//child process had returned to ret_from_fork, so we only intercept the parent process
 
 	if(monitor_idx!=0){	
-		if(shuffle_pid!=-1){
+		if(shuffle_pid!=0){
 			//modify the child shadow stack belonged info
 			modify_stack_belong(current, current->pid, ret);
 			unlock_app_slot();
@@ -559,5 +563,34 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	}
 	
 	return ret;
+}
+
+
+asmlinkage long intercept_setsid(void)
+{
+	long ret;
+	int old_pgid = pid_vnr(task_pgrp(current));
+	PRINTK("[%d, %d] %s in setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
+	ret = orig_setsid();
+	if(is_monitor_app(current->comm)!=0){
+		modify_pgid(current, old_pgid);
+	}
+	PRINTK("[%d, %d] %s out setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
+	return ret;
+	/*
+	int old_pgid = pid_vnr(task_pgrp(current));
+	long ret;
+	//lock_app_slot();
+	
+	ret = orig_setsid();
+	
+	if(is_monitor_app(current->comm)!=0){
+		modify_pgid(current, old_pgid);
+		PRINTK("in setsid!\n");
+	}
+	
+	//unlock_app_slot();
+
+	return ret;*/
 }
 

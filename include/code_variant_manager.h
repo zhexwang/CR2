@@ -94,6 +94,7 @@ public:
 	//get functions
 	CodeVariantManager(std::string module_path);
 	~CodeVariantManager();
+	static BOOL is_added(const std::string elf_path);
 	static void recycle();
 	static void init_from_db(std::string elf_path, std::string db_path, LKM_SS_TYPE ss_type);
 	static RandomBBL *find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
@@ -125,6 +126,8 @@ public:
 	static void consume_cv(BOOL is_first_cc);
 	static void clear_all_cv(BOOL is_first_cc);
 	static void store_into_db(std::string db_path);	
+	static void handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, P_SIZE cc_size, std::string db_path, LKM_SS_TYPE ss_type, \
+		std::string lib_path, std::string shm_path);
 	static P_ADDRX handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc);
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
@@ -159,6 +162,7 @@ public:
 	static void create_ss(P_SIZE ss_size, std::string ss_shm_path);
 	static void free_ss(P_SIZE ss_size, std::string ss_shm_path);
 protected:	
+	void read_db_files(std::string db_path, LKM_SS_TYPE ss_type);
 	void patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler_paddrx, P_ADDRX sigreturn_paddrx);
 	static void patch_all_sigaction_entry(BOOL is_first_cc);
 	static void add_cvm(CodeVariantManager *cvm)

@@ -50,6 +50,9 @@ SIGALTSTACK_FUNC_TYPE orig_sigaltstack = NULL;
 CLONE_FUNC_TYPE orig_clone = NULL;
 void *orig_stub_clone = NULL;
 
+//setsid
+SETSID_FUNC_TYPE orig_setsid = NULL;
+
 /***********************System call table operation*************************/
 // ---------- write to read-only memory with CR0-WP bit manipulation
 static inline unsigned long readcr0(void) {
@@ -393,6 +396,8 @@ void init_orig_syscall(void)
 	//clone
 	orig_stub_clone = get_orig_syscall_addr(__NR_clone);
 	orig_clone = get_orig_clone_from_stub_clone(orig_stub_clone);
+	//setsid
+	orig_setsid = get_orig_syscall_addr(__NR_setsid);
 	/*
     PRINTK("Origin SyS_mmap: %p\n", orig_mmap);	
 	PRINTK("Origin SyS_munmap: %p\n", orig_munmap);	
@@ -421,6 +426,7 @@ void init_orig_syscall(void)
 	PRINTK("Origin SyS_rt_sigaction: %p\n", orig_rt_sigaction);	
 	PRINTK("Origin SyS_sigaltstack: %p\n", orig_sigaltstack);	
 	PRINTK("Origin SyS_clone: %p\n", orig_clone);	*/
+	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);
 }
 
 void hook_systable(void)
@@ -451,6 +457,8 @@ void hook_systable(void)
 	rewrite_systable_entry(__NR_sigaltstack, (void*)intercept_sigaltstack);
 #endif
 	rewrite_systable_entry(__NR_clone, (void*)intercept_stub_clone);
+	//hack setsid
+	rewrite_systable_entry(__NR_setsid, (void*)intercept_setsid);
 
 	return ;
 }
@@ -484,6 +492,8 @@ void stop_hook(void)
 	rewrite_systable_entry(__NR_sigaltstack, (void*)orig_sigaltstack);
 #endif
 	rewrite_systable_entry(__NR_clone, (void*)orig_stub_clone);
+	//write back setsid
+	rewrite_systable_entry(__NR_setsid, (void*)orig_setsid);
 
 	return ;	
 }

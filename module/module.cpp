@@ -359,6 +359,7 @@ void Module::generate_all_relocation_block(LKM_SS_TYPE ss_type)
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
         Module *module = it->second;
+        //ERR("%s\n", module->get_name().c_str());
         module->generate_relocation_block(ss_type);
     }
 }

@@ -13,6 +13,11 @@ extern char is_monitor_app(const char *name);
 extern void init_monitor_app_list(void);
 
 extern int get_cc_id(struct task_struct *ts);
+extern void modify_pgid(struct task_struct *ts, int old_pgid);
+extern int get_process_sum(struct task_struct *ts);
+extern int increase_process_sum(struct task_struct *ts);
+extern int decrease_process_sum(struct task_struct *ts);
+
 extern char init_app_slot(struct task_struct *ts);
 extern void free_app_slot(struct task_struct *ts);
 extern void set_io_in(struct task_struct *ts, int sys_no, char value);
@@ -26,10 +31,11 @@ extern ulong get_shuffle_pc(char app_slot_idx);
 extern volatile char *get_start_flag(char app_slot_idx);
 extern int get_shuffle_pid(char app_slot_idx);
 extern long set_app_start(struct task_struct *ts);
-extern void insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const char *file);
+extern char is_app_start(struct task_struct *ts);
+extern char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const char *file);
 extern void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file);
 extern char *get_stack_shm_info(struct task_struct *ts, long *stack_len);
-extern int get_stack_sum(struct task_struct *ts);
+extern int get_stack_number(struct task_struct *ts);
 extern void modify_stack_belong(struct task_struct *ts, int old_pid, int new_pid);
 extern void free_stack_info(struct task_struct *ts);
 extern char get_ss_info(struct task_struct *ts, long *stack_start, long *stack_end);
