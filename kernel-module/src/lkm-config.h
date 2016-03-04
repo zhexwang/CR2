@@ -26,6 +26,9 @@
 #define _START_RAX 0x1c
 #define CHECK_ENCODE_LEN 7
 
+#define MAX_PGID_NUM 2
+#define MAX_STACK_NUM 10
+#define MAX_X_NUM 15
 #define MAX_APP_LIST_NUM 35
 #define MAX_SHUFFLE_NUM_FOR_ONE_APP 4
 //we only support run less than 4 same protected application at the same time

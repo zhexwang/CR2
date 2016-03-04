@@ -35,13 +35,16 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 	MESG_BAG msg = {DLOPEN, ts->pid, regs->ip, orig_x_start, orig_x_end, cc_size, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, lib_path);
 	strcpy(msg.mesg, shm_file);
-	nl_send_msg(shuffle_pid, msg);
-	
-	*start_flag = 1;
-	while(*start_flag){
-		schedule();
+
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+		
+		*start_flag = 1;
+		while(*start_flag){
+			schedule();
+		}
+		regs->ip = get_shuffle_pc(app_slot_idx);
 	}
-	regs->ip = get_shuffle_pc(app_slot_idx);
 	
 	return ;	
 }

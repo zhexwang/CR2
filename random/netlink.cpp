@@ -101,6 +101,19 @@ MESG_BAG NetLink::recv_mesg()
 {
 	BLUE("Waiting for message from kernel: ");
     recvmsg(sock_fd, &msg, 0);
+    switch((*(MESG_BAG*)NLMSG_DATA(nlh)).connect){
+        case CREATE_SS:
+            BLUE("Create Shadow Stack: ");
+            break;
+        case FREE_SS:
+            BLUE("Free Shadow Stack: ");
+            break;
+        case DLOPEN:
+            BLUE("Dlopen: ");
+            break;
+        default:
+            break;
+    }
     BLUE("%s\n", (*(MESG_BAG*)NLMSG_DATA(nlh)).mesg);
     return *(MESG_BAG*)NLMSG_DATA(nlh);
 }

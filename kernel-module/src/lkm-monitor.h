@@ -13,7 +13,7 @@ extern char is_monitor_app(const char *name);
 extern void init_monitor_app_list(void);
 
 extern int get_cc_id(struct task_struct *ts);
-extern void modify_pgid(struct task_struct *ts, int old_pgid);
+extern void create_new_sid(struct task_struct *ts, int old_pgid);
 extern int get_process_sum(struct task_struct *ts);
 extern int increase_process_sum(struct task_struct *ts);
 extern int decrease_process_sum(struct task_struct *ts);
@@ -37,7 +37,8 @@ extern void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end
 extern char *get_stack_shm_info(struct task_struct *ts, long *stack_len);
 extern int get_stack_number(struct task_struct *ts);
 extern void modify_stack_belong(struct task_struct *ts, int old_pid, int new_pid);
-extern void free_stack_info(struct task_struct *ts);
+extern void free_stack_info(int pgid, int pid);
+extern void free_dead_stack(struct task_struct *ts);
 extern char get_ss_info(struct task_struct *ts, long *stack_start, long *stack_end);
 
 extern void lock_app_slot(void);

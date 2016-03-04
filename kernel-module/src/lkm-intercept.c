@@ -381,13 +381,16 @@ void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_
 	MESG_BAG msg = {FREE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
-	nl_send_msg(shuffle_pid, msg);
 	
-	*start_flag = 1;
-	while(*start_flag){
-		schedule();
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+	
+		*start_flag = 1;
+		while(*start_flag){
+			schedule();
+		}
+		regs->ip = get_shuffle_pc(app_slot_idx);
 	}
-	regs->ip = get_shuffle_pc(app_slot_idx);
 	
 	return ;	
 }
@@ -411,13 +414,12 @@ asmlinkage long intercept_exit_group(ulong error)
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
 			app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
 			shuffle_pid  = get_shuffle_pid(app_slot_idx);
-			if(shuffle_pid!=-1){
-				PRINTK("[%d, %d]app_slot_idx: %d, shuffle pid: %d\n", current->pid, pid_vnr(task_pgrp(current)), app_slot_idx, shuffle_pid);
+			if(shuffle_pid!=0){
 				if(decrease_process_sum(current)!=0){//exit curr process, so we only need clear shadow stack
 					stack_shm = get_stack_shm_info(current, &stack_len);
 					if(stack_shm){
 						send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
-						free_stack_info(current);
+						free_stack_info(pid_vnr(task_pgrp(current)), current->pid);
 					}
 				}else{//exit process group
 					send_exit_mesg_to_shuffle_process(current, shuffle_pid);
@@ -454,14 +456,16 @@ void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 	MESG_BAG msg = {SIGACTION_DETECTED, ts->pid, regs->ip, handler_addr, sigreturn_addr, \
 		GS_BASE, global_ss_type, "\0", "handle sigaction handler and sigreturn!"};
 	strcpy(msg.app_name, ts->comm);
-	nl_send_msg(shuffle_pid, msg);
 	
-	*start_flag = 1;
-	while(*start_flag){
-		schedule();
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+		
+		*start_flag = 1;
+		while(*start_flag){
+			schedule();
+		}
+		regs->ip = get_shuffle_pc(app_slot_idx);
 	}
-	regs->ip = get_shuffle_pc(app_slot_idx);
-	
 	return ;
 }
 
@@ -474,6 +478,7 @@ asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, st
 	struct pt_regs *regs = task_pt_regs(current);
 	if(monitor_idx!=0){
 		PRINTK("[%d]%s had rt_sigaction, pc = %lx\n", current->pid, current->comm, regs->ip);
+		
 		//modify the handler address and sigreturn address
 		app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
 		shuffle_pid = get_shuffle_pid(app_slot_idx);
@@ -498,14 +503,15 @@ void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 	MESG_BAG msg = {CREATE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
-	nl_send_msg(shuffle_pid, msg);
-	
-	*start_flag = 1;
-	while(*start_flag){
-		schedule();
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+		
+		*start_flag = 1;
+		while(*start_flag){
+			schedule();
+		}
+		regs->ip = get_shuffle_pc(app_slot_idx);
 	}
-	regs->ip = get_shuffle_pc(app_slot_idx);
-	
 	return ;	
 }
 
@@ -549,6 +555,8 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 			//modify the child shadow stack belonged info
 			modify_stack_belong(current, current->pid, ret);
 			unlock_app_slot();
+			//free dead processes's shadow stack <handled for nginx server>
+			free_dead_stack(current);
 			//allocate the new shadow stack for parent process
 			ss_ret = reallocate_ss(curr_stack_start, curr_stack_end);
 			PRINTK("reallocate shadow stack %lx [%lx-%lx]\n", ss_ret, curr_stack_start, curr_stack_end);
@@ -570,27 +578,12 @@ asmlinkage long intercept_setsid(void)
 {
 	long ret;
 	int old_pgid = pid_vnr(task_pgrp(current));
-	PRINTK("[%d, %d] %s in setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
 	ret = orig_setsid();
 	if(is_monitor_app(current->comm)!=0){
-		modify_pgid(current, old_pgid);
+		PRINTK("[%d, %d] %s in setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
+		create_new_sid(current, old_pgid);
+		PRINTK("[%d, %d] %s out setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
 	}
-	PRINTK("[%d, %d] %s out setsid\n", current->pid, pid_vnr(task_pgrp(current)), current->comm);
 	return ret;
-	/*
-	int old_pgid = pid_vnr(task_pgrp(current));
-	long ret;
-	//lock_app_slot();
-	
-	ret = orig_setsid();
-	
-	if(is_monitor_app(current->comm)!=0){
-		modify_pgid(current, old_pgid);
-		PRINTK("in setsid!\n");
-	}
-	
-	//unlock_app_slot();
-
-	return ret;*/
 }
 

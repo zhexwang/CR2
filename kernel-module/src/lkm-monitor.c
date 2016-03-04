@@ -204,7 +204,7 @@ typedef struct{
 }STACK_REGION;
 
 typedef struct{
-	int pgid;
+	int pgid[MAX_PGID_NUM];//setsid
 	int shuffle_pid;
 	int process_sum;
 	int ss_number;
@@ -216,17 +216,48 @@ typedef struct{
 	char app_name[256];
 	char start_instr_encode[7];
 	IO_MONITOR im;//use to monitor  
-	X_REGION xr[15];
-	STACK_REGION sr[15];	
+	X_REGION xr[MAX_X_NUM];
+	STACK_REGION sr[MAX_STACK_NUM];	
 }APP_SLOT;
 
 APP_SLOT app_slot_list[MAX_APP_SLOT_LIST_NUM];
+
+int is_pgid_matched(char app_slot_idx, int pgid)
+{
+	int index = 0;
+	for(index=0; index<MAX_PGID_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].pgid[index]==pgid)
+			return 1;
+	}
+	return 0;
+}
+
+int is_pgid_empty(char app_slot_idx)
+{
+	int index = 0;
+	for(index=0; index<MAX_PGID_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].pgid[index]!=0)
+			return 0;
+	}
+	return 1;
+}
+
+void add_a_new_pgid(char app_slot_idx, int pgid)
+{
+	int index = 0;
+	for(index=0; index<MAX_PGID_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].pgid[index]==0){
+			app_slot_list[(int)app_slot_idx].pgid[index] = pgid;
+			return ;
+		}
+	}
+}
 
 int get_cc_id(struct task_struct *ts)
 {
 	int index = 0;
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts)))
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts))))
 			return app_slot_list[index].cc_id;
 	}
 	return -1;
@@ -237,7 +268,7 @@ int get_process_sum(struct task_struct *ts)
 	int index = 0;
 	spin_lock(&app_slot_lock);
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			spin_unlock(&app_slot_lock);
 			return app_slot_list[index].process_sum;
 		}
@@ -247,16 +278,19 @@ int get_process_sum(struct task_struct *ts)
 	return 0;
 }
 
-void modify_pgid(struct task_struct *ts, int old_pgid)
+void create_new_sid(struct task_struct *ts, int old_pgid)
 {
 	int index = 0;
+	spin_lock(&app_slot_lock);
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==old_pgid){
-			app_slot_list[index].pgid = pid_vnr(task_pgrp(ts));
+		if(is_pgid_matched(index, old_pgid)){
+			add_a_new_pgid(index, pid_vnr(task_pgrp(ts)));
+			spin_unlock(&app_slot_lock);
 			return ;
 		}
 	}
 	PRINTK("find no app slot in %s\n", __FUNCTION__);
+	spin_unlock(&app_slot_lock);
 	return ;
 }
 
@@ -265,7 +299,7 @@ int increase_process_sum(struct task_struct *ts)
 	int index = 0;
 	spin_lock(&app_slot_lock);
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			app_slot_list[index].process_sum++;
 			spin_unlock(&app_slot_lock);
 			return app_slot_list[index].process_sum;
@@ -281,7 +315,7 @@ int decrease_process_sum(struct task_struct *ts)
 	int index = 0;
 	spin_lock(&app_slot_lock);
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			app_slot_list[index].process_sum--;
 			spin_unlock(&app_slot_lock);
 			return app_slot_list[index].process_sum;
@@ -298,8 +332,8 @@ char init_app_slot(struct task_struct *ts)
 	PRINTK("execve %s\n", ts->comm);
 	// 1.find a free slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==0){
-			app_slot_list[index].pgid = pid_vnr(task_pgrp(ts));
+		if(is_pgid_empty(index)){
+			add_a_new_pgid(index, pid_vnr(task_pgrp(ts)));
 			app_slot_list[index].shuffle_pid = 0;
 			app_slot_list[index].ss_number = 0;
 			app_slot_list[index].process_sum = 1;
@@ -311,8 +345,8 @@ char init_app_slot(struct task_struct *ts)
 			strcpy(app_slot_list[index].app_name, ts->comm);
 			memset((void*)&(app_slot_list[index].start_instr_encode), 11, sizeof(char));
 			memset((void*)&(app_slot_list[index].im), 0, sizeof(IO_MONITOR));
-			memset((void*)&(app_slot_list[index].xr[0]), 0, 15*sizeof(X_REGION));
-			memset((void*)&(app_slot_list[index].sr[0]), 0, 15*sizeof(STACK_REGION));
+			memset((void*)&(app_slot_list[index].xr[0]), 0, MAX_X_NUM*sizeof(X_REGION));
+			memset((void*)&(app_slot_list[index].sr[0]), 0, MAX_STACK_NUM*sizeof(STACK_REGION));
 			return index;
 		}
 	}
@@ -324,7 +358,7 @@ void free_app_slot(struct task_struct *ts)
 	spin_lock(&app_slot_lock);
 	//find the slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			memset((void*)(&app_slot_list[index]), 0, sizeof(APP_SLOT));
 			spin_unlock(&app_slot_lock);
 			return ;
@@ -340,7 +374,7 @@ void set_io_in(struct task_struct *ts, int sys_no, char value)
 	spin_lock(&app_slot_lock);
 	// 1.find a free slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			switch(sys_no){
 				case __NR_write: app_slot_list[index].im.has_write = value; spin_unlock(&app_slot_lock); return;
 				case __NR_pwrite64: app_slot_list[index].im.has_pwrite64 = value; spin_unlock(&app_slot_lock); return;
@@ -365,7 +399,7 @@ char has_io_in(struct task_struct *ts, int sys_no)
 	spin_lock(&app_slot_lock);
 	// 1.find a free slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			switch(sys_no){
 				case __NR_write: spin_unlock(&app_slot_lock); return app_slot_list[index].im.has_write;
 				case __NR_pwrite64: spin_unlock(&app_slot_lock); return app_slot_list[index].im.has_pwrite64;
@@ -391,7 +425,7 @@ char *get_start_encode_and_set_entry(struct task_struct *ts, long program_entry)
 	spin_lock(&app_slot_lock); 
 	// 1.find the  encode
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			app_slot_list[index].program_entry = program_entry;
 			spin_unlock(&app_slot_lock); 
 			return app_slot_list[index].start_instr_encode;
@@ -410,7 +444,7 @@ char *is_checkpoint(struct task_struct *ts, char *app_slot_idx)
 	spin_lock(&app_slot_lock); 
 	// 1.find the  encode
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			*app_slot_idx = index;
 			if(app_slot_list[index].program_entry == (curr_rip-CHECK_ENCODE_LEN)){
 				spin_unlock(&app_slot_lock); 
@@ -434,7 +468,7 @@ char get_app_slot_idx(int pgid)
 	spin_lock(&app_slot_lock); 
 	// 1.find a free slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++)
-		if(app_slot_list[index].pgid==pgid){
+		if(is_pgid_matched(index, pgid)){
 			spin_unlock(&app_slot_lock); 
 			return index;
 		}
@@ -476,7 +510,7 @@ long set_app_start(struct task_struct *ts)
 	int index;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			app_slot_list[index].executed_start = 1;
 			spin_unlock(&app_slot_lock); 
 			return app_slot_list[index].program_entry;
@@ -492,7 +526,7 @@ char is_app_start(struct task_struct *ts)
 	int index;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			spin_unlock(&app_slot_lock); 
 			return app_slot_list[index].executed_start;
 		}
@@ -508,8 +542,8 @@ char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const cha
 	int internal_index = 0;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
-			for(internal_index=0; internal_index<15; internal_index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			for(internal_index=0; internal_index<MAX_X_NUM; internal_index++){
 				if(app_slot_list[index].xr[internal_index].cc_start==0){
 					app_slot_list[index].xr[internal_index].cc_start = cc_start;
 					app_slot_list[index].xr[internal_index].cc_end = cc_end;
@@ -531,9 +565,9 @@ void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const
 	int internal_index = 0;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			app_slot_list[index].ss_number++;
-			for(internal_index=0; internal_index<15; internal_index++){
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
 				if(app_slot_list[index].sr[internal_index].belong_pid==0){
 					app_slot_list[index].sr[internal_index].ss_region_start = ss_start;
 					app_slot_list[index].sr[internal_index].ss_region_end = ss_end;
@@ -556,8 +590,8 @@ char *get_stack_shm_info(struct task_struct *ts, long *stack_len)
 	int internal_index = 0;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
-			for(internal_index=0; internal_index<15; internal_index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
 				if(app_slot_list[index].sr[internal_index].belong_pid==ts->pid){
 					*stack_len = app_slot_list[index].sr[internal_index].ss_region_end - \
 						app_slot_list[index].sr[internal_index].ss_region_start;
@@ -587,8 +621,8 @@ void modify_stack_belong(struct task_struct *ts, int old_pid, int new_pid)
 	int index;
 	int internal_index = 0;
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
-			for(internal_index=0; internal_index<15; internal_index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
 				if(app_slot_list[index].sr[internal_index].belong_pid==old_pid){
 					if(app_slot_list[index].sr[internal_index].ss_region_start==0)
 						PRINTK("%s modify stack belong error (old pid: %d, new pid %d): find no shadow stack!\n", ts->comm, old_pid, new_pid);
@@ -608,7 +642,7 @@ int get_stack_number(struct task_struct *ts)
 	int index;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			spin_unlock(&app_slot_lock);
 			return app_slot_list[index].ss_number;
 		}
@@ -624,8 +658,8 @@ char get_ss_info(struct task_struct *ts, long *stack_start, long *stack_end)
 	int internal_index = 0;
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
-			for(internal_index=0; internal_index<15; internal_index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
 				if(app_slot_list[index].sr[internal_index].belong_pid==ts->pid){
 					*stack_start = app_slot_list[index].sr[internal_index].ss_region_start;
 					*stack_end = app_slot_list[index].sr[internal_index].ss_region_end;
@@ -640,16 +674,16 @@ char get_ss_info(struct task_struct *ts, long *stack_start, long *stack_end)
 	return -1;
 }
 
-void free_stack_info(struct task_struct *ts)
+void free_stack_info(int pgid, int pid)
 {
 	int index;
 	int internal_index = 0;
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
-			for(internal_index=0; internal_index<15; internal_index++){
-				if(app_slot_list[index].sr[internal_index].belong_pid==ts->pid){
+		if(is_pgid_matched(index, pgid)){
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
+				if(app_slot_list[index].sr[internal_index].belong_pid==pid){
 					if(app_slot_list[index].sr[internal_index].ss_region_start==0)
-						PRINTK("%s free stack error): find no shadow stack!\n", ts->comm);
+						PRINTK("%s free stack error): find no shadow stack!\n", current->comm);
 					else
 						memset((void*)&app_slot_list[index].sr[internal_index], 0, sizeof(STACK_REGION)); 
 					return;
@@ -660,6 +694,67 @@ void free_stack_info(struct task_struct *ts)
 	PRINTK("find no app slot in %s\n", __FUNCTION__);
 	return ;
 }
+
+int is_process_exist(int pid, char *comm)
+{
+	struct task_struct *task;  
+	for_each_process(task)  
+	{
+		if(task->pid==pid && !strcmp(task->comm, comm))
+			return 1;
+	}
+	
+	//PRINTK("%s(%d) is not exist\n", comm, pid);
+	return 0;
+}
+
+typedef struct {
+	int pid;
+	int stack_len;
+	int stack_idx;
+	char *shm_file;
+}SAVED_STACK_INFO;
+extern void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, \
+	int shuffle_pid, long stack_len, char *shm_file);
+
+void free_dead_stack(struct task_struct *ts)
+{
+	int index;
+	int internal_index = 0;
+	SAVED_STACK_INFO ss_array[MAX_STACK_NUM];
+	int array_sum = 0;
+	int array_idx = 0;
+	spin_lock(&app_slot_lock); 
+	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			//scan all pid
+			for(internal_index=0; internal_index<MAX_STACK_NUM; internal_index++){
+				if(app_slot_list[index].sr[internal_index].belong_pid!=0){
+					ss_array[array_sum++] = (SAVED_STACK_INFO){app_slot_list[index].sr[internal_index].belong_pid, \
+						app_slot_list[index].sr[internal_index].ss_region_end - app_slot_list[index].sr[internal_index].ss_region_start, \
+						internal_index, app_slot_list[index].sr[internal_index].shfile};
+					//PRINTK("find dead stack belong to %d\n", app_slot_list[index].sr[internal_index].belong_pid);
+				}
+			}
+			spin_unlock(&app_slot_lock); 
+			//judge the pid is exist or not
+			for(array_idx = 0; array_idx<array_sum; array_idx++){
+				if(!is_process_exist(ss_array[array_idx].pid, ts->comm)){
+					//send message
+					send_ss_free_mesg_to_shuffle_process(ts, index, app_slot_list[index].shuffle_pid, ss_array[array_idx].stack_len, \
+						ss_array[array_idx].shm_file);
+					//free
+					memset((void*)&app_slot_list[index].sr[ss_array[array_idx].stack_idx], 0, sizeof(STACK_REGION)); 
+				}
+			}
+			return ;
+		}
+	}
+	PRINTK("find no app slot in %s\n", __FUNCTION__);
+	spin_unlock(&app_slot_lock); 
+	return ;
+}
+
 
 /**************************rerandomization and communication with shuffle process**************************/
 
@@ -697,11 +792,11 @@ void rerandomization(struct task_struct *ts)
 	// 1.remap the code cache
 	spin_lock(&app_slot_lock); 
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
-		if(app_slot_list[index].pgid==pid_vnr(task_pgrp(ts))){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			curr_cc_id = app_slot_list[index].cc_id;
 			shuffle_pid = app_slot_list[index].shuffle_pid;
 			app_slot_list[index].cc_id = curr_cc_id==0 ? 1 : 0;
-			for(internal_index = 0; internal_index<15; internal_index++){
+			for(internal_index = 0; internal_index<MAX_X_NUM; internal_index++){
 				cc_start = app_slot_list[index].xr[internal_index].cc_start;
 				cc_end = app_slot_list[index].xr[internal_index].cc_end;
 				if(cc_start!=0){
