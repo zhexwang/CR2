@@ -26,15 +26,14 @@
 #define ASSERT(cond)       do{if(!(cond)) {ERR("ASSERT failed: %s:%-4d ", __FILE__, __LINE__); abort();}}while(0)
 #define ASSERTM(cond, format, ...) do{if(!(cond)) {ERR("ASSERT failed: %s:%-4d "format, __FILE__, __LINE__, ## __VA_ARGS__); abort();}}while(0)
 #define NOT_IMPLEMENTED(who)        do{ERR("%s() in %s:%-4d is not implemented by %s\n", __FUNCTION__, __FILE__, __LINE__, #who); abort();} while (0)
-
-//#define TRACE_DEBUG
-#define LAST_RBBL_DEBUG
-
 #else
 #define ASSERT(cond) 
 #define ASSERTM(cond, format, ...) 
 #define NOT_IMPLEMENTED(who)       
 #endif
+
+//#define TRACE_DEBUG
+#define LAST_RBBL_DEBUG
 
 //bits define
 #define BITS_ARE_SET_ANY(value, bits)	   ( ((value)&(bits)) != 0 )

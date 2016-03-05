@@ -99,6 +99,8 @@ long allocate_cc_fixed(long orig_x_start, long orig_x_end, const char *orig_name
 	return cc_ret;
 }
 
+extern void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, long stack_len, char *shm_file);
+
 long allocate_ss_fixed(long orig_stack_start, long orig_stack_end)
 {
 	int ss_fd = 0;
@@ -109,15 +111,21 @@ long allocate_ss_fixed(long orig_stack_start, long orig_stack_end)
 	int curr_sum = get_stack_number(current);
 	char *file_name = get_filename_from_path(current->comm);
 	int curr_pid = current->pid;
+	char app_slot_idx = -1;
+	int shuffle_pid = 0;
 	
 	sprintf(shm_path, "/dev/shm/%d-%d-%s.ss", curr_pid, curr_sum, file_name);
 	ss_fd = open_shm_file(shm_path);
 	orig_ftruncate(ss_fd, ss_size);
 	ss_ret = orig_mmap(ss_start, ss_size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FIXED, ss_fd, 0);
 
-	insert_stack_info(current, ss_ret, ss_ret+ss_size, shm_path);
+	app_slot_idx = insert_stack_info(current, ss_ret, ss_ret+ss_size, shm_path);
 	close_shm_file(ss_fd);
-	//TODO: send mesg to shuffle process
+	
+	if(is_app_start(current)){//send message to shuffle process, dlopen
+		shuffle_pid = get_shuffle_pid(app_slot_idx);
+		send_ss_create_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, ss_size, shm_path);
+	}
 	return ss_ret;
 }
 

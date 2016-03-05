@@ -279,7 +279,7 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff){
 	long ret = 0;
 	long cc_ret = 0;
-	//long ss_ret = 0;
+	long ss_ret = 0;
 	int procid = current->pid;
 	// insert the new element into the mapping table
 	if(is_monitor_app(current->comm)){
@@ -301,8 +301,8 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 			}
 		}else if((flags&MAP_STACK) && addr==0){
 			ret = orig_mmap(addr, len, prot, flags, fd, pgoff);
-			//ss_ret = allocate_ss_fixed(ret, ret+len);
-			//PRINTK("[LKM]allocate child shadow stack (%lx)\n", ss_ret);
+			ss_ret = allocate_ss_fixed(ret, ret+len);
+			PRINTK("[LKM]allocate child shadow stack (%lx)\n", ss_ret);
 		}else
 			ret = orig_mmap(addr, len, prot, flags, fd, pgoff);
 	}else
@@ -415,20 +415,18 @@ asmlinkage long intercept_exit_group(ulong error)
 			app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
 			if(app_slot_idx!=-1){
 				shuffle_pid  = get_shuffle_pid(app_slot_idx);
-				//if(shuffle_pid!=0){
-					if(decrease_process_sum(current)!=0){//exit curr process, so we only need clear shadow stack
-						stack_shm = get_stack_shm_info(current, &stack_len);
-						if(stack_shm){
-							send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
-							free_stack_info(pid_vnr(task_pgrp(current)), current->pid);
-						}
-						PRINTK("free_stack_info!\n");
-					}else{//exit process group
-						send_exit_mesg_to_shuffle_process(current, shuffle_pid);
-						free_app_slot(current);
-						PRINTK("free_app_slot!\n");
+				if(decrease_process_sum(current)!=0){//exit curr process, so we only need clear shadow stack
+					stack_shm = get_stack_shm_info(current, &stack_len);
+					if(stack_shm){
+						send_ss_free_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, stack_len, stack_shm);
+						free_stack_info(pid_vnr(task_pgrp(current)), current->pid);
 					}
-				//}
+					PRINTK("free_stack_info!\n");
+				}else{//exit process group
+					send_exit_mesg_to_shuffle_process(current, shuffle_pid);
+					free_app_slot(current);
+					PRINTK("free_app_slot!\n");
+				}
 			}
 		}
 	}
@@ -535,11 +533,15 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	if(monitor_idx!=0){
 		app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current))); 
 		if(app_slot_idx!=-1){
-			//increase num
-			increase_process_sum(current);
 			shuffle_pid = get_shuffle_pid(app_slot_idx);			
-			//PRINTK("after get_shuffle_pid!\n");
-			if(shuffle_pid!=0){
+			if(BITS_ARE_CLEAR(clone_flags, CLONE_VM)){				
+				//increase num
+				increase_process_sum(current);
+			}
+
+			if(shuffle_pid!=0 && BITS_ARE_CLEAR(clone_flags, CLONE_VM)){//fork process
+				//need rerandomization
+				rerandomization(current);
 				get_ss_info(current, &curr_stack_start, &curr_stack_end);
 				//backup the shadow stack information
 				stack_len = curr_stack_end - curr_stack_start;
@@ -547,8 +549,6 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 				if(!bk_buf)
 					PRINTK("error! failed to allocate memory!\n");
 				copy_from_user(bk_buf, (void*)curr_stack_start, stack_len);
-				//need rerandomization
-				rerandomization(current);
 				//lock
 				lock_app_slot();
 			}
@@ -559,7 +559,7 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	//child process had returned to ret_from_fork, so we only intercept the parent process
 
 	if(monitor_idx!=0){	
-		if(app_slot_idx!=-1 && shuffle_pid!=0){
+		if(app_slot_idx!=-1 && shuffle_pid!=0 && BITS_ARE_CLEAR(clone_flags, CLONE_VM)){
 			//modify the child shadow stack belonged info
 			modify_stack_belong(current, current->pid, ret);
 			unlock_app_slot();

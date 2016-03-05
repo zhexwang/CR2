@@ -559,7 +559,7 @@ char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const cha
 	return index;
 }
 
-void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file)
+char insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file)
 {
 	int index;
 	int internal_index = 0;
@@ -574,14 +574,14 @@ void insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const
 					app_slot_list[index].sr[internal_index].belong_pid = ts->pid;
 					strcpy(app_slot_list[index].sr[internal_index].shfile, file);
 					spin_unlock(&app_slot_lock); 
-					return;
+					return index;
 				}
 			}
 		}
 	}
 	PRINTK("find no app slot in %s\n", __FUNCTION__);
 	spin_unlock(&app_slot_lock); 
-	return ;
+	return -1;
 }
 
 char *get_stack_shm_info(struct task_struct *ts, long *stack_len)
@@ -777,6 +777,50 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 	}
 }
 
+void block_all_processes(struct task_struct *ts)
+{
+	int index = 0;
+	struct task_struct *task;
+	//struct pt_regs *regs = task_pt_regs(ts);
+	// 1.remap the code cache
+	spin_lock(&app_slot_lock); 
+	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){//find app slot idx
+			for_each_process(task)  
+			{
+				if(!strcmp(task->comm, ts->comm) && is_pgid_matched(index, pid_vnr(task_pgrp(task)))){
+					set_task_state(task, TASK_STOPPED);
+				}
+			}
+			break;
+		}
+	}
+	spin_unlock(&app_slot_lock); 	
+}
+
+
+void wake_all_processes(struct task_struct *ts)
+{
+	int index = 0;
+	struct task_struct *task;
+	//struct pt_regs *regs = task_pt_regs(ts);
+	// 1.remap the code cache
+	spin_lock(&app_slot_lock); 
+	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){//find app slot idx
+			for_each_process(task)  
+			{
+				if(!strcmp(task->comm, ts->comm) && is_pgid_matched(index, pid_vnr(task_pgrp(task)))){
+					wake_up_process(task);
+					set_task_state(task, TASK_RUNNING);
+				}
+			}
+			break;
+		}
+	}
+	spin_unlock(&app_slot_lock); 	
+}
+
 void rerandomization(struct task_struct *ts)
 {
 	return ;
@@ -816,6 +860,7 @@ void rerandomization(struct task_struct *ts)
 }
 
 /*************************Below functions are used to stop and wakeup processes******************************************/
+
 long saved_state = 0;
 
 void stop_all(void)
