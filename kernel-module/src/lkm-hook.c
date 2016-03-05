@@ -425,8 +425,8 @@ void init_orig_syscall(void)
 	PRINTK("Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);	
 	PRINTK("Origin SyS_rt_sigaction: %p\n", orig_rt_sigaction);	
 	PRINTK("Origin SyS_sigaltstack: %p\n", orig_sigaltstack);	
-	PRINTK("Origin SyS_clone: %p\n", orig_clone);	*/
-	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);
+	PRINTK("Origin SyS_clone: %p\n", orig_clone);	
+	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);*/
 }
 
 void hook_systable(void)

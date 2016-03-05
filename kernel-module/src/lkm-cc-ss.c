@@ -108,8 +108,9 @@ long allocate_ss_fixed(long orig_stack_start, long orig_stack_end)
 	char shm_path[256];
 	int curr_sum = get_stack_number(current);
 	char *file_name = get_filename_from_path(current->comm);
+	int curr_pid = current->pid;
 	
-	sprintf(shm_path, "/dev/shm/%d-%s.ss", curr_sum, file_name);
+	sprintf(shm_path, "/dev/shm/%d-%d-%s.ss", curr_pid, curr_sum, file_name);
 	ss_fd = open_shm_file(shm_path);
 	orig_ftruncate(ss_fd, ss_size);
 	ss_ret = orig_mmap(ss_start, ss_size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FIXED, ss_fd, 0);
@@ -128,8 +129,9 @@ long reallocate_ss(long ss_start, long ss_end)
 	char shm_path[256];
 	int curr_sum = get_stack_number(current);
 	char *file_name = get_filename_from_path(current->comm);
+	int curr_pid = current->pid;
 	
-	sprintf(shm_path, "/dev/shm/%d-%s.ss", curr_sum, file_name);
+	sprintf(shm_path, "/dev/shm/%d-%d-%s.ss", curr_pid, curr_sum, file_name);
 	ss_fd = open_shm_file(shm_path);
 	orig_ftruncate(ss_fd, ss_size);
 	ss_ret = orig_mmap(ss_start, ss_size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FIXED, ss_fd, 0);
