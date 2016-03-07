@@ -191,7 +191,7 @@ void PinProfile::check_func_safe() const
             ASSERT(it!=src_module->_indirect_jump_maps.end());
             Module::JUMPIN_INFO &info = it->second;
             if(info.type==Module::SWITCH_CASE_ABSOLUTE || info.type==Module::SWITCH_CASE_OFFSET || \
-                info.type==Module::MEMSET_JMP){
+                info.type==Module::MEMSET_JMP || info.type==Module::CONVERT_JMP){
                 ASSERT(info.targets.find(target_offset)!=info.targets.end());
                 continue;
             }

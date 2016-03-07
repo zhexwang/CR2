@@ -88,6 +88,7 @@ protected:
 	static SIZE _cc_offset;
 	static SIZE _ss_offset;
 	static P_ADDRX _gs_base;
+	static BOOL _has_init;
 	//signal related
 	static SIG_HANDLERS _sig_handlers;
 public:
@@ -117,6 +118,7 @@ public:
 		_gs_base = gs_base;
 		parse_proc_maps(protected_pid);//has already create shadow stack
 		init_all_cc();
+		_has_init = true;
 	}
 	static BOOL is_code_variant_ready(BOOL is_first_cc)
 	{

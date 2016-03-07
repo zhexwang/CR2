@@ -56,6 +56,7 @@ public:
 		PLT_JMP,
 		LONG_JMP,
 		MEMSET_JMP,
+		CONVERT_JMP,
 		TYPE_SUM,
 	};
 	typedef struct indirect_jump_info{
@@ -118,6 +119,7 @@ protected:
 	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
+	BOOL analysis_convert_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
 	void separate_movable_bbls();
 	void recursive_to_find_movable_bbls(BasicBlock *bbl);
 	BasicBlock *construct_bbl(const INSTR_MAP &instr_maps, BOOL is_call_proceeded, BOOL is_call_setjmp_proceeded);
@@ -155,7 +157,7 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_switch_case, BOOL &is_plt) const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, BOOL &is_switch_case, BOOL &is_plt) const; 
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
@@ -200,6 +202,7 @@ public:
 		return _unmatched_rets.find(offset)!=_unmatched_rets.end();
 	}
 	BOOL is_memset_jmpin(const F_SIZE offset) const;
+	BOOL is_convert_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_main_jmpin(const F_SIZE offset) const;
 	BOOL is_switch_case_so_jmpin(const F_SIZE offset) const;
 	BOOL is_instr_entry_in_off(const F_SIZE target_offset, BOOL consider_prefix) const;

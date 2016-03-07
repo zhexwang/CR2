@@ -71,7 +71,7 @@ long allocate_cc(long orig_x_size, const char *orig_name)
 	if(is_app_start(current)){//send message to shuffle process, dlopen
 		send_dlopen_mesg_to_shuffle_process(current, app_slot_idx, x_start, x_start+orig_x_size, cc_size, orig_name, shm_path);
 	}
-	printk(KERN_EMERG  "[CR2:%d]mmap(addr:%lx, len:%lx)\n", current->pid, cc_ret, cc_size);
+	PRINTK("[CR2:%d]mmap(addr:%lx, len:%lx)\n", current->pid, cc_ret, cc_size);
 	return cc_ret;
 }
 

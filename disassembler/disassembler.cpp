@@ -21,6 +21,18 @@ static BOOL is_0h_align(F_SIZE offset)
     return (offset&(0xfull))==0;
 }
 
+static BOOL objdump_error_correction(Module *module, P_ADDRX instr_addr)
+{
+    if(module->get_name()=="dedup"){
+        if((instr_addr>=0x407933) && (instr_addr<0x407980)){//this region is data, we should skip it 
+            //ERR("%lx\n", instr_addr);
+            return false;
+        }else
+            return true;
+    }else
+        return true;
+}
+
 void Disassembler::disassemble_module(Module *module)
 {
     /*Use objdump tools to split the code and data*/
@@ -41,7 +53,13 @@ void Disassembler::disassemble_module(Module *module)
     // objdump error : there are numbers of 0h after ret and jmp instructions, used for align! 
     std::set<Instruction *> maybe_0h_align_start_instrs;
     while(getline(&line_buf, &len, p_stream)!=-1) {
-        /* 4.1 skip! objdump result may contain two addresses which maps to one instruction
+        // 4.1 get instruction offset
+        P_ADDRX instr_addr;
+        sscanf(line_buf, "%lx\n", &instr_addr);
+        // skip data region
+        if(!objdump_error_correction(module, instr_addr))
+            continue;
+        /* 4.2 skip! objdump result may contain two addresses which maps to one instruction
                   1642a2:       64 48 c7 45 00 00 00    movq   $0x0,%fs:0x0(%rbp)
                   1642a9:       00 00    
         */
@@ -56,9 +74,7 @@ void Disassembler::disassemble_module(Module *module)
             if(pos>=(line_buf+strlen(line_buf)))                                                                                                                        
                 continue;
         }
-        // 4.2 get instruction offset
-        P_ADDRX instr_addr;
-        sscanf(line_buf, "%lx\n", &instr_addr);
+
         F_SIZE instr_off = module->convert_pt_addr_to_offset(instr_addr);
         // 4.3 disassemble instruction
         instr = disassemble_instruction(instr_off, module, line_buf);
@@ -227,6 +243,11 @@ void Disassembler::disassemble_all_modules()
         ElfParser *elf = it->second;
         Module *module = new Module(elf);
         disassemble_module(module);
+        if(module->get_name()=="freqmine"){
+            Instruction *instr = module->find_instr_by_off(0x1ed08, false);
+            module->erase_br_target(instr->get_target_offset(), 0x1ed08);
+            module->erase_instr(instr);
+        }
         module->check_br_targets();
     }
 }

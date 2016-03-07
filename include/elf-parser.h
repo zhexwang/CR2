@@ -65,6 +65,9 @@ private:
 	// 4.string
 	char *_str_table;
 	char *_dynstr_table;
+	// bss
+	P_ADDRX _bss_base;
+	P_SIZE _bss_size;
 	// 5.X sections
 	std::vector<SECTION_REGION> _x_sections;
 	// 6.load
@@ -181,9 +184,13 @@ public:
 			return addr - _pt_x_load_base + _pt_x_offset;
 		else if (addr>=_pt_d_load_base && addr<(_pt_d_load_base+_pt_d_filesz))
 			return addr - _pt_d_load_base + _pt_d_offset;
-		else{
-			ASSERTM(0, "Pt addr is not in elf\n");
-			return 0;
+		else{//judge is bss or not
+			if(addr>=_bss_base && addr<(_bss_base+_bss_size))
+				return 0;
+			else{	
+				ASSERTM(0, "Pt addr is not in elf\n");
+				return 0;
+			}
 		}
 	}
 	SIZE get_pt_x_size() const

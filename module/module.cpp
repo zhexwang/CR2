@@ -73,16 +73,18 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_switch_case, BOOL &is_plt) const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, BOOL &is_switch_case, BOOL &is_plt) const
 {
     JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
     if(it!=_indirect_jump_maps.end()){
         is_memset = it->second.type==MEMSET_JMP ? true : false;
+        is_convert = it->second.type==CONVERT_JMP ? true : false;
         is_switch_case = it->second.type==SWITCH_CASE_ABSOLUTE || it->second.type==SWITCH_CASE_OFFSET ? true : false;
         is_plt = it->second.type==PLT_JMP ? true : false;
         return it->second.targets;
     }else{
         is_memset = false;
+        is_convert = false;
         is_switch_case = false;
         is_plt = false;
         return std::set<F_SIZE>();
@@ -100,6 +102,15 @@ BOOL Module::is_memset_jmpin(const F_SIZE offset) const
     JUMPIN_MAP::const_iterator it = _indirect_jump_maps.find(offset);
     if(it!=_indirect_jump_maps.end()){
         return it->second.type==MEMSET_JMP ? true : false;
+    }else
+        return false;
+}
+
+BOOL Module::is_convert_jmpin(const F_SIZE offset) const
+{
+    JUMPIN_MAP::const_iterator it = _indirect_jump_maps.find(offset);
+    if(it!=_indirect_jump_maps.end()){
+        return it->second.type==CONVERT_JMP ? true : false;
     }else
         return false;
 }
@@ -674,11 +685,82 @@ void Module::examine_bbls()
                 bbl->set_no_fallthrough();
         }else if(bbl->is_ret() || bbl->is_direct_jump() || bbl->is_indirect_jump())
             bbl->set_no_fallthrough();
-        else if(bbl->is_indirect_call()){
+        else if(bbl->is_indirect_call() || bbl->is_direct_call()){
             if(!find_bbl_by_offset(fallthrough_offset, false))
                 bbl->set_no_fallthrough();
         }
     }
+}
+
+BOOL Module::analysis_convert_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
+{
+    UINT8 jump_dest_reg = R_NONE;
+    UINT8 src_reg = R_NONE;
+    BOOL is_sub_matched = false;
+    BOOL is_mov_imm32_matched = false;
+    BOOL is_lea_matched = false;
+    INT32 imm32 = 0;
+    INSTR_MAP_ITERATOR scan_iter = _instr_maps.find(jump_offset);
+    while(scan_iter!=_instr_maps.end()){
+        Instruction *instr = scan_iter->second;
+        if(jump_dest_reg == R_NONE){//indirect jump instruction
+            if(instr->is_jump_reg())
+                jump_dest_reg = instr->get_dest_reg();
+            else
+                return false;
+        }else{
+            if(!is_sub_matched){
+                if(instr->is_dest_reg(jump_dest_reg)){
+                    if(instr->is_sub_two_regs(jump_dest_reg, src_reg))
+                        is_sub_matched = true;
+                    else
+                        return false;
+                }
+            }else{
+                if(!is_mov_imm32_matched){
+                    if(instr->is_dest_reg(jump_dest_reg)){
+                        if(instr->is_mov_imm32_to_reg(imm32))
+                            is_mov_imm32_matched = true;
+                        else
+                            return false;
+                    }
+                }else{
+                    if(!is_lea_matched){
+                        if(instr->is_dest_reg(src_reg)){
+                            if(instr->is_lea_mem(src_reg, 0, 4)){
+                                is_lea_matched = true;
+                                break;
+                            }
+                        }
+                    }else
+                        return false;
+                }
+            }
+        }
+        scan_iter--;
+    }
+
+    F_SIZE target_offset = convert_pt_addr_to_offset(imm32);
+    INSTR_MAP_ITERATOR instr_it = _instr_maps.find(target_offset);
+    if(instr_it!=_instr_maps.end()){
+        //insert base
+        insert_br_target(target_offset, jump_offset);
+        targets.insert(target_offset);
+        instr_it--;
+        while(instr_it!=_instr_maps.end()){
+            Instruction *target_instr = instr_it->second;
+            //insert
+            if(target_instr->get_instr_size()==4){
+                insert_br_target(target_instr->get_instr_offset(), jump_offset);
+                targets.insert(target_instr->get_instr_offset());
+            }else
+                break;
+            //next
+            instr_it--;
+        }
+        return true;
+    }else
+        return false;
 }
 
 BOOL Module::analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets)
@@ -801,6 +883,26 @@ void Module::separate_movable_bbls()
 void Module::special_handling_in_cpp_exception()
 {
     _unmatched_rets.clear();
+    if(get_name()=="bodytrack"){
+        BasicBlock *catch_bbl = find_bbl_by_offset(0x762f8, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+        catch_bbl = find_bbl_by_offset(0x76a08, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+        catch_bbl = find_bbl_by_offset(0x73b3b, false);
+        ASSERT(catch_bbl);
+        if(is_movable_bbl(catch_bbl)){
+            erase_movable_bbl(catch_bbl);
+            insert_fixed_bbl(catch_bbl);
+        }
+    }
 #ifdef _VM
     //1. should read elf _gcc_exception section to get these information(Dwarf)! We leave it in future 
     if(get_name()=="omnetpp_base.cr2"){
@@ -870,8 +972,14 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
         //find fallthrough movable bbls
         BasicBlock *fallthrough_bbl = find_bbl_by_offset(fallthrough_offset, true);
         if(!fallthrough_bbl){
-            ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
-            return ;
+            if(get_name()=="freqmine" && fallthrough_offset==0x1ed08)//call 0
+                return ;
+            else if(get_name()=="libuuid.so.1" && fallthrough_offset==0x2d17)
+                return ;
+            else{
+                ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
+                return ;
+            }
         }
         if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
             insert_movable_bbl(fallthrough_bbl);
@@ -909,7 +1017,7 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
         ASSERT(iter!=_indirect_jump_maps.end());
         JUMPIN_INFO &info = iter->second;
         
-        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP){
+        if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE || info.type==MEMSET_JMP || info.type==CONVERT_JMP){
             BOOL has_movable_bbl = false;
             for(std::set<F_SIZE>::iterator target_iter = info.targets.begin(); target_iter!=info.targets.end(); target_iter++){
                 BasicBlock *target_bbl = find_bbl_by_offset(*target_iter, false);
@@ -984,6 +1092,10 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
     }
     F_SIZE entry_offset = convert_pt_addr_to_offset(disp);
     table_base = entry_offset;
+
+    if(table_base==0)//maybe bss section
+        return false;
+    
     INT64 entry_data = read_8byte_data_in_off(entry_offset);
     do{
         F_SIZE target_instr = entry_data - get_pt_load_base();
@@ -1027,8 +1139,12 @@ void Module::analysis_indirect_jump_targets()
                 info.type = SWITCH_CASE_ABSOLUTE;
                 info.table_offset = table_base;
                 info.table_size = table_size;
-            }else if(analysis_memset_jump(jump_offset, info.targets)){//assembly code in library
+            }else if(is_shared_object() && analysis_memset_jump(jump_offset, info.targets)){//assembly code in library
                 info.type = MEMSET_JMP;
+                info.table_offset = 0;
+                info.table_size = 0;
+            }else if(!is_shared_object() && analysis_convert_jump(jump_offset, info.targets)){
+                info.type = CONVERT_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
             }
@@ -1215,6 +1331,7 @@ void Module::dump_indirect_jump_result()
     INT32 switch_case_off_count = 0, switch_case_absolute_count = 0;
     INT32 plt_jmp_count = 0;
     INT32 memset_jmp_count = 0;
+    INT32 convert_jmp_count = 0;
     INT32 sum = _indirect_jump_maps.size();
     
     JUMPIN_MAP_ITER it = _indirect_jump_maps.begin();
@@ -1224,15 +1341,17 @@ void Module::dump_indirect_jump_result()
             case PLT_JMP: plt_jmp_count++; break;
             case SWITCH_CASE_ABSOLUTE: switch_case_absolute_count++; break;
             case MEMSET_JMP: memset_jmp_count++; break;
+            case CONVERT_JMP: convert_jmp_count++; break;
             default:
                 ;//find_instr_by_off(it->first)->dump_file_inst();
         }
         
     }
     
-    PRINT("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset)\n",\
+    PRINT("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset), %2d%%(%4d convert)\n",\
         sum, get_name().c_str(), 100*switch_case_off_count/sum, switch_case_off_count, 100*switch_case_absolute_count/sum,\
-        switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count);
+        switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count, \
+        100*convert_jmp_count/sum, convert_jmp_count);
 }
 
 void Module::dump_all_bbls_in_off()

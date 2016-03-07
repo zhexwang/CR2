@@ -50,15 +50,33 @@ int main(int argc, char **argv)
         }
         // 1.init netlink and get protected process's information
         NetLink::connect_with_lkm(Options::_elf_path);
-        MESG_BAG mesg = NetLink::recv_mesg();
-        if(mesg.connect!=P_PROCESS_IS_IN){
-            return -1;
+
+        // loop to listen 
+        MESG_BAG mesg;
+        P_ADDRX new_pc;
+        
+        while(1){
+            mesg = NetLink::recv_mesg();
+                    
+            if(mesg.connect==P_PROCESS_IS_IN)
+                break;
+            else if(mesg.connect==SIGACTION_DETECTED){
+                //handle sigaction
+                P_ADDRX sighandler_addr = mesg.cc_offset;
+                P_ADDRX sigreturn_addr = mesg.ss_offset;
+                //ERR("Register handler: %lx, sigreturn: %lx\n", sighandler_addr, sigreturn_addr);
+                new_pc = CodeVariantManager::handle_sigaction(sighandler_addr, sigreturn_addr, mesg.new_ip);
+                NetLink::send_sigaction_handled_mesg(new_pc, Options::_elf_path);
+            }else{
+                ASSERTM(0, "wrong message from kernel!\n");
+                return -1;
+            }
         }
         // 2.generate the first code variant
         CodeVariantManager::init_protected_proc_info(mesg.proctected_procid, mesg.cc_offset, mesg.ss_offset, mesg.gs_base, mesg.lkm_ss_type);
         CodeVariantManager::start_gen_code_variants();
         CodeVariantManager::wait_for_code_variant_ready(true);
-        P_ADDRX new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
+        new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
         ASSERT(new_pc!=0);
 
         // 3.send message to switch to the new generated code variant

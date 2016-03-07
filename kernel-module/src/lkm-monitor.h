@@ -8,6 +8,7 @@ extern void init_shuffle_config_list(void);
 extern void insert_shuffle_info(char monitor_list_idx,int shuffle_pid);
 extern void free_one_shuffle_info(char monitor_list_idx, int shuffle_pid);
 extern 	int connect_one_shuffle(char monitor_list_idx, char app_slot_idx);
+extern int  has_free_shuffle(char monitor_list_idx, char app_slot_idx);
 extern char get_app_slot_idx_from_shuffle_config(char monitor_list_idx, int shuffle_pid);
 extern char is_monitor_app(const char *name);
 extern void init_monitor_app_list(void);

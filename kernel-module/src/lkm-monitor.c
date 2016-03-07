@@ -93,6 +93,23 @@ int connect_one_shuffle(char monitor_list_idx, char app_slot_idx)
 	return 0;
 }
 
+int has_free_shuffle(char monitor_list_idx, char app_slot_idx)
+{
+	int index;
+
+	spin_lock(&shuffle_config_lock);
+	for(index = 0; index < MAX_SHUFFLE_NUM_FOR_ONE_APP; index++){
+		//find a free
+		if(shuffle_config_list[(int)monitor_list_idx][index].app_slot_idx==-1 && \
+			shuffle_config_list[(int)monitor_list_idx][index].shuffle_pid!=0){
+			spin_unlock(&shuffle_config_lock);
+			return 1;
+		}
+	}
+	spin_unlock(&shuffle_config_lock);
+	return 0;
+}
+
 char get_app_slot_idx_from_shuffle_config(char monitor_list_idx, int shuffle_pid)
 {
 	int index;
@@ -171,11 +188,26 @@ void init_monitor_app_list(void)
 	monitor_app_list[28] = "soplex_base.cr2";//450
 	monitor_app_list[29] = "dealII_base.cr2";//447
 	monitor_app_list[30] = "povray_base.cr2";//453
-	//nginx
+	//-------------------nginx-----------------------//
 	monitor_app_list[31] = "nginx";
-	//test
-	monitor_app_list[32] = "a.out";
-	
+	//--------------parsec benchmarks----------------//
+	//apps
+	monitor_app_list[32] = "blackscholes";
+	monitor_app_list[33] = "bodytrack";
+	monitor_app_list[34] = "facesim";
+	monitor_app_list[35] = "ferret";
+	monitor_app_list[36] = "fluidanimate";
+	monitor_app_list[37] = "freqmine";
+	monitor_app_list[38] = "rtview";
+	monitor_app_list[39] = "swaptions";
+	monitor_app_list[40] = "vips";//unable to map in _VM
+	monitor_app_list[41] = "x264";
+	//kernel
+	monitor_app_list[42] = "canneal";
+	monitor_app_list[43] = "dedup";
+	monitor_app_list[44] = "streamcluster";
+	//---------------------test----------------------//
+	monitor_app_list[45] = "a.out";
 }
 
 //-------------APP slot----------------------//

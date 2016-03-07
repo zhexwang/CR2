@@ -187,6 +187,15 @@ public:
 	{
 		return SEGMENT_GET(_dInst.segment)==R_GS;
 	}
+	BOOL is_mov_imm32_to_reg(INT32 &imm32) const
+	{
+		if((_dInst.opcode==I_MOV)&&(_dInst.ops[0].type==O_REG)&&(_dInst.ops[1].type==O_IMM)\
+			&&(_dInst.ops[1].size==32)){
+			imm32 = _dInst.imm.sdword;
+			return true;
+		}else
+			return false;
+	}
 	// used for match switch jump
 	BOOL is_movsxd_sib_to_reg(UINT8 &sib_base_reg, UINT8 &dest_reg) const
 	{
@@ -287,6 +296,18 @@ public:
 				return false;
 		}
 	}
+	BOOL is_sub_two_regs(UINT8 dest_reg, UINT8 &src_reg) const
+	{
+		if(_dInst.opcode==I_SUB){
+			if((_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_REG) && (_dInst.ops[2].type==O_NONE) \
+				&& (_dInst.ops[0].index==dest_reg)){
+				 src_reg = _dInst.ops[1].index;
+				return true;
+			}else
+				return false;
+		}else
+			return false;
+	}
 	BOOL is_lea_rip(UINT8 dest_reg, UINT64 &disp)
 	{
 		if((_dInst.opcode==I_LEA) && (_dInst.ops[0].type==O_REG) && (_dInst.ops[1].type==O_SMEM) \
@@ -294,6 +315,14 @@ public:
 			disp = _dInst.disp;
 			return true;
 		}else
+			return false;
+	}
+	BOOL is_lea_mem(UINT8 dest_reg, UINT64 disp, UINT8 scale)
+	{
+		if((_dInst.opcode==I_LEA) && (_dInst.ops[0].type==O_REG) && (_dInst.ops[0].index==dest_reg) \
+			&& (_dInst.ops[1].type==O_MEM) && (_dInst.scale==scale) && (_dInst.disp==disp))
+			return true;
+		else
 			return false;
 	}
 	void get_sib(UINT8 ops_num, UINT8 &base, UINT8 &index, UINT8 &scale, UINT64 &disp)

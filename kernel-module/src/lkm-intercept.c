@@ -176,12 +176,14 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 	long ld_offset = 0;//ld-linux.so fixed offset
 	long program_entry = 0;
 	long *program_entry_addr = NULL;
+	int has_handle_main_elf = 0;
 #ifdef _C10	
 	char buf[256];
 	char *ld_path = NULL;
 	int ld_fd = 0;
 	void *bk_buf = NULL;
 #endif
+
 	do{
 		struct file *fil = ptr->vm_file;
 		if(fil != NULL){
@@ -206,13 +208,14 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 #endif
 			}
 
-			if(name && is_monitor_app(name) && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV){//main file executable region
+			if(name && is_monitor_app(name) && !has_handle_main_elf && ptr->vm_page_prot.pgprot==PAGE_COPY_EXECV){//main file executable region
 				cc_ret = allocate_cc_fixed(ptr->vm_start, ptr->vm_end, name);
 				//get main program entry
 				program_entry_addr = (long*)((long)&((Elf64_Ehdr *)0)->e_entry + ptr->vm_start);
 				get_user(program_entry, program_entry_addr);
 				PRINTK("[LKM:%d]entry=0x%lx\n", ts->pid, program_entry);
 				set_checkpoint(ts, program_entry, ptr->vm_start, ptr->vm_end);
+				has_handle_main_elf = 1;
 			}
 		}
 #ifdef _VM
@@ -290,7 +293,10 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 			char* name = fil->f_path.dentry->d_iname;			
 			cc_ret = allocate_cc(len, name);
 			// 2.execute the original mmap, but the start is fixed with CC_OFFSET
-			ret = orig_mmap(cc_ret-CC_OFFSET, len, prot, flags|MAP_FIXED, fd, pgoff);
+			if(is_app_start(current))
+				ret = orig_mmap(cc_ret-CC_OFFSET, len, prot, (flags&(~PROT_EXEC))|MAP_FIXED, fd, pgoff);
+			else
+				ret = orig_mmap(cc_ret-CC_OFFSET, len, prot, flags|MAP_FIXED, fd, pgoff);
 			// 3.judge the code cache is allocate correctly
 			if(cc_ret==0 || ret==0){
 				PRINTK("[LKM]allocate code cache error!(mmap: cc_ret=%lx, ret=%lx)\n", cc_ret, ret);
@@ -407,8 +413,11 @@ asmlinkage long intercept_exit_group(ulong error)
 		start_encode = is_checkpoint(current, &app_slot_idx);
 		
 		if(start_encode){
-			shuffle_pid = connect_one_shuffle(monitor_idx, app_slot_idx);
-			set_shuffle_pid(app_slot_idx, shuffle_pid);
+			shuffle_pid = get_shuffle_pid(app_slot_idx);
+			if(shuffle_pid==0){
+				shuffle_pid = connect_one_shuffle(monitor_idx, app_slot_idx);
+				set_shuffle_pid(app_slot_idx, shuffle_pid);
+			}
 			return set_program_start(current, start_encode, app_slot_idx);
 		}else{
 			PRINTK("[LKM]exit_group(%s)\n", current->comm);
@@ -477,22 +486,30 @@ asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, st
 	int shuffle_pid = 0;
 	char app_slot_idx = 0;
 	long ret;
+	int add_offset = 0;
 	struct pt_regs *regs = task_pt_regs(current);
 	if(monitor_idx!=0){
-		PRINTK("[%d]%s had rt_sigaction, pc = %lx\n", current->pid, current->comm, regs->ip);
+		PRINTK("[%d]%s had rt_sigaction sig=%d, pc = %lx\n", current->pid, current->comm, sig, regs->ip);
 		
 		//modify the handler address and sigreturn address
-		app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));
+		app_slot_idx = get_app_slot_idx(pid_vnr(task_pgrp(current)));		
 		shuffle_pid = get_shuffle_pid(app_slot_idx);
+
+		if(shuffle_pid==0 && is_app_start(current)==0){
+			shuffle_pid = connect_one_shuffle(monitor_idx, app_slot_idx);
+			set_shuffle_pid(app_slot_idx, shuffle_pid);
+		}
+		
 		if(shuffle_pid!=0 && act && act->sa_handler!=SIG_IGN && act->sa_handler!=SIG_DFL && act->sa_handler!=SIG_ERR){
 			send_sigaction_mesg_to_shuffle_process(current, app_slot_idx, shuffle_pid, (ulong)act->sa_handler, (ulong)act->sa_restorer);
 			act->sa_handler = (__sighandler_t)((long)act->sa_handler + CC_OFFSET);
+			add_offset = 1;
 		}
 	}
 
 	ret = orig_rt_sigaction(sig, act, oact, sigsetsize);
 
-	if(monitor_idx!=0 && shuffle_pid!=0 && act && act->sa_handler!=SIG_IGN && act->sa_handler!=SIG_DFL && act->sa_handler!=SIG_ERR)
+	if(add_offset==1)
 		act->sa_handler = (__sighandler_t)((long)act->sa_handler - CC_OFFSET);
 
 	return ret;

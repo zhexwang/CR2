@@ -504,13 +504,14 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
     ASSERTM(_dInst.opcode!=I_JMP_FAR, "we only handle jmp near!\n");
     
     BOOL is_memset = false;
+    BOOL is_convert = false;
     BOOL is_plt = false;
     BOOL is_switch_case = false;
-    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset, is_switch_case, is_plt);
+    std::set<F_SIZE> targets = _module->get_indirect_jump_targets(_dInst.addr, is_memset, is_convert, is_switch_case, is_plt);
     BOOL has_recognized_targets = targets.size()==0 ? false : true;
 
     std::string instr_template;
-    if(is_memset){
+    if(is_memset || is_convert){
         BOOL can_hash = can_hash_low_32bits(targets);
         FATAL(!can_hash, "memset jumpin can not use hash!\n");
         UINT16 curr_pc = 0;

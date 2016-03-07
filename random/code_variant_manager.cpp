@@ -23,6 +23,7 @@ CodeVariantManager::SS_MAPS CodeVariantManager::_ss_maps;
 BOOL CodeVariantManager::_is_cv1_ready = false;
 BOOL CodeVariantManager::_is_cv2_ready = false;
 CodeVariantManager::SIG_HANDLERS CodeVariantManager::_sig_handlers;
+BOOL CodeVariantManager::_has_init = false;
 
 std::string get_real_path(const char *file_path)
 {
@@ -193,6 +194,7 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
             currentRow->perms, &(currentRow->offset), currentRow->dev, &(currentRow->inode), currentRow->pathname);
         //x and code cache
         if(is_executable(currentRow) && !strstr(currentRow->pathname, "[vdso]") && !strstr(currentRow->pathname, "[vsyscall]")){
+            
             std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
             if(is_shared(currentRow)){
                 SIZE prefix_pos = maps_record_name.find(shared_prefix);
@@ -1414,23 +1416,29 @@ P_ADDRX CodeVariantManager::handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADD
     if(sighandler_is_registered(orig_sighandler_addr, orig_sigreturn_addr))
         return old_pc;
     else{
-        //wait all ready to make sure patch code cache safely
-        wait_for_code_variant_ready(true);
-        wait_for_code_variant_ready(false);
-        //1. pause gen code variants
-        pause_gen_code_variants();
-        //2. record sighandler and sigreturn
-        SIG_INFO sig_info = {orig_sighandler_addr, orig_sigreturn_addr, false, false};
-        _sig_handlers.insert(std::make_pair(orig_sighandler_addr, sig_info));
-        //3. patch template into sighandler
-        patch_all_sigaction_entry(true);
-        patch_all_sigaction_entry(false);
-        //4. continue to gen code
-        continue_gen_code_variants();
-        //5. wait code variants
-        wait_for_code_variant_ready(true);
-        wait_for_code_variant_ready(false);
-        return old_pc;
+        if(_has_init){
+            //wait all ready to make sure patch code cache safely
+            wait_for_code_variant_ready(true);
+            wait_for_code_variant_ready(false);
+            //1. pause gen code variants
+            pause_gen_code_variants();
+            //2. record sighandler and sigreturn
+            SIG_INFO sig_info = {orig_sighandler_addr, orig_sigreturn_addr, false, false};
+            _sig_handlers.insert(std::make_pair(orig_sighandler_addr, sig_info));
+            //3. patch template into sighandler
+            patch_all_sigaction_entry(true);
+            patch_all_sigaction_entry(false);
+            //4. continue to gen code
+            continue_gen_code_variants();
+            //5. wait code variants
+            wait_for_code_variant_ready(true);
+            wait_for_code_variant_ready(false);
+            return old_pc;
+        }else{
+            SIG_INFO sig_info = {orig_sighandler_addr, orig_sigreturn_addr, false, false};
+            _sig_handlers.insert(std::make_pair(orig_sighandler_addr, sig_info));
+            return old_pc;
+        }
     }       
 }
 
