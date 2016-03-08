@@ -193,19 +193,19 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
         sscanf(row_buffer, "%lx-%lx %s %lx %s %d %s", &(currentRow->start), &(currentRow->end), \
             currentRow->perms, &(currentRow->offset), currentRow->dev, &(currentRow->inode), currentRow->pathname);
         //x and code cache
-        if(is_executable(currentRow) && !strstr(currentRow->pathname, "[vdso]") && !strstr(currentRow->pathname, "[vsyscall]")){
-            
+        if(is_executable(currentRow) && !strstr(currentRow->pathname, "[vdso]") && !strstr(currentRow->pathname, "[vsyscall]") &&
+            currentRow->offset==0 && currentRow->inode!=0){//handle dedup 
             std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
             if(is_shared(currentRow)){
                 SIZE prefix_pos = maps_record_name.find(shared_prefix);
-                ASSERT(prefix_pos!=std::string::npos);
-                prefix_pos += shared_prefix.length();
                 SIZE cc_pos = maps_record_name.find(cc_sufix);
-                ASSERT(cc_pos!=std::string::npos);
-                //find cvm
-                CVM_MAPS::iterator iter = _all_cvm_maps.find(maps_record_name.substr(prefix_pos, cc_pos-prefix_pos));
-                ASSERT(iter!=_all_cvm_maps.end());
-                iter->second->set_cc_load_info(currentRow->start, currentRow->end-currentRow->start, maps_record_name);
+                if(prefix_pos!=std::string::npos && cc_pos!=std::string::npos){
+                    prefix_pos += shared_prefix.length();
+                    //find cvm
+                    CVM_MAPS::iterator iter = _all_cvm_maps.find(maps_record_name.substr(prefix_pos, cc_pos-prefix_pos));
+                    ASSERT(iter!=_all_cvm_maps.end());
+                    iter->second->set_cc_load_info(currentRow->start, currentRow->end-currentRow->start, maps_record_name);
+                }
             }else{
                 CVM_MAPS::iterator iter = _all_cvm_maps.find(maps_record_name);
                 ASSERT(iter!=_all_cvm_maps.end());
@@ -213,7 +213,7 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
             }
         }
         //shadow stack and stack
-        if(!is_executable(currentRow)){
+        /*if(!is_executable(currentRow)){
             std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
             if(is_shared(currentRow)){//shadow stack
                 if(maps_record_name.find(ss_sufix)!=std::string::npos)
@@ -222,8 +222,17 @@ void CodeVariantManager::parse_proc_maps(PID protected_pid)
                 if(strstr(currentRow->pathname, "[stack]"))//stack
                     set_stack_load_base(currentRow->end);
             }
-        }
+        }*///dedup
 
+        if(is_shared(currentRow) && currentRow->inode!=0){
+            std::string maps_record_name = get_real_name_from_path(get_real_path(currentRow->pathname));
+            if(maps_record_name.find(ss_sufix)!=std::string::npos)
+                create_ss(currentRow->end-currentRow->start, maps_record_name);
+        }
+        
+        if(strstr(currentRow->pathname, "[stack]"))//stack
+            set_stack_load_base(currentRow->end);
+        
         //debug trace buffer
 #ifdef TRACE_DEBUG
         if(strstr(currentRow->pathname, ".tdb")){

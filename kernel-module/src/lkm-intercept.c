@@ -49,7 +49,7 @@ ulong is_code_cache(char *name)
 void protect_orig_x_region(struct task_struct *ts, char app_slot_idx)
 {
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
-	if(shuffle_pid!=0){
+	if(shuffle_pid!=0 && strcmp(ts->comm, "dedup")){
 		struct mm_struct *mm = ts->mm;
 		struct vm_area_struct *list = mm->mmap, *ptr = list;
 		do{
