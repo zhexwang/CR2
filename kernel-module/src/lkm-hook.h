@@ -80,7 +80,12 @@ extern MQTIMEDSEND_FUNC_TYPE orig_mq_timedsend;
 // ---------------Signal syscall-----------------------//
 
 typedef asmlinkage long (*RTSIGACTION_FUNC_TYPE)(int sig, const struct sigaction __user *act, struct sigaction __user *oact, size_t sigsetsize); 
+#ifdef _C10
+typedef asmlinkage long (*SIGALTSTACK_FUNC_TYPE)(const stack_t __user *uss, stack_t __user *uoss, long arg2, long arg3, long arg4, long arg5, \
+	long arg6, long arg7, struct pt_regs regs);
+#else
 typedef asmlinkage long (*SIGALTSTACK_FUNC_TYPE)(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss);
+#endif
 
 extern RTSIGACTION_FUNC_TYPE orig_rt_sigaction;
 extern SIGALTSTACK_FUNC_TYPE orig_sigaltstack;
@@ -91,8 +96,13 @@ extern SIGALTSTACK_FUNC_TYPE orig_sigaltstack;
 
 // ---------------fork/vfork/clone syscall-----------------------//
 
+#ifdef _C10
+typedef asmlinkage long (*CLONE_FUNC_TYPE)(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
+	int __user * child_tidptr, unsigned long tls_val);
+#else
 typedef asmlinkage long (*CLONE_FUNC_TYPE)(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
 	int __user * child_tidptr, int tls_val);
+#endif
 extern CLONE_FUNC_TYPE orig_clone;
 
 //--------------------setsid syscall-----------------------------//

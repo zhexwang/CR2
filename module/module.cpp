@@ -981,7 +981,13 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
                 return ;
             }
         }
+       
         if(!is_movable_bbl(fallthrough_bbl) && !is_fixed_bbl(fallthrough_bbl)){
+#ifdef _C10        
+            if(get_name()=="libc.so.6" && fallthrough_offset==0x7d8c0)
+                insert_fixed_bbl(fallthrough_bbl);
+            else
+#endif 
             insert_movable_bbl(fallthrough_bbl);
             recursive_to_find_movable_bbls(fallthrough_bbl);
         }

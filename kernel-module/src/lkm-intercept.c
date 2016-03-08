@@ -444,21 +444,37 @@ asmlinkage long intercept_exit_group(ulong error)
 }
 
 
-
-asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss)
+#ifdef _C10
+asmlinkage long intercept_sigaltstack(const stack_t __user *uss, stack_t __user *uoss, long arg2, long arg3, long arg4, long arg5, \
+	long arg6, long arg7, struct pt_regs regs)
 {
 	char monitor_idx = is_monitor_app(current->comm);
 	if(monitor_idx!=0){
-		PRINTK("%s had set signal stack by itself! We do not handle this case now!\n", current->comm);
+		//PRINTK("%s had set signal stack by itself! We do not handle this case now!\n", current->comm);
 		//mmap ss_size
 
 		//allocate shadow stack
 
 		//send message
 	}
-	
+	return orig_sigaltstack(uss, uoss, arg2, arg3, arg4, arg5, arg6, arg7, regs);
+}
+#else
+asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, struct sigaltstack __user *uoss)
+{
+	char monitor_idx = is_monitor_app(current->comm);
+	if(monitor_idx!=0){
+		//PRINTK("%s had set signal stack by itself! We do not handle this case now!\n", current->comm);
+		//mmap ss_size
+
+		//allocate shadow stack
+
+		//send message
+	}
+
 	return orig_sigaltstack(uss, uoss);
 }
+#endif
 
 void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, ulong handler_addr, ulong sigreturn_addr)
 {
@@ -534,8 +550,14 @@ void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 	return ;	
 }
 
+#ifdef _C10
+asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
+	int __user * child_tidptr, unsigned long tls_val)
+
+#else
 asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, int __user * parent_tidptr,
 	int __user * child_tidptr, int tls_val)
+#endif
 {
 	long ret = 0;
 	long ss_ret = 0;
@@ -571,8 +593,9 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 			}
 		}
 	}
-	
+
 	ret = orig_clone(clone_flags, newsp, parent_tidptr, child_tidptr, tls_val);
+
 	//child process had returned to ret_from_fork, so we only intercept the parent process
 
 	if(monitor_idx!=0){	
@@ -597,7 +620,6 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 	
 	return ret;
 }
-
 
 asmlinkage long intercept_setsid(void)
 {

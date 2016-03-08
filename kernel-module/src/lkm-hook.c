@@ -91,32 +91,35 @@ static inline void *get_orig_syscall_addr(ulong index)
 //---------------Sys stub clone special handling------------------//
 static long sc_call_proceeded_addr = 0;
 #ifdef _C10
-	int sc_call_proceded_encode = 0;
+	static long sc_internal_call_addr = 0;
+	static int sc_call_proceded_encode = 0x000088e9;//jmpq
+	static int sc_intercal_call_proceded_encode = 0x24448d4c;//lea    0x8(%rsp),%r8
 #else
-	int sc_call_proceded_encode = 0x249c8b4c;//mov 0xa0(%rsp), %r11
+	static int sc_call_proceded_encode = 0x249c8b4c;//mov 0xa0(%rsp), %r11
 #endif
 
 static void *get_orig_clone_from_stub_clone(void *stub_clone) 
 {
 	int call_offset = 0;
-	
+#ifdef _C10	
+	int internal_call_offset = 0;
+	long sc_internal_call_proceeded_addr = 0;
+#endif
 	char *pos = (char*)stub_clone;
-	//int count = 0;//(use to dump stub_execve)
 	while(*(int*)pos!=sc_call_proceded_encode){
-	//int time = 0;
-	//PRINTK("0x%lx\n", *(long*)pos);
-	//while(time<15){
+#ifdef _C10		
+		if(*(int*)pos==sc_intercal_call_proceded_encode)
+			sc_internal_call_proceeded_addr = (long)pos;
+#endif	
 		pos++;
-		//count++;
-		//if(count==8){
-		//	PRINTK("0x%lx\n", *(long*)pos);
-		//	count=0;
-		//	time++;
-		//}
 	}
-	//PRINTK("0x%lx, %d\n", *(long*)((long)pos-count), count);
+	
 	sc_call_proceeded_addr = (long)pos;
 	call_offset = *(int*)(sc_call_proceeded_addr-4);
+#ifdef _C10
+	internal_call_offset = *(int*)(sc_internal_call_proceeded_addr-4);
+	sc_internal_call_addr = sc_internal_call_proceeded_addr+(long)internal_call_offset;
+#endif
 	
 	return (void*)(sc_call_proceeded_addr+(long)call_offset);
 
@@ -135,6 +138,15 @@ void hook_clone_template(void)
 	asm volatile(
 			".globl intercept_stub_clone \n"
 			"intercept_stub_clone:"
+#ifdef _C10
+			"subq    $0x30, %%rsp \n\t"
+			"callq   *%0 \n\t"
+			"lea     0x8(%%rsp), %%r8 \n\t"
+			"callq   *%1 \n\t"
+			"jmpq    *%2 \n\t"
+			:
+			:"m"(sc_internal_call_addr), "m"(intercept_clone_addr), "m"(sc_call_proceeded_addr)
+#else
 			"popq    %%r11 \n\t"
 			"subq    $0x30, %%rsp \n\t"
 			"movq    %%rbx, 0x28(%%rsp) \n\t"
@@ -155,6 +167,7 @@ void hook_clone_template(void)
 			"jmpq    *%1 \n\t"
 			:
 			:"m"(intercept_clone_addr), "m"(sc_call_proceeded_addr)
+#endif				
 		   );
 
 	return ;
@@ -165,8 +178,8 @@ void hook_clone_template(void)
 static long ss_call_proceeded_addr = 0;
 static long ss_internal_call_addr = 0;
 
-int ss_call_proceded_encode = 0x000028e9;
-int ss_internal_call_proceded_encode = 0x24548d48;
+static int ss_call_proceded_encode = 0x000028e9;
+static int ss_internal_call_proceded_encode = 0x24548d48;
 
 static void *get_orig_sigaltstack_from_stub_sigaltstack(void *stub_sigaltstack) 
 {
@@ -184,6 +197,7 @@ static void *get_orig_sigaltstack_from_stub_sigaltstack(void *stub_sigaltstack)
 	internal_call_offset = *(int*)(ss_internal_call_proceeded_addr-4);
 	
 	ss_internal_call_addr = ss_internal_call_proceeded_addr+(long)internal_call_offset;
+	PRINTK("internal call addr: %lx\n", ss_call_proceeded_addr);
 	return (void*)(ss_call_proceeded_addr+(long)call_offset);
 }
 
@@ -212,9 +226,9 @@ void hook_sigaltstack_template(void)
 //-----------Sys stub execve special handling---------------------//
 static long se_call_proceeded_addr = 0;
 #ifdef _C10
-	int se_call_proceded_encode = 0x249c8b4c;//mov 0x98(%rsp),%r11
+	static int se_call_proceded_encode = 0x249c8b4c;//mov 0x98(%rsp),%r11
 #else
-	int se_call_proceded_encode = 0x24448948;//movq %rax, RAX(%rsp)
+	static int se_call_proceded_encode = 0x24448948;//movq %rax, RAX(%rsp)
 #endif
 
 static void *get_orig_execve_from_stub_execve(void *stub_execve) 
@@ -357,6 +371,16 @@ void asm_code(void)
 }
 
 //-------------------------------------------------------------//
+void dump(long *ptr)
+{
+	int time = 0;
+	while(time<10){
+		PRINTK("0x%lx\n", *ptr);
+		ptr++;
+		time++;
+	}
+}
+
 void init_orig_syscall(void)
 {
 	//record original syscall addr
@@ -422,11 +446,11 @@ void init_orig_syscall(void)
 	PRINTK("Origin SyS_preadv: %p\n", orig_preadv);	
 	PRINTK("Origin SyS_pwritev: %p\n", orig_pwritev);	
 	PRINTK("Origin SyS_mq_timedreceive: %p\n", orig_mq_timedreceive);	
-	PRINTK("Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);	
+	PRINTK("Origin SyS_mq_timedsend: %p\n", orig_mq_timedsend);
 	PRINTK("Origin SyS_rt_sigaction: %p\n", orig_rt_sigaction);	
-	PRINTK("Origin SyS_sigaltstack: %p\n", orig_sigaltstack);	
-	PRINTK("Origin SyS_clone: %p\n", orig_clone);	
-	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);*/
+	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);
+	PRINTK("Origin SyS_sigaltstack: %p, stub_sigaltstack: %p\n", orig_sigaltstack, orig_stub_sigaltstack);	
+	PRINTK("Origin SyS_clone: %p, stub_clone: %p\n", orig_clone, orig_stub_clone);	*/
 }
 
 void hook_systable(void)

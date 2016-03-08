@@ -29,6 +29,44 @@ static BOOL objdump_error_correction(Module *module, P_ADDRX instr_addr)
             return false;
         }else
             return true;
+#ifdef _C10    
+    }else if(module->get_name()=="libcrypto.so.1.0.0"){
+        if((instr_addr>0x6c795) && (instr_addr<0x6c880)){//below regions are data, we should skip it 
+            //ERR("%lx\n", instr_addr);
+            return false;
+        }else if((instr_addr>0x6daf3) && (instr_addr<0x6dc00))
+            return false;
+        else if((instr_addr>0x6eea3) && (instr_addr<0x6f140))
+            return false;
+        else if((instr_addr>0x728de) && (instr_addr<0x73950))
+            return false;
+        else if((instr_addr>0x7e7a1) && (instr_addr<0x800c0))
+            return false;
+        else if((instr_addr>0x80890) && (instr_addr<0x80c40))
+            return false;
+        else if((instr_addr>0x838a4) && (instr_addr<0x83a80))
+            return false;
+        else if((instr_addr>0x8603c) && (instr_addr<0x860c0))
+            return false;
+        else if((instr_addr>0x884e2) && (instr_addr<0x885c0))
+            return false;
+        else if((instr_addr>0x89d43) && (instr_addr<0x89e00))
+            return false;
+        else if((instr_addr>0x8ec85) && (instr_addr<0x8fd00))
+            return false;
+        else if((instr_addr>0x8ffd0) && (instr_addr<0x8fffb))
+            return false;
+        else if((instr_addr>0x96d0c) && (instr_addr<0x97040))
+            return false;
+        else if((instr_addr>0xa42a8) && (instr_addr<0xa4300))
+            return false;
+        else if((instr_addr>0xa4d45) && (instr_addr<0xa4e20))
+            return false;
+        else if((instr_addr>0xa5245) && (instr_addr<0xa5290))
+            return false;
+        else
+            return true;
+#endif
     }else
         return true;
 }
@@ -56,6 +94,20 @@ void Disassembler::disassemble_module(Module *module)
         // 4.1 get instruction offset
         P_ADDRX instr_addr;
         sscanf(line_buf, "%lx\n", &instr_addr);
+#ifdef _C10
+        if(module->get_name()=="libcrypto.so.1.0.0"){
+            if(instr_addr==0x8fffb)
+                instr_addr = 0x90000;
+            else if(instr_addr==0x90002)
+                instr_addr = 0x90003;
+            else if(instr_addr==0x90005)
+                instr_addr = 0x90004;
+            else if(instr_addr==0xa4e21)
+                instr_addr = 0xa4e20;
+            else if(instr_addr==0xa5292)
+                instr_addr = 0xa5290;
+        }
+#endif
         // skip data region
         if(!objdump_error_correction(module, instr_addr))
             continue;

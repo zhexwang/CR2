@@ -33,7 +33,7 @@
 #endif
 
 //#define TRACE_DEBUG
-//#define LAST_RBBL_DEBUG
+#define LAST_RBBL_DEBUG
 
 //bits define
 #define BITS_ARE_SET_ANY(value, bits)	   ( ((value)&(bits)) != 0 )

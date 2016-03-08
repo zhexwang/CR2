@@ -1383,7 +1383,7 @@ void CodeVariantManager::patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler
             "signal handler entry basic block must be position fixed!\n");
         //2. get handler addr in code variant
         RBBL_CC_MAPS::iterator handler_iter = rbbl_maps.find(handler_offset);
-        ASSERT(handler_iter!=rbbl_maps.end());
+        FATAL(handler_iter==rbbl_maps.end(), "find no handler!\n");
         //3. get handler's trampoline addr
         S_ADDRX tramp_saddrx = handler_offset + base_saddrx;
         CC_LAYOUT_ITER cc_iter = cc_layout.upper_bound(Range<S_ADDRX>(tramp_saddrx));

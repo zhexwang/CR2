@@ -192,6 +192,11 @@ public:
 				return true;
 			else
 				return false;
+		}else if(offset==0x1ef80){
+			if(get_name()=="libc.so.6")
+				return true;
+			else 
+				return false;
 		}
 #endif
 		else
