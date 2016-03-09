@@ -35,6 +35,8 @@ public:
 	static std::string gen_movq_gs_rsp_smem_rax_instr(UINT16 &disp32_pos, INT32 disp32);
 	//nop
 	static std::string gen_nop_instr();
+	//addq 
+	static std::string gen_addq_reg_imm32_instr(UINT8 reg_index, UINT16 &imm32_pos, INT32 imm32);
 	//addq %rax, $imm32
 	static std::string gen_addq_rax_imm32_instr(UINT16 &imm32_pos, INT32 imm32);
 	//addq (%rsp), $imm32
@@ -63,6 +65,8 @@ public:
 	static std::string gen_popq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//popq gs:disp32(%rsp)
 	static std::string gen_popq_gs_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
+	//jmpq * %reg64
+	static std::string gen_jmpq_reg(UINT8 reg_index);
 	//jmpq disp32(%rsp)
 	static std::string gen_jmpq_rsp_smem_instr(UINT16 &disp32_pos, INT32 disp32);
 	//jmpq gs:disp32(%rsp)
@@ -89,6 +93,7 @@ public:
 	static std::string gen_jns_rel8_instr(UINT16 &rel8_pos, INT8 rel8, BOOL is_taken = true);
 	//convert functions
 	static std::string convert_jumpin_reg_to_movq_rax_reg(const UINT8 *instcode, UINT32 instsize);
+	static std::string convert_callin_mem_to_movq_rax_mem(const UINT8 *instcode, UINT32 instsize);
 	static std::string convert_jumpin_mem_to_movq_rax_mem(const UINT8 *instcode, UINT32 instsize);
 	static std::string convert_jmpin_mem_to_cmp_mem_imm8(UINT8 *instcode, UINT16 instsize, UINT16 &imm8_pos, INT8 imm8);
 	static std::string convert_jmpin_reg64_to_cmp_reg64_imm8(UINT8 *instcode, UINT16 instsize, UINT16 &imm8_pos, INT8 imm8);
@@ -101,4 +106,5 @@ public:
 	static std::string convert_cond_br_relx_to_rel8(const UINT8 *instcode, UINT32 inst_size, UINT16 &rel8_pos, INT8 rel8);
 	//modify functions
 	static std::string modify_disp_of_pushq_rsp_mem(std::string src_template, INT8 addend);
+	static std::string modify_disp_of_movq_rsp_mem(std::string src_template, INT8 addend);
 };

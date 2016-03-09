@@ -49,6 +49,11 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 	return ;	
 }
 
+void free_cc(unsigned long addr, size_t len)
+{
+	PRINTK("free cc : %lx - %lx\n", addr, addr+len);
+}
+
 long allocate_cc(long orig_x_size, const char *orig_name)
 {
 	int cc_fd = 0;

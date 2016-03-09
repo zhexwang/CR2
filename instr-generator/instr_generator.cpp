@@ -264,6 +264,31 @@ std::string InstrGenerator::convert_jumpin_reg_to_movq_rax_reg(const UINT8 *inst
     return movq_template;
 }
 
+std::string InstrGenerator::convert_callin_mem_to_movq_rax_mem(const UINT8 *instcode, UINT32 instsize)
+{
+    std::string movq_template;
+    UINT32 callin_index = 0;
+    // 1. set prefix 
+    if((instcode[callin_index])==0xff)
+        movq_template.append(1, 0x48);
+    else{//has prefix
+        movq_template.append(1, instcode[callin_index++]|0x48);
+        ASSERTM(instcode[callin_index]==0xff, "callin opcode is unkown!\n");
+    }
+    // 2.set opcode
+    movq_template.append(1, 0x8b);
+    callin_index++;                                                                                                                                                      
+    // 3.calculate ModRM
+    movq_template.append(1, instcode[callin_index++]&0xc7);
+    // 4.copy SIB | Displacement of jmpin_inst
+    while(callin_index<instsize){
+        movq_template.append((const INT8*)(instcode+callin_index), 1);
+        callin_index++;
+    }
+    
+    return movq_template;
+}
+
 std::string InstrGenerator::convert_jumpin_mem_to_movq_rax_mem(const UINT8 *instcode, UINT32 instsize)
 {
     std::string movq_template;
@@ -306,6 +331,7 @@ std::string InstrGenerator::convert_callin_reg_to_push_reg(const UINT8 *instcode
 
     return push_template;
 }
+
 
 std::string InstrGenerator::convert_callin_mem_to_push_mem(const UINT8 *instcode, UINT32 instsize)
 {
@@ -501,6 +527,46 @@ std::string InstrGenerator::gen_cmp_reg64_imm8_instr(UINT8 reg_index, UINT16 &im
     return instr_template;
 }
 
+std::string InstrGenerator::gen_addq_reg_imm32_instr(UINT8 reg_index, UINT16 &imm32_pos, INT32 imm32)
+{
+    std::string instr_template;
+    if(reg_index>=R_RAX && reg_index<=R_RDI){
+        instr_template.append(1, 0x48);
+        if(reg_index!=R_RAX){
+            instr_template.append(1, 0x81);
+            instr_template.append(1, 0xc0+reg_index-R_RAX);
+        }else
+            instr_template.append(1, 0x05);
+    }else if(reg_index>=R_R8 && reg_index<=R_R15){
+        instr_template.append(1, 0x49);
+        instr_template.append(1, 0x81);
+        instr_template.append(1, 0xc0+reg_index-R_R8);
+    }else
+        ASSERT(0);
+
+    imm32_pos = instr_template.length();
+    instr_template.append((const INT8*)&imm32, sizeof(INT32));
+
+    return instr_template;
+}
+
+std::string InstrGenerator::gen_jmpq_reg(UINT8 reg_index)
+{
+    std::string instr_template;
+
+    if(reg_index>=R_R8 && reg_index<=R_R15){
+        instr_template.append(1, 0x41);
+        instr_template.append(1, 0xff);
+        instr_template.append(1, 0xe0+reg_index-R_R8);
+    }else{
+        ASSERT(reg_index>=R_RAX && reg_index<=R_RDI);
+        instr_template.append(1, 0xff);
+        instr_template.append(1, 0xe0+reg_index-R_RAX);
+    }
+
+    return instr_template;   
+}
+
 std::string InstrGenerator::convert_jmpin_reg64_to_cmp_reg64_imm8(UINT8 *instcode, UINT16 instsize, UINT16 &imm8_pos, INT8 imm8)
 {
     std::string instr_template;
@@ -632,7 +698,7 @@ std::string InstrGenerator::convert_cond_br_relx_to_rel32(const UINT8 *instcode,
 std::string InstrGenerator::convert_cond_br_relx_to_rel8(const UINT8 *instcode, UINT32 inst_size, UINT16 &rel8_pos, INT8 rel8)
 {
     std::string instr_template;
-    UINT8 opcode_pos;
+    UINT8 opcode_pos = 0;
 
     if(instcode[0]==0x2e || instcode[0]==0x3e){//branch hint prefix
         instr_template.append(1, instcode[0]);
@@ -709,6 +775,67 @@ std::string InstrGenerator::modify_disp_of_pushq_rsp_mem(std::string src_templat
             break;
         default:
             ASSERTM(0, "Unkown ModRM(%x) in pushq mem with rsp register!\n", src_template[pushq_index]);
+    }
+
+    return dest_template;
+}
+
+std::string InstrGenerator::modify_disp_of_movq_rsp_mem(std::string src_template, INT8 addend)
+{
+    std::string dest_template;
+    UINT16 movq_index = 0;
+    
+    if((UINT8)src_template[movq_index]!=0x8b)//copy prefix
+        dest_template.append(1, src_template[movq_index++]);
+
+    ASSERT((UINT8)src_template[movq_index]==0x8b);//movq opcode
+    dest_template.append(1, src_template[movq_index++]);//copy opcode
+    //judge ModRM
+    switch((UINT8)src_template[movq_index]){
+        case 0x04://dispSize=0
+            {
+                //set dispSize8 ModRM
+                dest_template.append(1, 0x44);
+                //copy SIB
+                dest_template.append(1, src_template[++movq_index]);
+                //set displacement
+                dest_template.append(1, addend);
+            }
+            break;
+        case 0x44://dispSize=8
+            {
+                //get displacement
+                INT64 disp = (INT64)src_template[movq_index+2];
+                INT64 fixed_disp = disp + (INT64)addend;
+                if((fixed_disp > 0 ? fixed_disp : -fixed_disp) < 0x7f){
+                    //can still use dispSize8
+                    dest_template.append(1, src_template[movq_index++]);//copy ModRM
+                    dest_template.append(1, src_template[movq_index++]);//copy SIB
+                    dest_template.append(1, (INT8)fixed_disp);//set displacement
+                }else{
+                    //should use dispSize32
+                    dest_template.append(1, 0x84);//set dispSize32 ModRM
+                    dest_template.append(1, src_template[++movq_index]);//copy SIB
+                    //set displacement
+                    dest_template.append((const INT8*)&fixed_disp, 4);
+                }
+            }
+            break;
+        case 0x84://dispSize=32
+            {
+                //copy ModRM
+                dest_template.append(1, src_template[movq_index++]);
+                //copy SIB
+                dest_template.append(1, src_template[movq_index++]);
+                INT64 disp = *(INT64*)(&src_template[movq_index]);
+                INT64 fixed_disp = disp + (INT64)addend;
+                ASSERT((fixed_disp > 0 ? fixed_disp : -fixed_disp) < 0x7fffffff);
+                //set displacement
+                dest_template.append((const INT8*)&fixed_disp, 4);
+            }
+            break;
+        default:
+            ASSERTM(0, "Unkown ModRM(%x) in movq mem with rsp register!\n", src_template[movq_index]);
     }
 
     return dest_template;

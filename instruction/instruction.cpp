@@ -392,6 +392,59 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
           //2.4 merge the template
         instr_template += pushq_template;
     }
+#ifdef USE_CALLER_SAVED_DESTROY_OPT
+    /*
+        call *reg ==> addq %reg, $cc_offset
+                      jmpq %reg
+        call mem  ==> movq %rax, mem
+                      addq %rax, $cc_offset
+                      jmpq %rax
+    */
+    UINT8 dest_reg;
+    if(_dInst.ops[0].type==O_REG)
+        dest_reg = _dInst.ops[0].index;
+    else{
+        dest_reg = R_RAX;
+        //convert callin mem to movq rax
+        std::string movq_template = InstrGenerator::convert_callin_mem_to_movq_rax_mem(_encode, _dInst.size);
+        if(is_rip_relative()){//add relocation information if the instruction is rip relative
+            ASSERTM(_dInst.dispSize==32, "we only handle the situation that the size of displacement=32\n");
+            UINT16 rela_movq_pos = find_disp_pos_from_encode((const UINT8 *)movq_template.c_str(), movq_template.length(), (INT32)_dInst.disp);
+            rela_movq_pos += (UINT16)instr_template.length();
+            UINT16 movq_base_pos = (UINT16)(instr_template.length() + movq_template.length());
+            INSTR_RELA rela_push = {RIP_RELA_TYPE, rela_movq_pos, 4, movq_base_pos, (INT64)_dInst.disp};
+            reloc_vec.push_back(rela_push);
+        }else{//judge if has rsp or not
+            UINT8 check_reg = R_NONE;
+            if(_dInst.ops[0].type==O_SMEM)
+                check_reg = _dInst.ops[0].index;
+            else if(_dInst.ops[0].type==O_MEM){
+                check_reg = _dInst.base;
+                ASSERT(_dInst.ops[0].index!=R_RSP);
+            }
+    
+            if(check_reg==R_RSP)
+                movq_template = InstrGenerator::modify_disp_of_movq_rsp_mem(movq_template, 8);
+        }
+        
+        curr_pc += movq_template.length();
+        instr_template += movq_template;
+    }
+
+    //addq %dest_reg, $cc_offset
+    UINT16 rela_addq_pos;
+    std::string addq_template = InstrGenerator::gen_addq_reg_imm32_instr(dest_reg, rela_addq_pos, 0);
+
+    rela_addq_pos += (UINT16)instr_template.length();
+    curr_pc += addq_template.length();
+    INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, curr_pc, (INT64)get_instr_offset()};
+
+    reloc_vec.push_back(rela_addq);
+    instr_template += addq_template;
+    //jmpq %dest_reg
+    std::string jmpq_template = InstrGenerator::gen_jmpq_reg(dest_reg);
+    instr_template += jmpq_template;
+#else
     /*
         pushq mem/reg          (take care of the base register is rsp in mem operand, because the rsp has already decrease the rsp)
         addq (%rsp), $cc_offset
@@ -440,7 +493,7 @@ std::string IndirectCallInstr::generate_instr_template(std::vector<INSTR_RELA> &
     //retq
     std::string retq_template = InstrGenerator::gen_retq_instr();
     instr_template += retq_template;
-    
+#endif
     return instr_template;
 }
 
@@ -624,8 +677,8 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             instr_template[imm8_pos] = (INT8)offset32;
         }
 
-        BOOL need_protect_eflags = is_switch_case;
-        BOOL need_protect_stack_vars = is_switch_case;
+        BOOL need_protect_eflags = false;//is_switch_case;
+        BOOL need_protect_stack_vars = false;//is_switch_case;
         if(is_switch_case)
             ASSERT(!_module->is_likely_vsyscall_jmpq(_dInst.addr));
         
@@ -743,6 +796,35 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             INSTR_RELA rela_jmpq = {SS_RELA_TYPE, disp32_pos, 4, curr_pc, -8};
             reloc_vec.push_back(rela_jmpq);
         }else{
+#ifdef USE_CALLER_SAVED_DESTROY_OPT
+            if(is_plt){
+                //1. convert jumpin mem to movq rax
+                ASSERTM(is_rip_relative(), "plt jmp should be rip relative instruction!\n");
+                std::string movq_template = InstrGenerator::convert_jumpin_mem_to_movq_rax_mem(_encode, _dInst.size);
+                
+                UINT16 rela_movq_pos = find_disp_pos_from_encode((const UINT8 *)movq_template.c_str(), \
+                        movq_template.length(), (INT32)_dInst.disp);
+                rela_movq_pos += (UINT16)instr_template.length();
+                instr_template += movq_template;
+                UINT16 movq_base_pos = (UINT16)instr_template.length();
+                
+                INSTR_RELA rela_movq = {RIP_RELA_TYPE, rela_movq_pos, 4, movq_base_pos, (INT64)_dInst.disp};
+                reloc_vec.push_back(rela_movq);                
+                
+                //2. addq %rax, $cc_offset
+                UINT16 rela_addq_pos;
+                std::string addq_template = InstrGenerator::gen_addq_reg_imm32_instr(R_RAX, rela_addq_pos, 0);
+                
+                rela_addq_pos += (UINT16)instr_template.length();
+                instr_template += addq_template;
+                UINT16 addq_base_pos = instr_template.length();
+                INSTR_RELA rela_addq = {CC_RELA_TYPE, rela_addq_pos, 4, addq_base_pos, (INT64)get_instr_offset()};
+                reloc_vec.push_back(rela_addq);
+                //3. jmpq %rax
+                std::string jmpq_template = InstrGenerator::gen_jmpq_reg(R_RAX);
+                instr_template += jmpq_template;
+            }else{
+#endif        
             //1. push target onto stack
             std::string push_template;
             if(_dInst.ops[0].type==O_REG){
@@ -794,6 +876,9 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
             //5. gen return instruction
             std::string retq_template = InstrGenerator::gen_retq_instr();
             instr_template += retq_template;
+#ifdef USE_CALLER_SAVED_DESTROY_OPT
+            }
+#endif            
         }
     }
     return instr_template;
@@ -821,6 +906,7 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
     UINT16 curr_pc = 0;
     UINT16 limit_rel8_rela_pos = 0;
     UINT16 limit_rel8_pc = 0;
+
     //1. target
     switch(_dInst.opcode){
         case I_JA: case I_JAE: case I_JB: case I_JBE: case I_JG:
@@ -842,7 +928,6 @@ std::string ConditionBrInstr::generate_instr_template(std::vector<INSTR_RELA> &r
         case I_LOOP: case I_LOOPZ: case I_LOOPNZ: case I_JCXZ: case I_JRCXZ://can only be convert to rel8
             {
                 std::string cbr_template = InstrGenerator::convert_cond_br_relx_to_rel8(_encode, _dInst.size, limit_rel8_rela_pos, 0);
-
                 curr_pc += cbr_template.length();
                 limit_rel8_pc = curr_pc;
                 limit_rel8_rela_pos += instr_template.length();

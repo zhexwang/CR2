@@ -27,7 +27,7 @@ int main(int argc, char **argv)
             profile->check_bbl_safe();
             profile->check_func_safe();
         }
-        //Module::dump_all_indirect_jump_result();
+        Module::dump_all_indirect_jump_result();
         //Module::dump_all_bbl_movable_info();
         if(Options::_has_output_db_file){
             // 6. generate bbl template

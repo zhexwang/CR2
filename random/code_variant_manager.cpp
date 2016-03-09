@@ -706,7 +706,7 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
     cc_used_base = arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
     // 3.generate the code
     relocate_rbbls_and_tramps(cc_layout, cc_base, rbbl_maps, jmpin_rbbl_offsets);
-    
+
     return ;
 }
 

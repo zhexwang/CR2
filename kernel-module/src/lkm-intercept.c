@@ -278,8 +278,18 @@ void remmap_interp_and_allocate_cc(struct task_struct *ts)
 	regs->ip -= ld_offset;
 }
 
+asmlinkage long intercept_munmap(unsigned long addr, size_t len)
+{
+	char monitor_idx = is_monitor_app(current->comm);
+	if(monitor_idx!=0){
+		free_cc(addr, len);	
+	}
 
-asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff){
+	return orig_munmap(addr, len);
+}
+
+asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff)
+{
 	long ret = 0;
 	long cc_ret = 0;
 	long ss_ret = 0;

@@ -855,7 +855,7 @@ void wake_all_processes(struct task_struct *ts)
 
 void rerandomization(struct task_struct *ts)
 {
-	return ;
+	//return ;
 	int index = 0;
 	int internal_index = 0;
 	int shm_fd = 0;
