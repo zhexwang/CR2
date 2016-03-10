@@ -15,7 +15,8 @@
 #define TRAMP_OVERLAP_JMP32_PTR 2
 #define INV_TRAMP_PTR 3
 #define BOUNDARY_PTR 4
-#define RBBL_PTR_MIN 5
+#define MAIN_JMP_TABLE 5
+#define RBBL_PTR_MIN 6
 
 typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
 typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
@@ -30,6 +31,8 @@ public:
 	typedef TARGET_SET::iterator TARGET_ITERATOR;
 	typedef std::map<F_SIZE, TARGET_SET> JMPIN_TARGETS_MAPS;//first is src_bbl
 	typedef JMPIN_TARGETS_MAPS::iterator JMPIN_ITERATOR;
+	typedef std::vector<F_SIZE> JMP_TABLE_CONTENT;
+	typedef std::map<F_SIZE, JMP_TABLE_CONTENT> JMP_TABLE_MAPS;
 	typedef std::map<std::string, CodeVariantManager*> CVM_MAPS;
 	typedef struct{
 		P_ADDRX sighandler;
@@ -49,6 +52,7 @@ protected:
 	RAND_BBL_MAPS _postion_fixed_rbbl_maps;
 	RAND_BBL_MAPS _movable_rbbl_maps;
 	JMPIN_TARGETS_MAPS _switch_case_jmpin_rbbl_maps;
+	JMP_TABLE_MAPS _main_switch_case_jump_table;
 	std::string _elf_real_name;
 	LKM_SS_TYPE _ss_type;
 	/********generate code information********/
@@ -152,6 +156,10 @@ public:
 			TARGET_SET targets;
 			_switch_case_jmpin_rbbl_maps.insert(std::make_pair(src_bbl_offset, targets));
 		}
+	}
+	void insert_main_switch_case_jump_table(F_SIZE table_offset, JMP_TABLE_CONTENT table_content)
+	{
+		_main_switch_case_jump_table.insert(std::make_pair(table_offset, table_content));
 	}
 	void insert_switch_case_jmpin_rbbl(F_SIZE src_bbl_offset, TARGET_SET targets)
 	{

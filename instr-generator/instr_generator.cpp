@@ -315,6 +315,43 @@ std::string InstrGenerator::convert_jumpin_mem_to_movq_rax_mem(const UINT8 *inst
     return movq_template;
 }
 
+std::string InstrGenerator::convert_jumpin_mem_to_movq_reg_mem(const UINT8 *instcode, UINT32 instsize, UINT8 reg_index)
+{
+    std::string movq_template;
+    UINT32 jmpin_index = 0;
+    UINT8 prefix_base = 0;
+    UINT8 reg_in_ModRM = 0;
+    
+    if(reg_index>=R_RAX && reg_index<=R_RDI){
+        prefix_base = 0x48;
+        reg_in_ModRM = reg_index - R_RAX;
+    }else if(reg_index>=R_R8 && reg_index<=R_R15){
+        prefix_base = 0x4c;
+        reg_in_ModRM = reg_index - R_R8;
+    }else
+        ASSERT(0);
+    
+    // 1. set prefix 
+    if((instcode[jmpin_index])==0xff)
+        movq_template.append(1, prefix_base);
+    else{//has prefix
+        movq_template.append(1, instcode[jmpin_index++]|prefix_base);
+        ASSERTM(instcode[jmpin_index]==0xff, "jumpin opcode is unkown!\n");
+    }
+    // 2.set opcode
+    movq_template.append(1, 0x8b);
+    jmpin_index++;                                                                                                                                                      
+    // 3.calculate ModRM
+    ASSERTM((instcode[jmpin_index]&0x38)==0x20, "We only handle jmp r/m64! jmp m16:[16|32|64] is not handled!\n");
+    movq_template.append(1, (instcode[jmpin_index++]&0xc7)|((reg_in_ModRM&0x7)<<3));
+    // 4.copy SIB | Displacement of jmpin_inst
+    while(jmpin_index<instsize){
+        movq_template.append((const INT8*)(instcode+jmpin_index), 1);
+        jmpin_index++;
+    }
+    
+    return movq_template;
+}
 
 std::string InstrGenerator::convert_callin_reg_to_push_reg(const UINT8 *instcode, UINT32 instsize)
 {
@@ -526,7 +563,27 @@ std::string InstrGenerator::gen_cmp_reg64_imm8_instr(UINT8 reg_index, UINT16 &im
 
     return instr_template;
 }
+
+std::string InstrGenerator::gen_movq_reg_to_rax_instr(UINT8 reg_index)
+{
+    std::string instr_template;
+    UINT8 reg_idx_in_modRM = 0;
+    if(reg_index>=R_R8 && reg_index<=R_R15){//prefix
+        instr_template.append(1, 0x4c);
+        reg_idx_in_modRM = reg_index - R_R8;
+    }else if(reg_index>=R_RAX && reg_index<=R_RDI){
+        instr_template.append(1, 0x48);
+        reg_idx_in_modRM = reg_index - R_RAX;
+    }else
+        ASSERT(0);
+    //opcode
+    instr_template.append(1, 0x89);
+    //modRM
+    instr_template.append(1, 0xc0|((reg_idx_in_modRM&0x7)<<3));
 
+    return instr_template;
+}
+    
 std::string InstrGenerator::gen_addq_reg_imm32_instr(UINT8 reg_index, UINT16 &imm32_pos, INT32 imm32)
 {
     std::string instr_template;

@@ -488,7 +488,25 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
             FATAL(!ret.second, " place trampoline32 wrong!\n");
         }
     }
-    // 2.place switch-case trampolines
+#ifdef USE_MAIN_SWITCH_CASE_COPY_OPT
+    // 2.place switch-case tables
+    S_ADDRX old_used_cc_base = used_cc_base;
+    for(JMP_TABLE_MAPS::iterator iter = _main_switch_case_jump_table.begin(); iter!=_main_switch_case_jump_table.end(); iter++){
+        F_SIZE table_offset = iter->first;
+        INT32 entry_idx = 0;
+        JMP_TABLE_CONTENT &table_content = iter->second;
+        for(JMP_TABLE_CONTENT::iterator it = table_content.begin(); it!=table_content.end(); it++, entry_idx++){
+            S_ADDRX placed_saddrx = cc_base + table_offset + entry_idx*sizeof(F_SIZE);
+            //place target rbbl offset
+            *(F_SIZE *)placed_saddrx = *it;
+            used_cc_base = placed_saddrx + sizeof(F_SIZE);
+            FATAL(used_cc_base<old_used_cc_base, "jump table should be place after x section!\n");
+            //record    
+            cc_layout.insert(std::make_pair(Range<S_ADDRX>(placed_saddrx, used_cc_base-1), MAIN_JMP_TABLE));
+        }
+    }
+#endif    
+    // 3.place switch-case trampolines
     #define TRAMP_GAP 0x100
     S_ADDRX new_cc_base = used_cc_base + TRAMP_GAP;
     // get full jmpin targets
@@ -499,7 +517,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         jmpin_rbbl_offsets.insert(std::make_pair(jmpin_rbbl_offset, jmpin_target_offset));
         merge_set.insert(iter->second.begin(), iter->second.end());
     }
-    // 3.place jmpin targets trampoline
+    // 4.place jmpin targets trampoline
     for(TARGET_ITERATOR it = merge_set.begin(); it!=merge_set.end(); it++){
         TARGET_ITERATOR it_bk = it;
         F_SIZE curr_bbl_offset = *it;
@@ -539,15 +557,15 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
             FATAL(!ret.second, " place trampoline32 wrong!\n");
         }
     }
-    // 4.place fixed and movable rbbls
-    // 4.1 random fixed and movable rbbls
+    // 5.place fixed and movable rbbls
+    // 5.1 random fixed and movable rbbls
     SIZE rbbl_array_size;
     S_ADDRX *rbbl_array = NULL;
     if(Options::_need_randomize_rbbl)
         rbbl_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
     else
         rbbl_array = fallthrough_following(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
-    // 4.2 place rbbls
+    // 5.2 place rbbls
     SIZE reduce_num = 0;
     for(SIZE idx = 0; idx<rbbl_array_size; idx++){
         RandomBBL *curr_rbbl = (RandomBBL*)rbbl_array[idx];
@@ -582,7 +600,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         }else
             ASSERT(place_size==0);
     }
-    // 4.3 free array
+    // 5.3 free array
     delete []rbbl_array;
     //BLUE("Sum: %d, Reduce: %d(%lf)\n", (INT32)rbbl_array_size, (INT32)reduce_num, ((double)reduce_num*100)/(double)rbbl_array_size);
 
@@ -614,6 +632,16 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
                     INT64 offset64 = target_rbbl_addr - curr_pc;
                     ASSERT((offset64 > 0 ? offset64 : -offset64) < 0x7fffffff);
                     *(INT32*)relocate_addr = (INT32)offset64;
+                }
+                break;
+            case MAIN_JMP_TABLE:
+                {
+                    ASSERT(range_size==sizeof(F_SIZE));
+                    F_SIZE target_rbbl_offset = *(F_SIZE*)range_base_addr;
+                    RBBL_CC_MAPS::iterator ret = rbbl_maps.find(target_rbbl_offset);
+                    ASSERT(ret!=rbbl_maps.end());
+                    P_ADDRX target_rbbl_addr = ret->second - cc_base + _org_x_load_base + _cc_offset;
+                    *(S_ADDRX*)range_base_addr = target_rbbl_addr;
                 }
                 break;
             default://rbbl

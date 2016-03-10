@@ -27,7 +27,7 @@ typedef struct{
 	UINT16    r_byte_size;//relocation bytes num
 	UINT16    r_base_pos; //base postion (pc)
 	INT64     r_value;    //1.rip_rela_type: displacement; 2. branch_rela_type: branch target; 3.high32/low32 CC/ORG rela type: F_SIZE addr
-}INSTR_RELA;             //3. SS rela type: addend; 4.CC/trampoline rela type: callin or jmpin address in elf
+}INSTR_RELA;             //3. SS rela type: addend; 4.CC rela type: addend; 5. trampoline rela type: callin and jmpin address in elf
 
 typedef struct{
 	RELA_TYPE r_type; 
@@ -35,7 +35,7 @@ typedef struct{
 	UINT16    r_byte_size;  //need relocate size
 	INT32     r_addend;     //relocation addend, normalize the instr relocation to bbl start relocation info
 	INT64     r_value;      //1.rip_rela_type: displacement; 2. branch_rela_type: branch target; 3.high32/low32 CC/ORG rela type: F_SIZE addr
-}BBL_RELA;                //4.CC/Trampoline rela type: callin or jmpin address in elf 
+}BBL_RELA;                //4.Trampoline rela type: callin or jmpin address in elf 
 
 /************RIP Relocation******************
         VA(hight->low)               Relocation 

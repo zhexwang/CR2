@@ -73,22 +73,34 @@ BasicBlock *Module::get_bbl_by_off(const F_SIZE off) const
         return NULL;
 }
 
-std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, BOOL &is_switch_case, BOOL &is_plt) const
+std::set<F_SIZE> Module::get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, \
+    BOOL &is_main_switch_case, BOOL &is_so_switch_case, BOOL &is_plt) const
 {
     JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jumpin_offset);
     if(it!=_indirect_jump_maps.end()){
         is_memset = it->second.type==MEMSET_JMP ? true : false;
         is_convert = it->second.type==CONVERT_JMP ? true : false;
-        is_switch_case = it->second.type==SWITCH_CASE_ABSOLUTE || it->second.type==SWITCH_CASE_OFFSET ? true : false;
+        is_main_switch_case = it->second.type==SWITCH_CASE_ABSOLUTE ? true : false;
+        is_so_switch_case = it->second.type==SWITCH_CASE_OFFSET ? true : false;
         is_plt = it->second.type==PLT_JMP ? true : false;
         return it->second.targets;
     }else{
         is_memset = false;
         is_convert = false;
-        is_switch_case = false;
+        is_main_switch_case = false;
+        is_so_switch_case = false;
         is_plt = false;
         return std::set<F_SIZE>();
     }
+}
+
+F_SIZE Module::get_switch_case_table_stored(F_SIZE jmpin_offset) const
+{
+    JUMPIN_MAP_CONST_ITER it = _indirect_jump_maps.find(jmpin_offset);
+    if(it!=_indirect_jump_maps.end())
+        return it->second.table_base_stored;
+    else
+        return 0;
 }
 
 BasicBlock *Module::get_bbl_by_va(const P_ADDRX addr) const
@@ -361,7 +373,11 @@ void Module::generate_relocation_block(LKM_SS_TYPE ss_type)
         F_SIZE src_bbl_offset = src_bbl->get_bbl_offset(second);
         //TODO:memset use hash!!!!
         if(info.type==SWITCH_CASE_OFFSET || info.type==SWITCH_CASE_ABSOLUTE)
-            _cvm->insert_switch_case_jmpin_rbbl(src_bbl_offset, info.targets);
+            _cvm->insert_switch_case_jmpin_rbbl(src_bbl_offset, info.targets);        
+        // main switch case should copy jump table
+        if(info.type==SWITCH_CASE_ABSOLUTE){
+            _cvm->insert_main_switch_case_jump_table(info.table_offset, info.main_jump_table_targets);
+        }
     }
 }
 
@@ -1068,7 +1084,8 @@ BOOL Module::is_fixed_bbl(BasicBlock *bbl)
     return _pos_fixed_bbls.find(bbl)!=_pos_fixed_bbls.end();
 }
 
-BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets)
+BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets, \
+    std::vector<F_SIZE> &main_jump_table_targets, F_SIZE &table_base_stored)
 {
     INSTR_MAP_ITERATOR iter = _instr_maps.find(jump_offset); 
     Instruction *instr = iter->second;
@@ -1078,8 +1095,10 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
         instr->get_sib(0, base, index, scale, disp);
         if(base!=R_NONE || index==R_NONE || scale!=8)
             return false;
+        table_base_stored = jump_offset;
     }else if(instr->is_jump_smem()){
         disp = instr->get_disp();
+        table_base_stored = jump_offset;
     }else{//
         ASSERT(instr->is_jump_reg());
         UINT8 jump_base_reg = instr->get_dest_reg();
@@ -1088,9 +1107,10 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
             Instruction *inst = iter->second;
             UINT8 base_reg, dest_reg;
             if(inst->is_dest_reg(jump_base_reg)){
-                if(inst->is_mov_sib_to_reg64(base_reg, dest_reg, disp) && base_reg==R_NONE && dest_reg==jump_base_reg)
+                if(inst->is_mov_sib_to_reg64(base_reg, dest_reg, disp) && base_reg==R_NONE && dest_reg==jump_base_reg){
+                    table_base_stored = inst->get_instr_offset();
                     break;
-                else
+                }else
                     return false;
             }
             iter--;
@@ -1113,6 +1133,8 @@ BOOL Module::analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base,
                 insert_br_target(target_instr, jump_offset);
                 targets.insert(target_instr);
             }
+            //save target offset in table
+            main_jump_table_targets.push_back(target_instr);
         }else{
             entry_offset -=8;
             break;
@@ -1137,11 +1159,16 @@ void Module::analysis_indirect_jump_targets()
                 info.table_offset = 0;
                 info.table_size = 0;
                 info.targets.clear();
+                info.table_base_stored = 0;
+                info.main_jump_table_targets.clear();
             }else if(is_shared_object() && analysis_jump_table_in_so(jump_offset, table_base, table_size, info.targets)){
                 info.type = SWITCH_CASE_OFFSET;
                 info.table_offset = table_base;
                 info.table_size = table_size;
-            }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size, info.targets)){
+                info.main_jump_table_targets.clear();
+                info.table_base_stored = 0;
+            }else if(!is_shared_object() && analysis_jump_table_in_main(jump_offset, table_base, table_size, info.targets, \
+                info.main_jump_table_targets, info.table_base_stored)){
                 info.type = SWITCH_CASE_ABSOLUTE;
                 info.table_offset = table_base;
                 info.table_size = table_size;
@@ -1149,10 +1176,14 @@ void Module::analysis_indirect_jump_targets()
                 info.type = MEMSET_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
+                info.main_jump_table_targets.clear();
+                info.table_base_stored = 0;
             }else if(!is_shared_object() && analysis_convert_jump(jump_offset, info.targets)){
                 info.type = CONVERT_JMP;
                 info.table_offset = 0;
                 info.table_size = 0;
+                info.main_jump_table_targets.clear();
+                info.table_base_stored = 0;
             }
         }
     }
@@ -1334,7 +1365,7 @@ void Module::dump_all_indirect_jump_result()
 
 void Module::dump_indirect_jump_result()
 {
-    INT32 switch_case_off_count = 0, switch_case_absolute_count = 0;
+    INT32 switch_case_off_count = 0, switch_case_absolute_count = 0, switch_case_mem = 0;
     INT32 plt_jmp_count = 0;
     INT32 memset_jmp_count = 0;
     INT32 convert_jmp_count = 0;
@@ -1345,7 +1376,13 @@ void Module::dump_indirect_jump_result()
         switch(it->second.type){
             case SWITCH_CASE_OFFSET:switch_case_off_count++; break;
             case PLT_JMP: plt_jmp_count++; break;
-            case SWITCH_CASE_ABSOLUTE: switch_case_absolute_count++; break;
+            case SWITCH_CASE_ABSOLUTE: 
+                {
+                    switch_case_absolute_count++; 
+                    if(it->second.table_base_stored == it->first)
+                        switch_case_mem++;
+                }
+                break;
             case MEMSET_JMP: memset_jmp_count++; break;
             case CONVERT_JMP: convert_jmp_count++; break;
             default:
@@ -1354,9 +1391,9 @@ void Module::dump_indirect_jump_result()
         
     }
     
-    PRINT("Indirect Jump Types (%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute), %2d%%(%4d plt), %2d%%(%4d memset), %2d%%(%4d convert)\n",\
+    PRINT("Indirect Jump(%4d in %20s): %2d%%(%4d switch case offset), %2d%%(%4d switch case absolute[mem: %4d]), %2d%%(%4d plt), %2d%%(%4d memset), %2d%%(%4d convert)\n",\
         sum, get_name().c_str(), 100*switch_case_off_count/sum, switch_case_off_count, 100*switch_case_absolute_count/sum,\
-        switch_case_absolute_count, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count, \
+        switch_case_absolute_count, switch_case_mem, 100*plt_jmp_count/sum, plt_jmp_count, 100*memset_jmp_count/sum, memset_jmp_count, \
         100*convert_jmp_count/sum, convert_jmp_count);
 }
 

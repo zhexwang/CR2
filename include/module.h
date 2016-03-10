@@ -63,7 +63,9 @@ public:
 		JUMPIN_TYPE type;
 		F_SIZE table_offset;//jump table offset
 		SIZE table_size;
+		F_SIZE table_base_stored;//base stored in which instruction
 		std::set<F_SIZE> targets;
+		std::vector<F_SIZE> main_jump_table_targets;//has sequence
 	}JUMPIN_INFO;
 	typedef std::map<F_SIZE, JUMPIN_INFO> JUMPIN_MAP;
 	typedef JUMPIN_MAP::iterator JUMPIN_MAP_ITER;	
@@ -116,7 +118,8 @@ protected:
 	void examine_bbls();
 	void special_handling_in_cpp_exception();
 	void analysis_indirect_jump_targets();
-	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
+	BOOL analysis_jump_table_in_main(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets, \
+		std::vector<F_SIZE> &main_jump_table_targets, F_SIZE &table_base_stored);
 	BOOL analysis_jump_table_in_so(F_SIZE jump_offset, F_SIZE &table_base, SIZE &table_size, std::set<F_SIZE> &targets);
 	BOOL analysis_memset_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
 	BOOL analysis_convert_jump(F_SIZE jump_offset, std::set<F_SIZE> &targets);
@@ -157,7 +160,9 @@ public:
 	Instruction *get_instr_by_va(const P_ADDRX addr) const;
 	BasicBlock  *get_bbl_by_off(const F_SIZE off) const;
 	BasicBlock  *get_bbl_by_va(const P_ADDRX addr) const;
-	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, BOOL &is_switch_case, BOOL &is_plt) const; 
+	std::set<F_SIZE> get_indirect_jump_targets(F_SIZE jumpin_offset, BOOL &is_memset, BOOL &is_convert, \
+		BOOL &is_main_switch_case, BOOL &is_so_switch_case, BOOL &is_plt) const; 
+	F_SIZE get_switch_case_table_stored(F_SIZE jmpin_offset) const;
 	//find function
 	Instruction *find_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;
 	Instruction *find_prev_instr_by_off(F_SIZE offset, BOOL consider_prefix) const;

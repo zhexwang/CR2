@@ -32,9 +32,15 @@
 #define NOT_IMPLEMENTED(who)       
 #endif
 
+/*********debug********/
 //#define TRACE_DEBUG
 //#define LAST_RBBL_DEBUG
+
+/*********opt**********/
 #define USE_CALLER_SAVED_DESTROY_OPT
+#define USE_JMPIN_REG_DESTORY_OPT
+#define USE_JMPIN_MEM_INDEX_DESTORY_OPT
+#define USE_MAIN_SWITCH_CASE_COPY_OPT
 
 //bits define
 #define BITS_ARE_SET_ANY(value, bits)	   ( ((value)&(bits)) != 0 )
