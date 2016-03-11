@@ -1062,7 +1062,8 @@ void CodeVariantManager::recycle()
 static UINT32 db_seg_movable = 0;
 static UINT32 db_seg_fixed = 1;
 static UINT32 db_seg_all_jmpin = 2;
-//db_seg_jmpin: the offset of jmpin src, it must be larger than 2
+static UINT32 db_seg_main_jump_table = 3;
+//db_seg_jmpin: the offset of jmpin src, it must be larger than 3
 
 static SIZE read_rbbls(S_ADDRX r_addrx, CodeVariantManager *cvm, BOOL is_movable)
 {
@@ -1122,6 +1123,34 @@ static SIZE read_switch_case_info(S_ADDRX r_addrx, CodeVariantManager *cvm)
     return (S_ADDRX)ptr_32 - r_addrx;
 }
 
+static SIZE read_main_jump_table_info(S_ADDRX r_addrx, CodeVariantManager *cvm)
+{
+    UINT32 *ptr_32 = NULL;
+    //1. read seg type
+    ptr_32 = (UINT32*)r_addrx;
+    UINT32 seg_type = *ptr_32++;
+    FATAL(seg_type!=db_seg_main_jump_table, "type unmatched!\n");
+    //2. read jmpin sum
+    SIZE table_sum = *ptr_32++;
+    //3. read all jmpins
+    for(SIZE index = 0; index<table_sum; index++){
+        //3.1 read jmpin offset
+        F_SIZE jmpin_offset = *ptr_32++;
+        //3.2 read target sum
+        SIZE target_sum = *ptr_32++;
+        //3.3 read all targets
+        CodeVariantManager::JMP_TABLE_CONTENT table_content;
+        for(SIZE idx = 0; idx<target_sum; idx++)
+            table_content.push_back((F_SIZE)*ptr_32++);
+        //3.4 insert
+        cvm->insert_main_switch_case_jump_table(jmpin_offset, table_content);
+        table_content.clear();
+    }
+
+    //4. return
+    return (S_ADDRX)ptr_32 - r_addrx;
+}
+
 static SIZE store_rbbls(S_ADDRX s_addrx, CodeVariantManager::RAND_BBL_MAPS &rbbl_maps, BOOL is_movable)
 {
     S_ADDRX start_addrx = s_addrx;
@@ -1165,6 +1194,37 @@ static SIZE store_switch_case_info(S_ADDRX s_addrx, CodeVariantManager::JMPIN_TA
         *ptr_32++ = (UINT32)target_num;
         //3.3 store all targets
         for(CodeVariantManager::TARGET_ITERATOR it = target_set.begin(); it!=target_set.end(); it++){
+            F_SIZE target_offset = *it;
+            ASSERT(target_offset<=UINT_MAX);
+            *ptr_32++ = (UINT32)target_offset;
+        }
+    }
+    //4. return
+    return (S_ADDRX)ptr_32 - s_addrx;
+}
+
+static SIZE store_main_jump_table_info(S_ADDRX s_addrx, CodeVariantManager::JMP_TABLE_MAPS &table_maps)
+{
+    UINT32 *ptr_32 = NULL;
+    //1. store seg type
+    ptr_32 = (UINT32*)s_addrx;
+    *ptr_32++ = db_seg_main_jump_table;
+    //2. store table num
+    SIZE table_num = table_maps.size();
+    *ptr_32++ = (UINT32)table_num;
+    //3. store all jmpins
+    for(CodeVariantManager::JMP_TABLE_MAPS::iterator iter = table_maps.begin(); iter!=table_maps.end(); iter++){
+        F_SIZE jmpin_offset = iter->first;
+        CodeVariantManager::JMP_TABLE_CONTENT &table_content = iter->second;
+        SIZE table_size = table_content.size();
+        //3.1 store jmpin offset
+        ASSERT(jmpin_offset<=UINT_MAX);
+        *ptr_32++ = (UINT32)jmpin_offset;
+        //3.2 store target num
+        ASSERT(table_size<=UINT_MAX);
+        *ptr_32++ = (UINT32)table_size;
+        //3.3 store all targets
+        for(CodeVariantManager::JMP_TABLE_CONTENT::iterator it = table_content.begin(); it!=table_content.end(); it++){
             F_SIZE target_offset = *it;
             ASSERT(target_offset<=UINT_MAX);
             *ptr_32++ = (UINT32)target_offset;
@@ -1267,7 +1327,9 @@ void CodeVariantManager::read_db_files(std::string db_path, LKM_SS_TYPE ss_type)
     read_ptr += read_rbbls(read_ptr, this, true);
      //6.3 read switch_case jmpin targets
     read_ptr += read_switch_case_info(read_ptr, this);
-     
+     //6.4 read main jump table info
+    read_ptr += read_main_jump_table_info(read_ptr, this);
+    
     ASSERT(read_ptr==(statbuf.st_size+(S_ADDRX)buf_start));
     //7. unmap 
     ret = munmap(buf_start, map_size);
@@ -1336,7 +1398,9 @@ void CodeVariantManager::store_into_db(std::string db_path)
         store_ptr += store_rbbls(store_ptr, cvm->_movable_rbbl_maps, true);
          //3.3 store switch_case jmpin targets
         store_ptr += store_switch_case_info(store_ptr, cvm->_switch_case_jmpin_rbbl_maps);
-        
+         //3.4 store main jump table info
+        store_ptr += store_main_jump_table_info(store_ptr, cvm->_main_switch_case_jump_table);
+         
         //4. unmap and dwindle the file
         ret = munmap(buf_start, BUF_SIZE);
         ASSERT(ret==0);

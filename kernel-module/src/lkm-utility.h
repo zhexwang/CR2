@@ -3,8 +3,6 @@
 #include <linux/module.h>
 
 #define PRINTK(format, ...) do{ printk(KERN_ERR format, ##__VA_ARGS__);}while(0)
-#define ASSERT(cond)       do{if(!(cond)) {PRINTK("ASSERT failed: %s:%-4d ", __FILE__, __LINE__); abort();}}while(0)
-#define ASSERTM(cond, format, ...) do{if(!(cond)) {PRINTK("ASSERT failed: %s:%-4d "format, __FILE__, __LINE__, ## __VA_ARGS__); abort();}}while(0)
 
 //bits define
 #define BITS_ARE_SET_ANY(value, bits)	   ( ((value)&(bits)) != 0 )

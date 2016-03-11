@@ -75,7 +75,7 @@ int main(int argc, char **argv)
         // 2.generate the first code variant
         CodeVariantManager::init_protected_proc_info(mesg.proctected_procid, mesg.cc_offset, mesg.ss_offset, mesg.gs_base, mesg.lkm_ss_type);
         CodeVariantManager::start_gen_code_variants();
-        CodeVariantManager::wait_for_code_variant_ready(true);
+        CodeVariantManager::wait_for_code_variant_ready(true); 
         new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
         ASSERT(new_pc!=0);
 
@@ -91,7 +91,9 @@ int main(int argc, char **argv)
             else if(mesg.connect==CURR_IS_CV1_NEED_CV2 || mesg.connect==CURR_IS_CV2_NEED_CV1){
                 //handle rerandomization
                 BOOL need_cv1 = mesg.connect==CURR_IS_CV2_NEED_CV1;
+                
                 CodeVariantManager::wait_for_code_variant_ready(need_cv1);
+                
                 new_pc = CodeVariantManager::get_new_pc_from_old_all(mesg.new_ip, need_cv1);
                 ASSERT(new_pc!=0);
                 CodeVariantManager::modify_new_ra_in_ss(need_cv1);
