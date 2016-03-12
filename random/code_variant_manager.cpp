@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "option.h"
 #include "code_variant_manager.h"
@@ -24,6 +25,11 @@ BOOL CodeVariantManager::_is_cv1_ready = false;
 BOOL CodeVariantManager::_is_cv2_ready = false;
 CodeVariantManager::SIG_HANDLERS CodeVariantManager::_sig_handlers;
 BOOL CodeVariantManager::_has_init = false;
+
+inline UINT64 get_time_diff(struct timeval &start, struct timeval &end)
+{
+    return 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+}
 
 std::string get_real_path(const char *file_path)
 {
@@ -73,6 +79,10 @@ CodeVariantManager::CodeVariantManager(std::string module_path)
 {
     _elf_real_name = get_real_name_from_path(get_real_path(module_path.c_str()));
     add_cvm(this);
+#ifdef USE_TRAMP_RECORD_OPT
+    _has_common_record1 = false;
+    _has_common_record2 = false;
+#endif
 }
 
 static INT32 map_shm_file(std::string shm_path, S_ADDRX &addr, F_SIZE &file_sz)
@@ -415,11 +425,25 @@ S_ADDRX *random(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeV
     return rbbl_array;
 }
 
+S_ADDRX *sequence_rbbu(CodeVariantManager::RAND_BBU_MAPS &rbbu_maps, SIZE array_num)
+{   
+    S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+    SIZE idx = 0;
+    for(CodeVariantManager::RAND_BBU_MAPS::iterator iter = rbbu_maps.begin(); iter!=rbbu_maps.end(); iter++){
+        for(CodeVariantManager::RAND_BBL_MAPS::iterator it = iter->second.begin(); it!=iter->second.end(); it++)
+            rbbl_array[idx++] = (S_ADDRX)it->second;
+    }
+    ASSERT(idx==array_num);
+    
+    return rbbl_array;
+}
+
 S_ADDRX *fallthrough_following(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeVariantManager::RAND_BBL_MAPS movable_rbbls, \
     SIZE &array_num)
 {
     array_num = fixed_rbbls.size() + movable_rbbls.size();
     S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+
     //init array
     CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_iter = fixed_rbbls.begin();
     CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_end = fixed_rbbls.end();
@@ -442,11 +466,71 @@ S_ADDRX *fallthrough_following(const CodeVariantManager::RAND_BBL_MAPS fixed_rbb
     return rbbl_array;
 }
 
+void CodeVariantManager::init_rbbl_unit()
+{
+    SIZE array_num = _postion_fixed_rbbl_maps.size() + _movable_rbbl_maps.size();
+    S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+    //init array
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_iter = _postion_fixed_rbbl_maps.begin();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator fixed_end = _postion_fixed_rbbl_maps.end();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator movable_iter = _movable_rbbl_maps.begin();
+    CodeVariantManager::RAND_BBL_MAPS::const_iterator movable_end = _movable_rbbl_maps.end();
+    
+    for(SIZE index=0; index<array_num; index++){
+        F_SIZE curr_fixed_offset = fixed_iter!=fixed_end ? fixed_iter->first : 0x7fffffff;
+        F_SIZE curr_movable_offset = movable_iter!=movable_end ? movable_iter->first : 0x7fffffff;
+        if(curr_fixed_offset<curr_movable_offset){
+            rbbl_array[index] = (S_ADDRX)fixed_iter->second;
+            fixed_iter++;
+        }else if(curr_fixed_offset>curr_movable_offset){
+            rbbl_array[index] = (S_ADDRX)movable_iter->second;
+            movable_iter++;
+        }else
+            FATAL(1, "Can not be exist the same offset in both fixed_rbbls and movable_rbbls!\n");
+    }
+    //split basic block unit   
+    F_SIZE curr_rbbu_offset = ((RandomBBL*)rbbl_array[0])->get_rbbl_offset();
+    std::map<F_SIZE, RandomBBL*> curr_rbbu;
+    curr_rbbu.insert(std::make_pair(curr_rbbu_offset, (RandomBBL*)rbbl_array[0]));
+
+    for(SIZE idx = 0; idx<array_num; idx++){
+        RandomBBL *curr_rbbl = (RandomBBL*)rbbl_array[idx];
+        RandomBBL *next_rbbl = idx<(array_num-1) ? (RandomBBL*)rbbl_array[idx+1] : NULL;
+        
+        if(next_rbbl){
+            F_SIZE next_rbbl_offset = next_rbbl->get_rbbl_offset();
+            if(next_rbbl_offset!=curr_rbbl->get_last_br_target()){
+                _rbbu_maps.insert(std::make_pair(curr_rbbu_offset, curr_rbbu));
+                curr_rbbu.clear();
+                curr_rbbu_offset = next_rbbl_offset;
+            }            
+            curr_rbbu.insert(std::make_pair(next_rbbl_offset, next_rbbl));
+        }else{
+            if(curr_rbbu.size()!=0)
+                _rbbu_maps.insert(std::make_pair(curr_rbbu_offset, curr_rbbu));
+        }
+            
+    }
+    delete []rbbl_array;
+    
+    return ;    
+}
+
 S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, \
     RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
 {
-    S_ADDRX trampoline32_addr = 0;
     S_ADDRX used_cc_base = 0;
+    S_ADDRX trampoline32_addr = 0;
+
+#ifdef USE_TRAMP_RECORD_OPT 
+    BOOL &has_common_record = cc_base==_cc1_base ? _has_common_record1 : _has_common_record2;
+	CC_LAYOUT &common_cc_layout = cc_base==_cc1_base ? _common_cc_layout1 : _common_cc_layout2;
+	JMPIN_CC_OFFSET &common_jmpin_offset = cc_base==_cc1_base ? _common_jmpin_offset1 : _common_jmpin_offset2;
+	S_ADDRX &common_used_cc_base = cc_base==_cc1_base ? _common_used_cc_base1 : _common_used_cc_base2;
+	COMMON_DATA &common_data = cc_base==_cc1_base ? _common_data1 : _common_data2;	
+
+    if(!has_common_record){
+#endif
     // 1.place fixed rbbl's trampoline  
     CC_LAYOUT_PAIR invalid_ret = place_invalid_boundary(cc_base, cc_layout);
     FATAL(!invalid_ret.second, " place invalid boundary wrong!\n");
@@ -557,14 +641,37 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
             FATAL(!ret.second, " place trampoline32 wrong!\n");
         }
     }
+#ifdef USE_TRAMP_RECORD_OPT 
+        //init record common
+        common_used_cc_base = used_cc_base;
+        common_cc_layout = cc_layout;
+        common_jmpin_offset = jmpin_rbbl_offsets;
+        for(CC_LAYOUT_ITER iter = common_cc_layout.begin(); iter!=common_cc_layout.end(); iter++){
+            S_ADDRX saddrx = iter->first.low();
+            common_data.insert(std::make_pair(saddrx, *(UINT64*)saddrx));
+        }
+        has_common_record = true;
+    }else{
+        //init from record common
+        used_cc_base = common_used_cc_base;
+        cc_layout = common_cc_layout;
+        jmpin_rbbl_offsets = common_jmpin_offset;
+        for(COMMON_DATA::iterator iter = common_data.begin(); iter!=common_data.end(); iter++){
+            S_ADDRX saddrx = iter->first;
+            *(UINT64*)saddrx = iter->second;
+        }
+    }
+#endif
     // 5.place fixed and movable rbbls
     // 5.1 random fixed and movable rbbls
     SIZE rbbl_array_size;
     S_ADDRX *rbbl_array = NULL;
     if(Options::_need_randomize_rbbl)
         rbbl_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
-    else
-        rbbl_array = fallthrough_following(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
+    else{
+        rbbl_array_size = _postion_fixed_rbbl_maps.size()+_movable_rbbl_maps.size();
+        rbbl_array = sequence_rbbu(_rbbu_maps, rbbl_array_size);
+    }
     // 5.2 place rbbls
     SIZE reduce_num = 0;
     for(SIZE idx = 0; idx<rbbl_array_size; idx++){
@@ -603,7 +710,6 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     // 5.3 free array
     delete []rbbl_array;
     //BLUE("Sum: %d, Reduce: %d(%lf)\n", (INT32)rbbl_array_size, (INT32)reduce_num, ((double)reduce_num*100)/(double)rbbl_array_size);
-
     //judge used cc size
     ASSERT((used_cc_base - cc_base)<=_cc_load_size);
     return used_cc_base;
@@ -729,19 +835,47 @@ void CodeVariantManager::generate_code_variant(BOOL is_first_cc)
     JMPIN_CC_OFFSET &jmpin_rbbl_offsets = is_first_cc ? _jmpin_rbbl_offsets1 : _jmpin_rbbl_offsets2;
     S_ADDRX &cc_used_base = is_first_cc ? _cc1_used_base : _cc2_used_base;
     // 1.clean code cache
+#ifndef USE_CLOSE_CLEAN_CC_OPT    
     clean_cc(is_first_cc);
+#endif
     // 2.arrange the code layout
     cc_used_base = arrange_cc_layout(cc_base, cc_layout, rbbl_maps, jmpin_rbbl_offsets);
     // 3.generate the code
     relocate_rbbls_and_tramps(cc_layout, cc_base, rbbl_maps, jmpin_rbbl_offsets);
-
     return ;
+}
+
+typedef struct{
+    CodeVariantManager *cvm;
+    BOOL is_first_cc;
+}THREAD_GCV_ARG;
+
+void *CodeVariantManager::thread_gen_code_variant(void *arg)
+{
+    THREAD_GCV_ARG *thread_arg = (THREAD_GCV_ARG*)arg;
+    thread_arg->cvm->generate_code_variant(thread_arg->is_first_cc);
+    
+    return NULL;
 }
 
 void CodeVariantManager::generate_all_code_variant(BOOL is_first_cc)
 {
-    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++)
-        iter->second->generate_code_variant(is_first_cc);
+    INT32 thread_sum = _all_cvm_maps.size();
+    INT32 thread_idx = 0;
+    pthread_t *thread = new pthread_t[thread_sum];
+    THREAD_GCV_ARG *args = new THREAD_GCV_ARG[thread_sum];
+    
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++, thread_idx++){
+        args[thread_idx].cvm = iter->second;
+        args[thread_idx].is_first_cc = is_first_cc;
+        pthread_create(&thread[thread_idx], NULL, thread_gen_code_variant, (void*)&args[thread_idx]);
+    }
+
+    for(thread_idx = 0; thread_idx<thread_sum; thread_idx++)
+        pthread_join(thread[thread_idx], NULL);
+            
+    delete []thread;
+    delete []args;
 
     patch_all_sigaction_entry(is_first_cc);
     return ;
@@ -1336,6 +1470,8 @@ void CodeVariantManager::read_db_files(std::string db_path, LKM_SS_TYPE ss_type)
     ASSERT(ret==0);
     //8. close the file
     close(fd);
+    //9. init rbbl unit    
+    init_rbbl_unit();
 }
 
 void CodeVariantManager::init_from_db(std::string elf_path, std::string db_path, LKM_SS_TYPE ss_type)
@@ -1350,7 +1486,7 @@ void CodeVariantManager::init_from_db(std::string elf_path, std::string db_path,
     //3. read db to initialize the code variant manager
     for(std::vector<CodeVariantManager*>::iterator iter = init_cvm_vec.begin(); iter!=init_cvm_vec.end(); iter++){
         CodeVariantManager *cvm = *iter;
-        cvm->read_db_files(db_path, ss_type);       
+        cvm->read_db_files(db_path, ss_type);  
     }
 }
 

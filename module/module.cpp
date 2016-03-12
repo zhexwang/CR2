@@ -379,6 +379,8 @@ void Module::generate_relocation_block(LKM_SS_TYPE ss_type)
             _cvm->insert_main_switch_case_jump_table(info.table_offset, info.main_jump_table_targets);
         }
     }
+    // init rbbl unit
+    _cvm->init_rbbl_unit();
 }
 
 void Module::generate_all_relocation_block(LKM_SS_TYPE ss_type)

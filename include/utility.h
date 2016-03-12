@@ -41,6 +41,8 @@
 #define USE_JMPIN_REG_DESTORY_OPT
 #define USE_JMPIN_MEM_INDEX_DESTORY_OPT
 #define USE_MAIN_SWITCH_CASE_COPY_OPT
+#define USE_CLOSE_CLEAN_CC_OPT
+#define USE_TRAMP_RECORD_OPT
 
 //bits define
 #define BITS_ARE_SET_ANY(value, bits)	   ( ((value)&(bits)) != 0 )

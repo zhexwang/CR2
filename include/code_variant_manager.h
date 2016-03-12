@@ -19,6 +19,8 @@
 #define RBBL_PTR_MIN 6
 
 typedef std::map<Range<S_ADDRX>, S_ADDRX> CC_LAYOUT;
+typedef std::map<S_ADDRX, UINT64> COMMON_DATA;//first is CC_LAYOUT.low, second is max size of upper define size
+
 typedef CC_LAYOUT::iterator CC_LAYOUT_ITER;
 typedef std::pair<CC_LAYOUT_ITER, BOOL> CC_LAYOUT_PAIR;
 
@@ -26,6 +28,7 @@ class CodeVariantManager
 {
 public:
 	typedef std::map<F_SIZE, RandomBBL*> RAND_BBL_MAPS;
+	typedef std::map<F_SIZE, RAND_BBL_MAPS> RAND_BBU_MAPS;
 	typedef std::set<RandomBBL*> RAND_BBL_SET;
 	typedef std::set<F_SIZE> TARGET_SET;
 	typedef TARGET_SET::iterator TARGET_ITERATOR;
@@ -56,6 +59,21 @@ protected:
 	std::string _elf_real_name;
 	LKM_SS_TYPE _ss_type;
 	/********generate code information********/
+	RAND_BBU_MAPS _rbbu_maps;//basic block unit due to fallthrough optimization
+#ifdef USE_TRAMP_RECORD_OPT
+	//cc1
+	BOOL _has_common_record1;
+	CC_LAYOUT _common_cc_layout1;
+	JMPIN_CC_OFFSET _common_jmpin_offset1;
+	S_ADDRX _common_used_cc_base1;
+	COMMON_DATA _common_data1;	
+	//cc2
+	BOOL _has_common_record2;
+	CC_LAYOUT _common_cc_layout2;
+	JMPIN_CC_OFFSET _common_jmpin_offset2;
+	S_ADDRX _common_used_cc_base2;
+	COMMON_DATA _common_data2;	
+#endif
     CC_LAYOUT _cc_layout1;
 	CC_LAYOUT _cc_layout2;
 	S_ADDRX _cc1_used_base;
@@ -134,7 +152,8 @@ public:
 	static void store_into_db(std::string db_path);	
 	static void handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, P_SIZE cc_size, std::string db_path, LKM_SS_TYPE ss_type, \
 		std::string lib_path, std::string shm_path);
-	static P_ADDRX handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc);
+	static P_ADDRX handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc);	
+	void init_rbbl_unit();
 	//insert functions
 	void insert_fixed_random_bbl(F_SIZE bbl_offset, RandomBBL *rand_bbl)
 	{
@@ -203,7 +222,8 @@ protected:
 	RandomBBL *find_rbbl_from_paddrx(P_ADDRX p_addr, BOOL is_first_cc);
 	RandomBBL *find_rbbl_from_saddrx(S_ADDRX s_addr, BOOL is_first_cc);
 	S_ADDRX arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_layout, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
-	void generate_code_variant(BOOL is_first_cc);
+	void generate_code_variant(BOOL is_first_cc);	
+	static void *thread_gen_code_variant(void *arg);
 	void clean_cc(BOOL is_first_cc);
 	void relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets);
 	//init cc and ss
