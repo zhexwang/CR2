@@ -27,7 +27,7 @@ int main(int argc, char **argv)
             profile->check_bbl_safe();
             profile->check_func_safe();
         }
-        //Module::dump_all_indirect_jump_result();
+        Module::dump_all_indirect_jump_result();
         //Module::dump_all_bbl_movable_info();
         if(Options::_has_output_db_file){
             // 6. generate bbl template
@@ -76,11 +76,12 @@ int main(int argc, char **argv)
         CodeVariantManager::init_protected_proc_info(mesg.proctected_procid, mesg.cc_offset, mesg.ss_offset, mesg.gs_base, mesg.lkm_ss_type);
         CodeVariantManager::start_gen_code_variants();
         CodeVariantManager::wait_for_code_variant_ready(true); 
+        CodeVariantManager::wait_for_code_variant_ready(false); 
         new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
         ASSERT(new_pc!=0);
-
+        long new_ips[MAX_STOP_NUM] = {0};
         // 3.send message to switch to the new generated code variant
-        NetLink::send_cv_ready_mesg(true, new_pc, Options::_elf_path);
+        NetLink::send_cv_ready_mesg(true, new_pc, new_ips, Options::_elf_path);
         // 4.loop to listen for rereandomization and exit
         while(1){
             // block to recv message from kernel module
@@ -91,13 +92,16 @@ int main(int argc, char **argv)
             else if(mesg.connect==CURR_IS_CV1_NEED_CV2 || mesg.connect==CURR_IS_CV2_NEED_CV1){
                 //handle rerandomization
                 BOOL need_cv1 = mesg.connect==CURR_IS_CV2_NEED_CV1;
-                
                 CodeVariantManager::wait_for_code_variant_ready(need_cv1);
-                
+                //curr pc
                 new_pc = CodeVariantManager::get_new_pc_from_old_all(mesg.new_ip, need_cv1);
                 ASSERT(new_pc!=0);
                 CodeVariantManager::modify_new_ra_in_ss(need_cv1);
-                NetLink::send_cv_ready_mesg(need_cv1, new_pc, Options::_elf_path);
+                //other processes and threads pc
+                long new_additional_ips[MAX_STOP_NUM];
+                CodeVariantManager::patch_new_pc(new_additional_ips, mesg.additional_ips, need_cv1);
+                //send message
+                NetLink::send_cv_ready_mesg(need_cv1, new_pc, new_additional_ips, Options::_elf_path);
                 CodeVariantManager::consume_cv(need_cv1 ? false : true);
             }else if(mesg.connect==SIGACTION_DETECTED){
                 //handle sigaction

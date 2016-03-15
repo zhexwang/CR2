@@ -77,7 +77,7 @@ void send_init_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx
 	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
 	volatile char *start_flag = get_start_flag(app_slot_idx);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
-	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, \
+	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, \
 			"\0", "init code cache and request code variant!"};
 	strcpy(msg.app_name, ts->comm);
 	
@@ -382,7 +382,7 @@ asmlinkage long intercept_execve(const char __user* filename, const char __user*
 
 void send_exit_mesg_to_shuffle_process(struct task_struct *ts, int shuffle_pid)
 {
-	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "protected process is out!"};
+	MESG_BAG msg = {P_PROCESS_IS_OUT, ts->pid, 0, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "protected process is out!"};
 	strcpy(msg.app_name, ts->comm);
 	if(shuffle_pid!=0)
 		nl_send_msg(shuffle_pid, msg);
@@ -394,7 +394,7 @@ void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
-	MESG_BAG msg = {FREE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
+	MESG_BAG msg = {FREE_SS, ts->pid, regs->ip, {0}, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
 	
@@ -490,7 +490,7 @@ void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
-	MESG_BAG msg = {SIGACTION_DETECTED, ts->pid, regs->ip, handler_addr, sigreturn_addr, \
+	MESG_BAG msg = {SIGACTION_DETECTED, ts->pid, regs->ip, {0}, handler_addr, sigreturn_addr, \
 		GS_BASE, global_ss_type, "\0", "handle sigaction handler and sigreturn!"};
 	strcpy(msg.app_name, ts->comm);
 	
@@ -545,7 +545,7 @@ void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
-	MESG_BAG msg = {CREATE_SS, ts->pid, regs->ip, stack_len, 0, 0, global_ss_type, "\0", "\0"};
+	MESG_BAG msg = {CREATE_SS, ts->pid, regs->ip, {0}, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
 	if(shuffle_pid!=0){

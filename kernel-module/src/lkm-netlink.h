@@ -1,6 +1,7 @@
 #ifndef __LKM_NETLINK_H__
 #define __LKM_NETLINK_H__
 
+#include "lkm-config.h"
 
 /*
  * When lkm_ss_type==LKM_OFFSET_SS_TYPE, ss_offset represents the offset between shadow stack and original stack!
@@ -23,6 +24,7 @@ typedef struct{
 	int connect;
 	int proctected_procid;
 	long new_ip;
+	long additional_ips[MAX_STOP_NUM];
 	long cc_offset;
 	long ss_offset;
 	long gs_base;

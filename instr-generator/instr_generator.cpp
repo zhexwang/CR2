@@ -268,10 +268,15 @@ std::string InstrGenerator::convert_callin_mem_to_movq_rax_mem(const UINT8 *inst
 {
     std::string movq_template;
     UINT32 callin_index = 0;
-    // 1. set prefix 
-    if((instcode[callin_index])==0xff)
+
+    if(instcode[callin_index]==0x64){//has fs prefix
+        movq_template.append(1, 0x64);
+        callin_index++;
+    }
+    // 1. set ordinary prefix 
+    if(instcode[callin_index]==0xff)
         movq_template.append(1, 0x48);
-    else{//has prefix
+    else{//has ordninary prefix
         movq_template.append(1, instcode[callin_index++]|0x48);
         ASSERTM(instcode[callin_index]==0xff, "callin opcode is unkown!\n");
     }

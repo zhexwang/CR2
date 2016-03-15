@@ -3,7 +3,6 @@
 
 #include <linux/module.h>
 
-
 extern void init_shuffle_config_list(void);
 extern void insert_shuffle_info(char monitor_list_idx,int shuffle_pid);
 extern void free_one_shuffle_info(char monitor_list_idx, int shuffle_pid);
@@ -28,6 +27,7 @@ extern char *is_checkpoint(struct task_struct *ts, char *app_slot_idx);
 extern void set_shuffle_pid(char app_slot_idx, int shuffle_pid);
 extern char get_app_slot_idx(int pgid);
 extern void set_shuffle_pc(char app_slot_idx, ulong pc);
+extern void set_additional_pc(char app_slot_idx, long ips[]);
 extern ulong get_shuffle_pc(char app_slot_idx);
 extern volatile char *get_start_flag(char app_slot_idx);
 extern int get_shuffle_pid(char app_slot_idx);

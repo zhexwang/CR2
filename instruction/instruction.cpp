@@ -713,8 +713,8 @@ std::string IndirectJumpInstr::generate_instr_template(std::vector<INSTR_RELA> &
                 disp32_pos += instr_template.length();
                 instr_template += jmpq_template;
                 UINT16 jmpq_base = instr_template.length();
-                
-                INSTR_RELA rela_disp32 = {CC_RELA_TYPE, disp32_pos, 4, jmpq_base, _dInst.disp};
+                INT64 r_value = _dInst.disp;
+                INSTR_RELA rela_disp32 = {CC_RELA_TYPE, disp32_pos, 4, jmpq_base, r_value};
                 reloc_vec.push_back(rela_disp32);
                 
                 return instr_template;

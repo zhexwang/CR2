@@ -27,6 +27,7 @@
 #define CHECK_ENCODE_LEN 7
 
 #define MAX_PGID_NUM 2
+#define MAX_STOP_NUM 20
 #define MAX_STACK_NUM 20
 #define MAX_X_NUM 20
 #define MAX_APP_LIST_NUM 50

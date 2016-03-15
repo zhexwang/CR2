@@ -32,7 +32,7 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
-	MESG_BAG msg = {DLOPEN, ts->pid, regs->ip, orig_x_start, orig_x_end, cc_size, global_ss_type, "\0", "\0"};
+	MESG_BAG msg = {DLOPEN, ts->pid, regs->ip, {0}, orig_x_start, orig_x_end, cc_size, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, lib_path);
 	strcpy(msg.mesg, shm_file);
 
@@ -73,7 +73,7 @@ long allocate_cc(long orig_x_size, const char *orig_name)
 	x_start = cc_ret - CC_OFFSET;
 	app_slot_idx = insert_x_info(current, cc_ret, cc_ret+cc_size, shm_path);
 	close_shm_file(cc_fd);
-	if(is_app_start(current)){//send message to shuffle process, dlopen
+	if(is_app_start(current)){//send message to shuffle process, dlopen(need stop all processes/threads, we only handle one process/thread now)
 		send_dlopen_mesg_to_shuffle_process(current, app_slot_idx, x_start, x_start+orig_x_size, cc_size, orig_name, shm_path);
 	}
 	PRINTK("[CR2:%d]mmap(addr:%lx, len:%lx)\n", current->pid, cc_ret, cc_size);

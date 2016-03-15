@@ -1149,6 +1149,18 @@ P_ADDRX CodeVariantManager::get_new_pc_from_old_all(P_ADDRX old_pc, BOOL first_c
     return 0;
 }
 
+void CodeVariantManager::patch_new_pc(long new_ips[MAX_STOP_NUM], long old_ips[MAX_STOP_NUM],\
+    BOOL first_cc_is_new)
+{
+    for(INT32 idx = 0; idx<MAX_STOP_NUM; idx++){
+        if(old_ips[idx]!=0)
+            new_ips[idx] = get_new_pc_from_old_all(old_ips[idx], first_cc_is_new);
+        else
+            new_ips[idx] = 0;
+    }
+    return ;        
+}
+
 void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
 {
     //TODO: we only handle ordinary shadow stack, not shadow stack++

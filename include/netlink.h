@@ -6,6 +6,8 @@
 
 #include "type.h"
 
+#define MAX_STOP_NUM 20
+
 enum LKM_SS_TYPE{
 	LKM_OFFSET_SS_TYPE = 0,
 	LKM_SEG_SS_TYPE,
@@ -25,6 +27,7 @@ typedef struct{
 	int connect;
 	int proctected_procid;
 	long new_ip;
+	long additional_ips[MAX_STOP_NUM];
 	long cc_offset;
 	long ss_offset;
 	long gs_base;
@@ -62,7 +65,7 @@ protected:
 public:
 	static void connect_with_lkm(std::string elf_path);
 	static void send_mesg(MESG_BAG mesg);
-	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, std::string elf_path);
+	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, long additional_ips[MAX_STOP_NUM], std::string elf_path);
 	static MESG_BAG recv_mesg();
 	static void send_sigaction_handled_mesg(long new_pc, std::string elf_path);
 	static void send_ss_handled_mesg(long new_pc, std::string elf_path);

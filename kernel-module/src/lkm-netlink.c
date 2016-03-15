@@ -44,7 +44,7 @@ void nl_recv_msg(struct sk_buff *skb)
 	char monitor_idx = 0;
 	char app_slot_idx = 0;
 	volatile char *start_flag = NULL;
-	MESG_BAG wrong_msg = {WRONG_APP, 0, 0, 0, 0, 0, 0, "\0", "Wrong app!"};
+	MESG_BAG wrong_msg = {WRONG_APP, 0, 0, {0}, 0, 0, 0, 0, "\0", "Wrong app!"};
     nlh = (struct nlmsghdr *)skb->data;
     pid = nlh->nlmsg_pid; /*pid of sending process */
 	mesg = ((MESG_BAG*)nlmsg_data(nlh))->mesg;
@@ -63,7 +63,10 @@ void nl_recv_msg(struct sk_buff *skb)
 			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED: case SS_HANDLED: case DLOPEN_HANDLED:
 				app_slot_idx = get_app_slot_idx_from_shuffle_config(monitor_idx, pid);
 				start_flag = get_start_flag(app_slot_idx);
+				//set curr new pc
 				set_shuffle_pc(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->new_ip);
+				//set additional new pc
+				set_additional_pc(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->additional_ips);
 				*start_flag = 0;
 				break;
 			default:
