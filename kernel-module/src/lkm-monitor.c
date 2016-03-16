@@ -912,8 +912,10 @@ void wake_all_processes(char app_slot_idx)
 	for(index = 0; index<MAX_STOP_NUM; index++){
 		if(app_slot_list[(int)app_slot_idx].stopped_pid[index]!=0){
 			task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);
-			if(task && task->state==TASK_STOPPED)
+			if(task && task->state==TASK_STOPPED){
+				PRINTK("[%d] wake %d\n", current->pid, task->pid);
 				kill_pid(task_pid(task), SIGCONT, 1);
+			}
 			app_slot_list[(int)app_slot_idx].stopped_pid[index] = 0;
 		}
 	}
@@ -948,7 +950,7 @@ int has_rerandomization(char app_slot_idx)
 
 void rerandomization(struct task_struct *ts)
 {
-	//return ;
+	return ;
 	int internal_index = 0;
 	int shm_fd = 0;
 	long cc_start = 0;
@@ -980,13 +982,11 @@ void rerandomization(struct task_struct *ts)
 	}
 	spin_unlock(&app_slot_lock); 
 	// 4.send msg to shuffle process
-	//send_rerandomization_mesg_to_shuffle_process(ts, curr_cc_id, index);
-	PRINTK("recieve from shuffle!\n");
+	send_rerandomization_mesg_to_shuffle_process(ts, curr_cc_id, index);
 	// 5.clear all flags
 	clear_rerandomization_and_send_stop(index);
 	// 6.wake all related processes
 	wake_all_processes(index);
-	PRINTK("finish rerandomization!\n");
 }
 
 /*************************Below functions are used to stop and wakeup processes******************************************/

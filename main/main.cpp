@@ -95,7 +95,7 @@ int main(int argc, char **argv)
                 //curr pc
                 new_pc = CodeVariantManager::get_new_pc_from_old_all(mesg.new_ip, need_cv1);
                 ASSERT(new_pc!=0);
-                CodeVariantManager::modify_new_ra_in_ss(need_cv1);
+                CodeVariantManager::patch_new_ra_in_all_ss(need_cv1);
                 //other processes and threads pc
                 long new_additional_ips[MAX_STOP_NUM];
                 CodeVariantManager::patch_new_pc(new_additional_ips, mesg.additional_ips, need_cv1);

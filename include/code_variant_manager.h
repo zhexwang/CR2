@@ -129,7 +129,7 @@ public:
 	static void stop_gen_code_variants();
 	static P_ADDRX get_new_pc_from_old_all(P_ADDRX old_pc, BOOL first_cc_is_new);
 	static void patch_new_pc(long new_ips[MAX_STOP_NUM], long old_ips[MAX_STOP_NUM], BOOL first_cc_is_new);
-	static void modify_new_ra_in_ss(BOOL first_cc_is_new);
+	static void patch_new_ra_in_all_ss(BOOL first_cc_is_new);
 	static void init_protected_proc_info(PID protected_pid, SIZE cc_offset, SIZE ss_offset, P_ADDRX gs_base, LKM_SS_TYPE ss_type)
 	{
 		FATAL(ss_type==LKM_SEG_SS_PP_TYPE, "Current version do not support shadow stack++!\n");

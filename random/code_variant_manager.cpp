@@ -1161,24 +1161,64 @@ void CodeVariantManager::patch_new_pc(long new_ips[MAX_STOP_NUM], long old_ips[M
     return ;        
 }
 
-void CodeVariantManager::modify_new_ra_in_ss(BOOL first_cc_is_new)
+typedef struct{
+    BOOL first_cc_is_new;
+    S_ADDRX start_ptr;
+    S_ADDRX end;
+}THREAD_PRA_ARG;
+
+void *patch_new_ra_in_ss(void *arg)
+{
+    BOOL first_cc_is_new = ((THREAD_PRA_ARG*)arg)->first_cc_is_new;
+    S_ADDRX start_ptr = ((THREAD_PRA_ARG*)arg)->start_ptr;
+    S_ADDRX end = ((THREAD_PRA_ARG*)arg)->end;
+    
+    while(start_ptr>=end){
+        P_ADDRX old_return_addr = *(P_ADDRX *)start_ptr;
+        P_ADDRX new_return_addr = CodeVariantManager::get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
+        //modify old return address to the new return address
+        if(new_return_addr!=0)
+            *(P_ADDRX *)start_ptr = new_return_addr;
+        
+        start_ptr -= sizeof(P_ADDRX);
+    }
+    return NULL;
+}
+
+void CodeVariantManager::patch_new_ra_in_all_ss(BOOL first_cc_is_new)
 {
     //TODO: we only handle ordinary shadow stack, not shadow stack++
     ASSERT(_is_cv1_ready && _is_cv2_ready);
-    for(SS_MAPS::iterator iter = _ss_maps.begin(); iter!=_ss_maps.end(); iter++){
-        SS_INFO &info = iter->second;
-        S_ADDRX return_addr_ptr = info.ss_base - sizeof(P_ADDRX);
-        
-        while(return_addr_ptr>=(info.ss_base-info.ss_size)){
-            P_ADDRX old_return_addr = *(P_ADDRX *)return_addr_ptr;
-            P_ADDRX new_return_addr = get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
-            //modify old return address to the new return address
-            if(new_return_addr!=0)
-                *(P_ADDRX *)return_addr_ptr = new_return_addr;
-            
-            return_addr_ptr -= sizeof(P_ADDRX);
+    
+    INT32 ss_num = _ss_maps.size();
+    ASSERT(ss_num>=1);
+    THREAD_PRA_ARG *args = new THREAD_PRA_ARG[ss_num];
+    
+    if(ss_num==1){
+        SS_INFO &info = _ss_maps.begin()->second;
+        args[0].first_cc_is_new = first_cc_is_new;
+        args[0].start_ptr = info.ss_base - sizeof(P_ADDRX);
+        args[0].end = info.ss_base - info.ss_size;
+        patch_new_ra_in_ss((void*)(&args[0]));
+    }else{
+        INT32 idx = 0;
+        pthread_t *thread = new pthread_t[ss_num];
+        //create threads
+        for(SS_MAPS::iterator iter = _ss_maps.begin(); iter!=_ss_maps.end(); iter++, idx++){
+            SS_INFO &info = iter->second;
+            args[idx].first_cc_is_new = first_cc_is_new;
+            args[idx].start_ptr = info.ss_base - sizeof(P_ADDRX);
+            args[idx].end = info.ss_base - info.ss_size;
+            pthread_create(&thread[idx], NULL, patch_new_ra_in_ss, (void*)&args[idx]);
         }
+        //join threads
+        for(idx = 0; idx<ss_num; idx++)
+            pthread_join(thread[idx], NULL);
+
+        delete []thread;
     }
+
+    delete []args;
 }
 
 BOOL CodeVariantManager::is_added(const std::string elf_path)
