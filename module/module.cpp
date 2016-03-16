@@ -898,7 +898,7 @@ void Module::separate_movable_bbls()
     special_handling_in_cpp_exception();
 }
 
-void Module::special_handling_in_cpp_exception()
+void Module::special_handling_in_cpp_exception()//can use katana 
 {
     _unmatched_rets.clear();
     if(get_name()=="bodytrack"){

@@ -76,7 +76,6 @@ int main(int argc, char **argv)
         CodeVariantManager::init_protected_proc_info(mesg.proctected_procid, mesg.cc_offset, mesg.ss_offset, mesg.gs_base, mesg.lkm_ss_type);
         CodeVariantManager::start_gen_code_variants();
         CodeVariantManager::wait_for_code_variant_ready(true); 
-        CodeVariantManager::wait_for_code_variant_ready(false); 
         new_pc = CodeVariantManager::find_cc_paddrx_from_all_orig(mesg.new_ip, true);
         ASSERT(new_pc!=0);
         long new_ips[MAX_STOP_NUM] = {0};

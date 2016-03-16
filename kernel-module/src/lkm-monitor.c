@@ -249,7 +249,7 @@ typedef struct{
 	char start_instr_encode[7];
 	char has_rerandomization;
 	char has_send_stop;
-	struct task_struct *stopped_ts[MAX_STOP_NUM];//multi-threads and multi-processes need to stop all processes/threads, when rerandomization
+	int stopped_pid[MAX_STOP_NUM];//multi-threads and multi-processes need to stop all processes/threads, when rerandomization
 	IO_MONITOR im;//use to monitor  
 	X_REGION xr[MAX_X_NUM];
 	STACK_REGION sr[MAX_STACK_NUM];	
@@ -380,7 +380,7 @@ char init_app_slot(struct task_struct *ts)
 			app_slot_list[index].has_rerandomization = 0;
 			app_slot_list[index].has_send_stop = 0;
 			strcpy(app_slot_list[index].app_name, ts->comm);
-			memset((void*)&(app_slot_list[index].stopped_ts[0]), 0, MAX_STOP_NUM*sizeof(struct task_struct*));
+			memset((void*)&(app_slot_list[index].stopped_pid[0]), 0, MAX_STOP_NUM*sizeof(int));
 			memset((void*)&(app_slot_list[index].start_instr_encode), 11, sizeof(char));
 			memset((void*)&(app_slot_list[index].im), 0, sizeof(IO_MONITOR));
 			memset((void*)&(app_slot_list[index].xr[0]), 0, MAX_X_NUM*sizeof(X_REGION));
@@ -534,7 +534,7 @@ void set_additional_pc(char app_slot_idx, long ips[MAX_STOP_NUM])
 	struct task_struct *task;
 	spin_lock(&app_slot_lock); 
 	for(index = 0; index<MAX_STOP_NUM; index++){
-		task = app_slot_list[(int)app_slot_idx].stopped_ts[index];
+		task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);
 		if(task)
 			task_pt_regs(task)->ip = ips[index];
 	}
@@ -807,23 +807,31 @@ void free_dead_stack(struct task_struct *ts)
 }
 
 
+void init_stopped_ips_from_app_slot(char app_slot_idx, long ips[MAX_STOP_NUM])
+{
+	int index;
+	struct task_struct *task;
+	for(index = 0; index<MAX_STOP_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].stopped_pid[index]!=0){
+			task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);
+			ips[index] = task ? task_pt_regs(task)->ip : 0;
+		}else
+			ips[index] = 0;
+	}
+}
+
 /**************************rerandomization and communication with shuffle process**************************/
 
 void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int curr_cc_id, char app_slot_idx)
 {
-	int index;	
-	struct task_struct *task;
 	int connect = curr_cc_id==0 ? CURR_IS_CV1_NEED_CV2 : CURR_IS_CV2_NEED_CV1;
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
 	MESG_BAG msg = {connect, pid_vnr(task_pgrp(ts)), regs->ip, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "need rerandomization!"};
 	strcpy(msg.app_name, ts->comm);
-	//init additional pc
-	for(index = 0; index<MAX_STOP_NUM; index++){
-		task = app_slot_list[(int)app_slot_idx].stopped_ts[index];
-		msg.additional_ips[index] = task ? task_pt_regs(task)->ip : 0;
-	}	
+
+	init_stopped_ips_from_app_slot(app_slot_idx, msg.additional_ips);
 	
 	if(shuffle_pid!=0){
 		nl_send_msg(shuffle_pid, msg);
@@ -835,13 +843,13 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 	}
 }
 
-void insert_stopped_ts(char app_slot_idx, struct task_struct *task)
+void insert_stopped_pid(char app_slot_idx, int pid)
 {
 	int index;
 	spin_lock(&app_slot_lock); 
 	for(index = 0; index<MAX_STOP_NUM; index++){
-		if(app_slot_list[(int)app_slot_idx].stopped_ts[index]==NULL){
-			app_slot_list[(int)app_slot_idx].stopped_ts[index] = task;			
+		if(app_slot_list[(int)app_slot_idx].stopped_pid[index]==0){
+			app_slot_list[(int)app_slot_idx].stopped_pid[index] = pid;			
 			spin_unlock(&app_slot_lock); 
 			return ;
 		}
@@ -855,15 +863,19 @@ void wait_for_all_stopped(char app_slot_idx)
 	struct task_struct *task;
 	int index;
 	for(index = 0; index<MAX_STOP_NUM; index++){
-		task = app_slot_list[(int)app_slot_idx].stopped_ts[index];
-		if(task)
-			PRINTK("[%d] wait %d to be stopped, pc=0x%lx!\n", current->pid, task->pid, task_pt_regs(task)->ip);
-		
-		while(task && task->state!=TASK_STOPPED)//need check the process or thread is exist or not
-			schedule();
-		
-		if(task)
-			PRINTK("[%d] %d has stopped, pc=0x%lx!\n", current->pid, task->pid, task_pt_regs(task)->ip);
+		if(app_slot_list[(int)app_slot_idx].stopped_pid[index]!=0){
+			task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);
+			if(task)
+				PRINTK("[%d] wait %d (state: %ld) to be stopped, pc=0x%lx!\n", current->pid, task->pid, task->state, task_pt_regs(task)->ip);
+			
+			do{
+				task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);//should get new task from pid, some process or threads maybe exist
+				schedule();
+			}while(task && task->state!=TASK_STOPPED);
+			
+			if(task)
+				PRINTK("[%d] %d has stopped, pc=0x%lx!\n", current->pid, task->pid, task_pt_regs(task)->ip);
+		}
 	}
 }
 
@@ -880,7 +892,7 @@ void stop_all_processes(char app_slot_idx, struct task_struct *ts)
 	// 1.send stop signal to all related processes}
 	do{
 		if(task->pid!=ts->pid){
-			insert_stopped_ts(app_slot_idx, task);
+			insert_stopped_pid(app_slot_idx, task->pid);
 			PRINTK("[%d] send %d to be stopped, pc=0x%lx!\n", ts->pid, task->pid, task_pt_regs(task)->ip);
 			kill_pid(task_pid(task), SIGSTOP, 1);
 		}
@@ -898,11 +910,11 @@ void wake_all_processes(char app_slot_idx)
 	struct task_struct *task;
 	spin_lock(&app_slot_lock); 
 	for(index = 0; index<MAX_STOP_NUM; index++){
-		task = app_slot_list[(int)app_slot_idx].stopped_ts[index];
-		if(task){
-			if(task->state==TASK_STOPPED)
+		if(app_slot_list[(int)app_slot_idx].stopped_pid[index]!=0){
+			task = pid_task(find_get_pid(app_slot_list[(int)app_slot_idx].stopped_pid[index]), PIDTYPE_PID);
+			if(task && task->state==TASK_STOPPED)
 				kill_pid(task_pid(task), SIGCONT, 1);
-			app_slot_list[(int)app_slot_idx].stopped_ts[index] = NULL;
+			app_slot_list[(int)app_slot_idx].stopped_pid[index] = 0;
 		}
 	}
 	spin_unlock(&app_slot_lock); 	
@@ -937,7 +949,6 @@ int has_rerandomization(char app_slot_idx)
 void rerandomization(struct task_struct *ts)
 {
 	//return ;
-	char index = get_app_slot_idx(pid_vnr(task_pgrp(ts)));
 	int internal_index = 0;
 	int shm_fd = 0;
 	long cc_start = 0;
@@ -945,6 +956,7 @@ void rerandomization(struct task_struct *ts)
 	int curr_cc_id = 0;
 	long shm_off = 0;
 	int shuffle_pid = 0;
+	char index = get_app_slot_idx(pid_vnr(task_pgrp(ts)));
 	// 1.judge has a process/thread has rerandomization or not
 	if(has_rerandomization(index))
 		return ;
