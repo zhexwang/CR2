@@ -28,8 +28,8 @@
 
 #define MAX_PGID_NUM 2
 #define MAX_STOP_NUM 20
-#define MAX_STACK_NUM 20
-#define MAX_X_NUM 20
+#define MAX_STACK_NUM 40
+#define MAX_X_NUM 60
 #define MAX_APP_LIST_NUM 50
 #define MAX_SHUFFLE_NUM_FOR_ONE_APP 4
 //we only support run less than 4 same protected application at the same time

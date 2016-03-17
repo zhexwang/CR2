@@ -39,7 +39,7 @@ typedef struct{
 #define CV2_IS_READY          3 //send by shuffle process
 #define SIGACTION_HANDLED     4 //send by shuffle process
 #define SS_HANDLED            5 //send by shuffle process
-#define DLOPEN_HANDLED        6 //send by shuffle process
+#define DLOPERATION_HANDLED   6 //send by shuffle process
 #define CURR_IS_CV2_NEED_CV1  7 //send by kernel module
 #define CURR_IS_CV1_NEED_CV2  8 //send by kernel module
 #define P_PROCESS_IS_IN       9 //send by kernel module
@@ -48,8 +48,8 @@ typedef struct{
 #define CREATE_SS             12//send by kernel module
 #define FREE_SS               13//send by kernel module
 #define DLOPEN                14//send by kernel module
-#define WRONG_APP             15//send by kernel module
-
+#define DLCLOSE               15//send by kernel module
+#define WRONG_APP             16//send by kernel module
 
 extern void nl_send_msg(int target_pid, MESG_BAG mesg_bag);
 extern void init_netlink(void);

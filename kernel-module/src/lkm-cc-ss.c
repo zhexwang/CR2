@@ -27,13 +27,13 @@ long allocate_trace_debug_buffer(ulong buffer_base, ulong buffer_size)
 }
 
 static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, \
-	long orig_x_start, long orig_x_end, long cc_size, const char *lib_path, const char *shm_file)
+	long orig_x_start, long orig_x_end, long cc_size, const char *lib_name, const char *shm_file)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
 	volatile char *start_flag = get_start_flag(app_slot_idx);
 	MESG_BAG msg = {DLOPEN, ts->pid, regs->ip, {0}, orig_x_start, orig_x_end, cc_size, global_ss_type, "\0", "\0"};
-	strcpy(msg.app_name, lib_path);
+	strcpy(msg.app_name, lib_name);
 	strcpy(msg.mesg, shm_file);
 
 	if(shuffle_pid!=0){
@@ -49,9 +49,42 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 	return ;	
 }
 
-void free_cc(unsigned long addr, size_t len)
+static void send_dlclose_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, const char *lib_name, const char *shm_file)
 {
-	PRINTK("free cc : %lx - %lx\n", addr, addr+len);
+	struct pt_regs *regs = task_pt_regs(ts);
+	int shuffle_pid = get_shuffle_pid(app_slot_idx);
+	volatile char *start_flag = get_start_flag(app_slot_idx);
+	MESG_BAG msg = {DLCLOSE, ts->pid, regs->ip, {0}, 0, 0, 0, global_ss_type, "\0", "\0"};
+	strcpy(msg.app_name, lib_name);
+	strcpy(msg.mesg, shm_file);
+
+	if(shuffle_pid!=0){
+		nl_send_msg(shuffle_pid, msg);
+		
+		*start_flag = 1;
+		while(*start_flag){
+			schedule();
+		}
+		regs->ip = get_shuffle_pc(app_slot_idx);
+	}
+	
+	return ;	
+}
+
+void free_mem(unsigned long addr, size_t len)
+{
+	long cc_start = addr + CC_OFFSET;
+	long cc_end = cc_start + X86_PAGE_ALIGN_CEIL(len)*CC_MULTIPULE;
+	int pid = 0;
+	char shm_path[256] = "\0";
+	char lib_name[256] = "\0";
+	char app_slot_idx = free_x_info(current, cc_start, cc_end, shm_path);
+	if(app_slot_idx!=-1){
+		sscanf(shm_path, "/dev/shm/%d-%s", &pid, lib_name);
+		lib_name[strlen(lib_name)-3]='\0';
+		PRINTK("[%d]dlclose: %s\n", current->pid, lib_name);
+		send_dlclose_mesg_to_shuffle_process(current, app_slot_idx, lib_name, shm_path);
+	}
 }
 
 long allocate_cc(long orig_x_size, const char *orig_name)
@@ -74,9 +107,10 @@ long allocate_cc(long orig_x_size, const char *orig_name)
 	app_slot_idx = insert_x_info(current, cc_ret, cc_ret+cc_size, shm_path);
 	close_shm_file(cc_fd);
 	if(is_app_start(current)){//send message to shuffle process, dlopen(need stop all processes/threads, we only handle one process/thread now)
+		PRINTK("[%d] dlopen: %s\n", current->pid, orig_name);
 		send_dlopen_mesg_to_shuffle_process(current, app_slot_idx, x_start, x_start+orig_x_size, cc_size, orig_name, shm_path);
 	}
-	PRINTK("[CR2:%d]mmap(addr:%lx, len:%lx)\n", current->pid, cc_ret, cc_size);
+	//PRINTK("[CR2:%d]mmap_cc(addr:%lx, len:%lx)\n", current->pid, cc_ret, cc_size);
 	return cc_ret;
 }
 

@@ -282,7 +282,7 @@ asmlinkage long intercept_munmap(unsigned long addr, size_t len)
 {
 	char monitor_idx = is_monitor_app(current->comm);
 	if(monitor_idx!=0){
-		free_cc(addr, len);	
+		free_mem(addr, len);	
 	}
 
 	return orig_munmap(addr, len);
@@ -293,10 +293,9 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 	long ret = 0;
 	long cc_ret = 0;
 	long ss_ret = 0;
-	int procid = current->pid;
 	// insert the new element into the mapping table
 	if(is_monitor_app(current->comm)){
-		if((prot & PROT_EXEC) && ((int)fd)>0 && addr==0){
+		if((prot & PROT_EXEC) && ((int)fd)>0 && addr==0){			
 			// 1.allocate code cache
 				// 1.1 get x region file name
 			struct file *fil = fget(fd);
@@ -312,13 +311,13 @@ asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, u
 				PRINTK("[LKM]allocate code cache error!(mmap: cc_ret=%lx, ret=%lx)\n", cc_ret, ret);
 				ret = orig_mmap(addr, len, prot, flags, fd, pgoff);
 			}else{
-			    PRINTK("[ORG:%d]mmap(addr:%lx, len:%lx, prot:%d, flags:%d, fd:%d, off:%lx)= %lx\n", \
-			    	procid, addr, len, (int)prot, (int)flags, (int)fd, pgoff, ret);
+			    //PRINTK("[ORG:%d]mmap(addr:%lx, len:%lx, prot:%d, flags:%d, fd:%d, off:%lx)= %lx\n", 
+			    //	current->pid, addr, len, (int)prot, (int)flags, (int)fd, pgoff, ret);
 			}
 		}else if((flags&MAP_STACK) && addr==0){
 			ret = orig_mmap(addr, len, prot, flags, fd, pgoff);
 			ss_ret = allocate_ss_fixed(ret, ret+len);
-			PRINTK("[LKM]allocate child shadow stack (%lx)\n", ss_ret);
+			//PRINTK("[LKM]allocate child shadow stack (%lx)\n", ss_ret);
 		}else
 			ret = orig_mmap(addr, len, prot, flags, fd, pgoff);
 	}else

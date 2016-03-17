@@ -4,6 +4,7 @@
 
 //----------------intercept function used by modules----------------------//
 extern asmlinkage long intercept_mmap(ulong addr, ulong len, ulong prot, ulong flags, ulong fd, ulong pgoff);
+extern asmlinkage long intercept_munmap(unsigned long addr, size_t len);
 extern asmlinkage long intercept_execve(const char __user* filename, const char __user* const __user* argv,\
                     const char __user* const __user* envp);
 extern asmlinkage long intercept_exit_group(ulong error);

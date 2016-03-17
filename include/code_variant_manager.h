@@ -152,7 +152,9 @@ public:
 	static void clear_all_cv(BOOL is_first_cc);
 	static void store_into_db(std::string db_path);	
 	static void handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, P_SIZE cc_size, std::string db_path, LKM_SS_TYPE ss_type, \
-		std::string lib_path, std::string shm_path);
+		std::string lib_name, std::string shm_path);
+	static void handle_dlclose(std::string lib_name, std::string shm_path);
+	static void free_a_cvm(std::string name, std::string shm_path);
 	static P_ADDRX handle_sigaction(P_ADDRX orig_sighandler_addr, P_ADDRX orig_sigreturn_addr, P_ADDRX old_pc);	
 	void init_rbbl_unit();
 	//insert functions

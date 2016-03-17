@@ -60,7 +60,7 @@ void nl_recv_msg(struct sk_buff *skb)
 			case DISCONNECT:
 				free_one_shuffle_info(monitor_idx, pid);
 				break;
-			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED: case SS_HANDLED: case DLOPEN_HANDLED:
+			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED: case SS_HANDLED: case DLOPERATION_HANDLED:
 				app_slot_idx = get_app_slot_idx_from_shuffle_config(monitor_idx, pid);
 				start_flag = get_start_flag(app_slot_idx);
 				//set curr new pc

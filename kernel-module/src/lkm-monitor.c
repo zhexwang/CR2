@@ -206,8 +206,10 @@ void init_monitor_app_list(void)
 	monitor_app_list[42] = "canneal";
 	monitor_app_list[43] = "dedup";
 	monitor_app_list[44] = "streamcluster";
+	//---------------------Apache--------------------//
+	monitor_app_list[45] = "httpd";//we only support multi-thread mode now, you must use ./httpd -X
 	//---------------------test----------------------//
-	monitor_app_list[45] = "a.out";
+	monitor_app_list[46] = "a.out";
 }
 
 //-------------APP slot----------------------//
@@ -587,6 +589,39 @@ char is_app_start(struct task_struct *ts)
 	return 0;
 }
 
+char free_x_info(struct task_struct *ts, long start, long end, char *shm_path)
+{
+	int index;
+	int internal_index = 0;
+	long free_len = 0;
+	spin_lock(&app_slot_lock); 
+	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
+		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			for(internal_index=0; internal_index<MAX_X_NUM; internal_index++){
+				if(app_slot_list[index].xr[internal_index].cc_start!=0){
+					//PRINTK("(%d) %lx-%lx\n", internal_index, 
+					//	app_slot_list[index].xr[internal_index].cc_start, app_slot_list[index].xr[internal_index].cc_end);
+					if(app_slot_list[index].xr[internal_index].cc_start==start && app_slot_list[index].xr[internal_index].cc_end==end){
+						//need this code cache
+						free_len = app_slot_list[index].xr[internal_index].cc_end - app_slot_list[index].xr[internal_index].cc_start;
+						orig_munmap(app_slot_list[index].xr[internal_index].cc_start, free_len);
+						strcpy(shm_path, app_slot_list[index].xr[internal_index].shfile);
+						memset((void*)&(app_slot_list[index].xr[internal_index]), 0, sizeof(X_REGION));
+						spin_unlock(&app_slot_lock); 
+						return index;
+					}
+				}				
+			}
+			//PRINTK("find no match x info!\n");
+			spin_unlock(&app_slot_lock); 
+			return -1;
+		}
+	}
+	PRINTK("find no app slot in %s\n", __FUNCTION__);
+	spin_unlock(&app_slot_lock); 
+	return -1;
+}
+
 char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const char *file)
 {
 	int index;
@@ -596,6 +631,7 @@ char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const cha
 		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
 			for(internal_index=0; internal_index<MAX_X_NUM; internal_index++){
 				if(app_slot_list[index].xr[internal_index].cc_start==0){
+					//PRINTK("insert x info (%s): %lx-%lx\n", file, cc_start, cc_end);
 					app_slot_list[index].xr[internal_index].cc_start = cc_start;
 					app_slot_list[index].xr[internal_index].cc_end = cc_end;
 					strcpy(app_slot_list[index].xr[internal_index].shfile, file);
@@ -603,11 +639,14 @@ char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const cha
 					return index;
 				}
 			}
+			PRINTK("find no free x info!\n");
+			spin_unlock(&app_slot_lock); 
+			return -1;
 		}
 	}
 	PRINTK("find no app slot in %s\n", __FUNCTION__);
 	spin_unlock(&app_slot_lock); 
-	return index;
+	return -1;
 }
 
 char insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file)

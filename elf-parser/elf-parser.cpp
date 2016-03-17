@@ -82,6 +82,8 @@ ElfParser::ElfParser(const char *elf_path): _sym_table(NULL), _symt_num(0), _dyn
             SECTION_REGION element = {currentSec->sh_offset, currentSec->sh_offset+currentSec->sh_size, \
                 std::string(secName)};
             _x_sections.push_back(element);
+            //BLUE("%s x region: %lx-%lx %s\n", _elf_path.c_str(), currentSec->sh_offset, currentSec->sh_offset+currentSec->sh_size, 
+            //    secName);
         }
     }
     // 5.add parser

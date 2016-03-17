@@ -34,6 +34,7 @@ extern int get_shuffle_pid(char app_slot_idx);
 extern long set_app_start(struct task_struct *ts);
 extern char is_app_start(struct task_struct *ts);
 extern char insert_x_info(struct task_struct *ts, long cc_start, long cc_end, const char *file);
+extern char free_x_info(struct task_struct *ts, long start, long end, char *shm_path);
 extern char insert_stack_info(struct task_struct *ts, long ss_start, long ss_end, const char *file);
 extern char *get_stack_shm_info(struct task_struct *ts, long *stack_len);
 extern int get_stack_number(struct task_struct *ts);

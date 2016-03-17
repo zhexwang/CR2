@@ -121,13 +121,18 @@ int main(int argc, char **argv)
                 NetLink::send_ss_handled_mesg(mesg.new_ip, Options::_elf_path);
             }else if(mesg.connect==DLOPEN){
                 std::string shm_path = std::string(mesg.mesg);
-                std::string lib_path = std::string(mesg.app_name);
+                std::string lib_name = std::string(mesg.app_name);
                 P_ADDRX orig_x_base = mesg.cc_offset;
                 P_ADDRX orig_x_end = mesg.ss_offset;
                 P_SIZE cc_size = mesg.gs_base;
                 CodeVariantManager::handle_dlopen(orig_x_base, orig_x_end, cc_size, Options::_input_db_file_path, LKM_OFFSET_SS_TYPE, \
-                    lib_path, shm_path);
-                NetLink::send_dlopen_handled_mesg(mesg.new_ip, Options::_elf_path);
+                    lib_name, shm_path);
+                NetLink::send_dloperation_handled_mesg(mesg.new_ip, Options::_elf_path);
+            }else if(mesg.connect==DLCLOSE){
+                std::string shm_path = std::string(mesg.mesg);
+                std::string lib_name = std::string(mesg.app_name);
+                CodeVariantManager::handle_dlclose(lib_name, shm_path);
+                NetLink::send_dloperation_handled_mesg(mesg.new_ip, Options::_elf_path);
             }else
                 ASSERTM(0, "Unkwon message type %d!\n", mesg.connect);
         };

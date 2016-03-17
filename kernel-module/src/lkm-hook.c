@@ -458,6 +458,7 @@ void hook_systable(void)
 	rewrite_systable_entry(__NR_mmap, (void*)intercept_mmap);
 	rewrite_systable_entry(__NR_execve, (void*)intercept_stub_execve);
 	rewrite_systable_entry(__NR_exit_group, (void*)intercept_exit_group);
+	rewrite_systable_entry(__NR_munmap, (void*)intercept_munmap);
 	//hacking io pair
 	rewrite_systable_entry(__NR_read, (void*)hook_read);
 	rewrite_systable_entry(__NR_write, (void*)hook_write);
@@ -493,6 +494,7 @@ void stop_hook(void)
 	rewrite_systable_entry(__NR_mmap, (void*)orig_mmap);
 	rewrite_systable_entry(__NR_execve, (void*)orig_stub_execve);
 	rewrite_systable_entry(__NR_exit_group, (void*)orig_exit_group);
+	rewrite_systable_entry(__NR_munmap, (void*)orig_munmap);
 	//write back io pair
 	rewrite_systable_entry(__NR_read, (void*)orig_read);
 	rewrite_systable_entry(__NR_write, (void*)orig_write);

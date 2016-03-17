@@ -790,7 +790,7 @@ void CodeVariantManager::free_ss(P_SIZE ss_size, std::string ss_shm_path)
 void handle_directory_path(std::string &db_path);
 
 void CodeVariantManager::handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, P_SIZE cc_size, \
-    std::string db_path, LKM_SS_TYPE ss_type, std::string lib_path, std::string shm_path)
+    std::string db_path, LKM_SS_TYPE ss_type, std::string lib_name, std::string shm_path)
 {
     handle_directory_path(db_path);
     //1.wait for all ready
@@ -799,8 +799,8 @@ void CodeVariantManager::handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, 
     //2.pause gen code variants
     pause_gen_code_variants();
     //3.init cvm and generate code variant
-    ASSERTM(!CodeVariantManager::is_added(lib_path), "Should not be handled!\n");
-    CodeVariantManager *cvm = new CodeVariantManager(lib_path);
+    ASSERTM(!CodeVariantManager::is_added(lib_name), "Should not be handled!\n");
+    CodeVariantManager *cvm = new CodeVariantManager(lib_name);
     cvm->read_db_files(db_path, ss_type);
     P_ADDRX cc_base = orig_x_base + CodeVariantManager::_cc_offset;
     cvm->set_x_load_base(orig_x_base, orig_x_end - orig_x_base);
@@ -809,6 +809,29 @@ void CodeVariantManager::handle_dlopen(P_ADDRX orig_x_base, P_ADDRX orig_x_end, 
     cvm->generate_code_variant(true);
     cvm->generate_code_variant(false);
     //4.continue 
+    continue_gen_code_variants();
+}
+
+void CodeVariantManager::free_a_cvm(std::string name, std::string shm_path)
+{
+    CVM_MAPS::iterator it = _all_cvm_maps.find(get_real_name_from_path(name));
+    CodeVariantManager *free_cvm = it->second;
+    ASSERTM(get_real_name_from_path(shm_path)==free_cvm->_cc_shm_path, "shm unmatched!\n");
+    delete free_cvm;
+    _all_cvm_maps.erase(it);
+}
+
+void CodeVariantManager::handle_dlclose(std::string lib_name, std::string shm_path)
+{
+    //1.wait for all ready
+    wait_for_code_variant_ready(true);
+    wait_for_code_variant_ready(false);
+    //2.pause gen code variants
+    pause_gen_code_variants();
+    //3.munmap cvm
+    ASSERTM(CodeVariantManager::is_added(lib_name), "Should not be handled!\n");
+    free_a_cvm(lib_name, shm_path);
+    //4.continue
     continue_gen_code_variants();
 }
 

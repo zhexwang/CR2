@@ -994,6 +994,8 @@ void Module::recursive_to_find_movable_bbls(BasicBlock *bbl)
                 return ;
             else if(get_name()=="libuuid.so.1" && fallthrough_offset==0x2d17)
                 return ;
+            else if(get_name()=="libapr-1.so.0" && fallthrough_offset==0x24ebf)
+                return ;
             else{
                 ASSERT(read_1byte_code_in_off(fallthrough_offset)==0);
                 return ;
