@@ -66,7 +66,7 @@ int main(int argc, char **argv)
                 P_ADDRX sigreturn_addr = mesg.ss_offset;
                 //ERR("Register handler: %lx, sigreturn: %lx\n", sighandler_addr, sigreturn_addr);
                 new_pc = CodeVariantManager::handle_sigaction(sighandler_addr, sigreturn_addr, mesg.new_ip);
-                NetLink::send_sigaction_handled_mesg(new_pc, Options::_elf_path);
+                NetLink::send_sigaction_handled_mesg(mesg.proctected_procid, new_pc, Options::_elf_path);
             }else{
                 ASSERTM(0, "wrong message from kernel!\n");
                 return -1;
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
         ASSERT(new_pc!=0);
         long new_ips[MAX_STOP_NUM] = {0};
         // 3.send message to switch to the new generated code variant
-        NetLink::send_cv_ready_mesg(true, new_pc, new_ips, Options::_elf_path);
+        NetLink::send_cv_ready_mesg(mesg.proctected_procid, true, new_pc, new_ips, Options::_elf_path);
         // 4.loop to listen for rereandomization and exit
         while(1){
             // block to recv message from kernel module
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
                 long new_additional_ips[MAX_STOP_NUM];
                 CodeVariantManager::patch_new_pc(new_additional_ips, mesg.additional_ips, need_cv1);
                 //send message
-                NetLink::send_cv_ready_mesg(need_cv1, new_pc, new_additional_ips, Options::_elf_path);
+                NetLink::send_cv_ready_mesg(mesg.proctected_procid, need_cv1, new_pc, new_additional_ips, Options::_elf_path);
                 CodeVariantManager::consume_cv(need_cv1 ? false : true);
             }else if(mesg.connect==SIGACTION_DETECTED){
                 //handle sigaction
@@ -108,17 +108,17 @@ int main(int argc, char **argv)
                 P_ADDRX sigreturn_addr = mesg.ss_offset;
                 //ERR("Register handler: %lx, sigreturn: %lx\n", sighandler_addr, sigreturn_addr);
                 new_pc = CodeVariantManager::handle_sigaction(sighandler_addr, sigreturn_addr, mesg.new_ip);
-                NetLink::send_sigaction_handled_mesg(new_pc, Options::_elf_path);
+                NetLink::send_sigaction_handled_mesg(mesg.proctected_procid, new_pc, Options::_elf_path);
             }else if(mesg.connect==CREATE_SS){
                 SIZE ss_len = mesg.cc_offset;
                 std::string shm_path = std::string(mesg.mesg);
                 CodeVariantManager::create_ss(ss_len, shm_path);
-                NetLink::send_ss_handled_mesg(mesg.new_ip, Options::_elf_path);
+                NetLink::send_ss_handled_mesg(mesg.proctected_procid, mesg.new_ip, Options::_elf_path);
             }else if(mesg.connect==FREE_SS){
                 SIZE ss_len = mesg.cc_offset;
                 std::string shm_path = std::string(mesg.mesg);
                 CodeVariantManager::free_ss(ss_len, shm_path);
-                NetLink::send_ss_handled_mesg(mesg.new_ip, Options::_elf_path);
+                NetLink::send_ss_handled_mesg(mesg.proctected_procid, mesg.new_ip, Options::_elf_path);
             }else if(mesg.connect==DLOPEN){
                 std::string shm_path = std::string(mesg.mesg);
                 std::string lib_name = std::string(mesg.app_name);
@@ -127,12 +127,12 @@ int main(int argc, char **argv)
                 P_SIZE cc_size = mesg.gs_base;
                 CodeVariantManager::handle_dlopen(orig_x_base, orig_x_end, cc_size, Options::_input_db_file_path, LKM_OFFSET_SS_TYPE, \
                     lib_name, shm_path);
-                NetLink::send_dloperation_handled_mesg(mesg.new_ip, Options::_elf_path);
+                NetLink::send_dloperation_handled_mesg(mesg.proctected_procid, mesg.new_ip, Options::_elf_path);
             }else if(mesg.connect==DLCLOSE){
                 std::string shm_path = std::string(mesg.mesg);
                 std::string lib_name = std::string(mesg.app_name);
                 CodeVariantManager::handle_dlclose(lib_name, shm_path);
-                NetLink::send_dloperation_handled_mesg(mesg.new_ip, Options::_elf_path);
+                NetLink::send_dloperation_handled_mesg(mesg.proctected_procid, mesg.new_ip, Options::_elf_path);
             }else
                 ASSERTM(0, "Unkwon message type %d!\n", mesg.connect);
         };

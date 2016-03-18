@@ -28,6 +28,7 @@
 
 #define MAX_PGID_NUM 2
 #define MAX_STOP_NUM 20
+#define MAX_FLAG_NUM 5
 #define MAX_STACK_NUM 40
 #define MAX_X_NUM 60
 #define MAX_APP_LIST_NUM 50

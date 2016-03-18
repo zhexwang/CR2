@@ -1624,6 +1624,7 @@ void CodeVariantManager::store_into_db(std::string db_path)
     }
 }
 
+//patched code do not exist in cc_layout, we should modify the cc_layout in future
 S_ADDRX patch_sigreturn_ss_template(S_ADDRX cc_used_base, LKM_SS_TYPE ss_type, SIZE ss_offset, P_ADDRX gs_base, \
     P_ADDRX sigreturn_paddrx, S_ADDRX handler_saddrx)
 {
@@ -1696,11 +1697,12 @@ void CodeVariantManager::patch_sigaction_entry(BOOL is_first_cc, P_ADDRX handler
             ASSERT(start==tramp_saddrx);
             INT32 offset32 = *(INT32*)(start+OFFSET_POS);
             S_ADDRX target_saddrx = start + JMP32_LEN + offset32;
-            ASSERT(target_saddrx==handler_iter->second);                    
-            //modify the trampoline32
-            *(INT32*)(start+OFFSET_POS) = cc_used_base - JMP32_LEN - start;
+            ASSERT(target_saddrx==handler_iter->second); 
+            S_ADDRX target_patch_code = cc_used_base;
             //patch template
-            cc_used_base = patch_sigreturn_ss_template(cc_used_base, _ss_type, _ss_offset, _gs_base, sigreturn_paddrx, target_saddrx);
+            cc_used_base = patch_sigreturn_ss_template(target_patch_code, _ss_type, _ss_offset, _gs_base, sigreturn_paddrx, target_saddrx);
+            //modify the trampoline32
+            *(INT32*)(start+OFFSET_POS) = target_patch_code - JMP32_LEN - start;//make sure atomic, because the other threads or processes are running!
         }else
             ASSERTM(0, "must have trampoline32\n");
     }

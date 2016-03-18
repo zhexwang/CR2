@@ -62,7 +62,7 @@ void nl_recv_msg(struct sk_buff *skb)
 				break;
 			case CV1_IS_READY: case CV2_IS_READY: case SIGACTION_HANDLED: case SS_HANDLED: case DLOPERATION_HANDLED:
 				app_slot_idx = get_app_slot_idx_from_shuffle_config(monitor_idx, pid);
-				start_flag = get_start_flag(app_slot_idx);
+				start_flag = get_start_flag(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->proctected_procid);
 				//set curr new pc
 				set_shuffle_pc(app_slot_idx, ((MESG_BAG*)nlmsg_data(nlh))->new_ip);
 				//set additional new pc

@@ -238,13 +238,19 @@ typedef struct{
 }STACK_REGION;
 
 typedef struct{
+	int pid;
+	volatile char start_flag;
+}START_FLAG;
+
+typedef struct{
 	int pgid[MAX_PGID_NUM];//setsid
 	int shuffle_pid;
 	int process_sum;
 	int ss_number;
 	int cc_id;//current cc used index
 	ulong pc;//send by shuffle process
-	volatile char start_flag;
+	//volatile char start_flag;
+	START_FLAG start_flags[MAX_FLAG_NUM];
 	long program_entry;
 	char executed_start;
 	char app_name[256];
@@ -376,12 +382,13 @@ char init_app_slot(struct task_struct *ts)
 			app_slot_list[index].process_sum = 1;
 			app_slot_list[index].cc_id = 0;
 			app_slot_list[index].pc = 0;
-			app_slot_list[index].start_flag = 0;
+			//app_slot_list[index].start_flag = 0;
 			app_slot_list[index].executed_start = 0;
 			app_slot_list[index].program_entry = 0;
 			app_slot_list[index].has_rerandomization = 0;
 			app_slot_list[index].has_send_stop = 0;
 			strcpy(app_slot_list[index].app_name, ts->comm);
+			memset((void*)&(app_slot_list[index].start_flags[0]), 0, MAX_FLAG_NUM*sizeof(START_FLAG));
 			memset((void*)&(app_slot_list[index].stopped_pid[0]), 0, MAX_STOP_NUM*sizeof(int));
 			memset((void*)&(app_slot_list[index].start_instr_encode), 11, sizeof(char));
 			memset((void*)&(app_slot_list[index].im), 0, sizeof(IO_MONITOR));
@@ -548,9 +555,54 @@ int get_shuffle_pid(char app_slot_idx)
 	return app_slot_list[(int)app_slot_idx].shuffle_pid;
 }
 
-volatile char *get_start_flag(char app_slot_idx)
+volatile char *get_start_flag(char app_slot_idx, int pid)
 {
-	return &app_slot_list[(int)app_slot_idx].start_flag;
+	int index;
+	spin_lock(&app_slot_lock);
+	for(index=0; index<MAX_FLAG_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].start_flags[index].pid==pid){
+			spin_unlock(&app_slot_lock);
+			return &app_slot_list[(int)app_slot_idx].start_flags[index].start_flag;
+		}
+	}
+	PRINTK("Find no matched pid(%d) %s\n", pid, __FUNCTION__);
+	spin_unlock(&app_slot_lock);
+	return NULL;	
+}
+
+volatile char *req_a_start_flag(char app_slot_idx, int pid)
+{
+	int index;
+	spin_lock(&app_slot_lock);
+	for(index=0; index<MAX_FLAG_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].start_flags[index].pid==0){
+			app_slot_list[(int)app_slot_idx].start_flags[index].pid = pid;
+			PRINTK("%s pid(%d)\n", __FUNCTION__, pid);
+			spin_unlock(&app_slot_lock);
+			return &app_slot_list[(int)app_slot_idx].start_flags[index].start_flag;
+		}
+	}
+	PRINTK("There is no free start flag in %s\n", __FUNCTION__);
+	spin_unlock(&app_slot_lock);
+	return NULL;
+}
+
+void free_a_start_flag(char app_slot_idx, int pid)
+{
+	int index;
+	spin_lock(&app_slot_lock);
+	for(index=0; index<MAX_FLAG_NUM; index++){
+		if(app_slot_list[(int)app_slot_idx].start_flags[index].pid==pid){
+			app_slot_list[(int)app_slot_idx].start_flags[index].pid = 0;
+			app_slot_list[(int)app_slot_idx].start_flags[index].start_flag = 0;
+			PRINTK("%s pid(%d)\n", __FUNCTION__, pid);
+			spin_unlock(&app_slot_lock);
+			return ;
+		}
+	}
+	PRINTK("Find no matched pid in %s\n", __FUNCTION__);
+	spin_unlock(&app_slot_lock);
+	return ;
 }
 
 ulong get_shuffle_pc(char app_slot_idx)
@@ -866,8 +918,8 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 	int connect = curr_cc_id==0 ? CURR_IS_CV1_NEED_CV2 : CURR_IS_CV2_NEED_CV1;
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
-	MESG_BAG msg = {connect, pid_vnr(task_pgrp(ts)), regs->ip, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "need rerandomization!"};
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
+	MESG_BAG msg = {connect, ts->pid, regs->ip, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, "\0", "need rerandomization!"};
 	strcpy(msg.app_name, ts->comm);
 
 	init_stopped_ips_from_app_slot(app_slot_idx, msg.additional_ips);
@@ -879,6 +931,8 @@ void send_rerandomization_mesg_to_shuffle_process(struct task_struct *ts, int cu
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+		
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
 }
 
@@ -974,7 +1028,7 @@ int has_rerandomization(char app_slot_idx)
 	spin_lock(&app_slot_lock);
 	if(app_slot_list[(int)app_slot_idx].has_rerandomization==1){
 		spin_unlock(&app_slot_lock);
-		PRINTK("has thread to wait!\n");
+		PRINTK("Had threads to wait!\n");
 		//wait for stopped
 		while(app_slot_list[(int)app_slot_idx].has_send_stop==0)
 			schedule();
@@ -987,9 +1041,19 @@ int has_rerandomization(char app_slot_idx)
 	}
 }
 
+void close_rerandomization(struct task_struct *ts)
+{
+	char index = get_app_slot_idx(pid_vnr(task_pgrp(ts)));
+	spin_lock(&app_slot_lock);
+	app_slot_list[(int)index].has_rerandomization = 1;
+	app_slot_list[(int)index].has_send_stop = 1;
+	spin_unlock(&app_slot_lock);
+}
+
+
 void rerandomization(struct task_struct *ts)
 {
-	return ;
+	//return ;
 	int internal_index = 0;
 	int shm_fd = 0;
 	long cc_start = 0;

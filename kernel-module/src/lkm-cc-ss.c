@@ -31,7 +31,7 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	MESG_BAG msg = {DLOPEN, ts->pid, regs->ip, {0}, orig_x_start, orig_x_end, cc_size, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, lib_name);
 	strcpy(msg.mesg, shm_file);
@@ -44,8 +44,10 @@ static void send_dlopen_mesg_to_shuffle_process(struct task_struct *ts, char app
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+		
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
-	
+	PRINTK("[%d]dlopen handled! NewPC=0x%lx\n", ts->pid, regs->ip);
 	return ;	
 }
 
@@ -53,7 +55,7 @@ static void send_dlclose_mesg_to_shuffle_process(struct task_struct *ts, char ap
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	MESG_BAG msg = {DLCLOSE, ts->pid, regs->ip, {0}, 0, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, lib_name);
 	strcpy(msg.mesg, shm_file);
@@ -66,6 +68,8 @@ static void send_dlclose_mesg_to_shuffle_process(struct task_struct *ts, char ap
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
 	
 	return ;	

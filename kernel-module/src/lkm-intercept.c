@@ -75,7 +75,7 @@ void send_init_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx
 {
 	struct pt_regs *regs = task_pt_regs(ts);
 	long curr_ip = regs->ip - CHECK_ENCODE_LEN;
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	int shuffle_pid = get_shuffle_pid(app_slot_idx);
 	MESG_BAG msg = {P_PROCESS_IS_IN, ts->pid, curr_ip, {0}, CC_OFFSET, SS_OFFSET, GS_BASE, global_ss_type, \
 			"\0", "init code cache and request code variant!"};
@@ -88,6 +88,8 @@ void send_init_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+		
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}else
 		regs->ip = curr_ip;
 }
@@ -392,7 +394,7 @@ void send_exit_mesg_to_shuffle_process(struct task_struct *ts, int shuffle_pid)
 void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, long stack_len, char *shm_file)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	MESG_BAG msg = {FREE_SS, ts->pid, regs->ip, {0}, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
@@ -405,6 +407,8 @@ void send_ss_free_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
 	
 	return ;	
@@ -488,7 +492,7 @@ asmlinkage long intercept_sigaltstack(const struct sigaltstack __user *uss, stru
 void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, ulong handler_addr, ulong sigreturn_addr)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	MESG_BAG msg = {SIGACTION_DETECTED, ts->pid, regs->ip, {0}, handler_addr, sigreturn_addr, \
 		GS_BASE, global_ss_type, "\0", "handle sigaction handler and sigreturn!"};
 	strcpy(msg.app_name, ts->comm);
@@ -501,7 +505,10 @@ void send_sigaction_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+		
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
+	PRINTK("[%d]sigaction handled! NewPc=0x%lx\n", ts->pid, regs->ip);
 	return ;
 }
 
@@ -543,7 +550,7 @@ asmlinkage long intercept_rt_sigaction(int sig, struct sigaction __user *act, st
 void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slot_idx, int shuffle_pid, long stack_len, char *shm_file)
 {
 	struct pt_regs *regs = task_pt_regs(ts);
-	volatile char *start_flag = get_start_flag(app_slot_idx);
+	volatile char *start_flag = req_a_start_flag(app_slot_idx, ts->pid);
 	MESG_BAG msg = {CREATE_SS, ts->pid, regs->ip, {0}, stack_len, 0, 0, global_ss_type, "\0", "\0"};
 	strcpy(msg.app_name, ts->comm);
 	strcpy(msg.mesg, shm_file);
@@ -555,6 +562,8 @@ void send_ss_create_mesg_to_shuffle_process(struct task_struct *ts, char app_slo
 			schedule();
 		}
 		regs->ip = get_shuffle_pc(app_slot_idx);
+		
+		free_a_start_flag(app_slot_idx, ts->pid);
 	}
 	return ;	
 }
@@ -589,6 +598,7 @@ asmlinkage long intercept_clone(unsigned long clone_flags, unsigned long newsp, 
 
 			if(shuffle_pid!=0 && BITS_ARE_CLEAR(clone_flags, CLONE_VM)){//fork process
 				//need rerandomization
+				close_rerandomization(current);//should use trap to trigger the exit_group to switch the page table(re-mmap code cache) in multi-processes
 				rerandomization(current);
 				get_ss_info(current, &curr_stack_start, &curr_stack_end);
 				//backup the shadow stack information

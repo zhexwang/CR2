@@ -66,11 +66,11 @@ protected:
 public:
 	static void connect_with_lkm(std::string elf_path);
 	static void send_mesg(MESG_BAG mesg);
-	static void send_cv_ready_mesg(BOOL is_cv1, long new_pc, long additional_ips[MAX_STOP_NUM], std::string elf_path);
+	static void send_cv_ready_mesg(int protected_pid, BOOL is_cv1, long new_pc, long additional_ips[MAX_STOP_NUM], std::string elf_path);
 	static MESG_BAG recv_mesg();
-	static void send_sigaction_handled_mesg(long new_pc, std::string elf_path);
-	static void send_ss_handled_mesg(long new_pc, std::string elf_path);
-	static void send_dloperation_handled_mesg(long new_pc, std::string elf_path);
+	static void send_sigaction_handled_mesg(int protected_pid, long new_pc, std::string elf_path);
+	static void send_ss_handled_mesg(int protected_pid, long new_pc, std::string elf_path);
+	static void send_dloperation_handled_mesg(int protected_pid, long new_pc, std::string elf_path);
 	//if protected process is out, the return value is false
 	static void disconnect_with_lkm(std::string elf_path);
 };

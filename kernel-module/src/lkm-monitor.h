@@ -29,7 +29,9 @@ extern char get_app_slot_idx(int pgid);
 extern void set_shuffle_pc(char app_slot_idx, ulong pc);
 extern void set_additional_pc(char app_slot_idx, long ips[]);
 extern ulong get_shuffle_pc(char app_slot_idx);
-extern volatile char *get_start_flag(char app_slot_idx);
+extern volatile char *req_a_start_flag(char app_slot_idx, int pid);
+extern void free_a_start_flag(char app_slot_idx, int pid);
+extern volatile char *get_start_flag(char app_slot_idx, int pid);
 extern int get_shuffle_pid(char app_slot_idx);
 extern long set_app_start(struct task_struct *ts);
 extern char is_app_start(struct task_struct *ts);
@@ -47,6 +49,7 @@ extern void lock_app_slot(void);
 extern void unlock_app_slot(void);
 
 extern void rerandomization(struct task_struct *ts);
+extern void close_rerandomization(struct task_struct *ts);
 extern void stop_all(void);
 extern void wake_all(void);
 #endif

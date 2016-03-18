@@ -64,36 +64,36 @@ void NetLink::send_mesg(MESG_BAG mesg)
     sendmsg(sock_fd, &msg, 0);
 }
 
-void NetLink::send_cv_ready_mesg(BOOL is_cv1, long new_pc, long additional_ips[MAX_STOP_NUM], std::string elf_path)
+void NetLink::send_cv_ready_mesg(int protected_pid, BOOL is_cv1, long new_pc, long additional_ips[MAX_STOP_NUM], std::string elf_path)
 {
     std::string name = get_real_name_from_path(elf_path);
     int cvn_ready = is_cv1 ? CV1_IS_READY : CV2_IS_READY;
-    MESG_BAG msg_content = {cvn_ready, 0, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Code variant is ready!"};
+    MESG_BAG msg_content = {cvn_ready, protected_pid, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Code variant is ready!"};
     strcpy(msg_content.app_name, name.c_str());
     memcpy(msg_content.additional_ips, additional_ips, MAX_STOP_NUM*sizeof(long));
     send_mesg(msg_content);
 }
 
-void NetLink::send_sigaction_handled_mesg(long new_pc, std::string elf_path)
+void NetLink::send_sigaction_handled_mesg(int protected_pid, long new_pc, std::string elf_path)
 {
     std::string name = get_real_name_from_path(elf_path);
-    MESG_BAG msg_content = {SIGACTION_HANDLED, 0, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Sigaction is handled!"};
+    MESG_BAG msg_content = {SIGACTION_HANDLED, protected_pid, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Sigaction is handled!"};
     strcpy(msg_content.app_name, name.c_str());
     send_mesg(msg_content);
 }
 
-void NetLink::send_ss_handled_mesg(long new_pc, std::string elf_path)
+void NetLink::send_ss_handled_mesg(int protected_pid, long new_pc, std::string elf_path)
 {
     std::string name = get_real_name_from_path(elf_path);
-    MESG_BAG msg_content = {SS_HANDLED, 0, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Shadow Stack is handled!"};
+    MESG_BAG msg_content = {SS_HANDLED, protected_pid, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Shadow Stack is handled!"};
     strcpy(msg_content.app_name, name.c_str());
     send_mesg(msg_content);
 }
 
-void NetLink::send_dloperation_handled_mesg(long new_pc, std::string elf_path)
+void NetLink::send_dloperation_handled_mesg(int protected_pid, long new_pc, std::string elf_path)
 {
     std::string name = get_real_name_from_path(elf_path);
-    MESG_BAG msg_content = {DLOPERATION_HANDLED, 0, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Dloperation is handled!"};
+    MESG_BAG msg_content = {DLOPERATION_HANDLED, protected_pid, new_pc, {0}, 0, 0, 0, LKM_OFFSET_SS_TYPE, "\0", "Dloperation is handled!"};
     strcpy(msg_content.app_name, name.c_str());
     send_mesg(msg_content);
 }
