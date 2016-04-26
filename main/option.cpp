@@ -9,6 +9,8 @@ BOOL Options::_has_elf_path = false;
 BOOL Options::_has_input_db_file = false;
 BOOL Options::_has_output_db_file = false;
 BOOL Options::_need_randomize_rbbl = false;
+BOOL Options::_need_randomize_rbbu = false;
+INT64 Options::_rbbu_range = 1;
 
 std::string Options::_check_file;
 std::string Options::_elf_path;
@@ -43,7 +45,8 @@ void Options::print_usage(char *cr2)
     PRINT(" -i /rela.db.path               Input the db file of relocation block.\n");
     PRINT(" -I /path/elf                   Handle elf binary file and its all dependence library.\n");
     PRINT(" -o /rela.db.path               Output relocation block to db file used for shuffle code at runtime.\n");
-    PRINT(" -R                             All relocation block should be randomized in code variant.!\n");
+    PRINT(" -R                             All relocation block should be randomized in code variant!\n");
+    PRINT(" -r num                         Reorder Basic Block Unit(num: range value, default is 0)!\n");
     PRINT(" -S                             Static Analysis (Disassemble/Recognize IndirectJump Targets/Split BBLs/Classify BBLs).\n");
     PRINT(" -v                             Display version information.\n");
 }
@@ -63,6 +66,18 @@ void Options::check(char *cr2)
                 exit(-1);
             }
         }
+        if(_need_randomize_rbbl){
+            if(_need_randomize_rbbu){
+                PRINT("%s: invalid option -- -R and -r cannot used simultaneously!\n", cr2);
+                exit(-1);
+            }
+        }else{
+            if(!_need_randomize_rbbu){
+                PRINT("%s: invalid option -- -R or -r should be set at least!\n", cr2);
+                exit(-1);
+            }
+        }
+        
     }
 }
 
@@ -76,7 +91,7 @@ inline INT64 convert_str_to_num(std::string str)
 void Options::parse(int argc, char** argv)
 {
     //1. process cr2 options
-    const char *opt_string = "AC:Dhi:I:o:RSv";
+    const char *opt_string = "AC:Dhi:I:o:Rr:Sv";
     INT32 ret;
     while((ret = getopt(argc, argv, opt_string))!=-1){
         switch (ret){
@@ -110,6 +125,10 @@ void Options::parse(int argc, char** argv)
                 break;
             case 'R':
                 _need_randomize_rbbl = true;
+                break;
+            case 'r':
+                _rbbu_range = convert_str_to_num(std::string(optarg));
+                _need_randomize_rbbu = true;
                 break;
             case 'S':
                 _static_analysis = true;

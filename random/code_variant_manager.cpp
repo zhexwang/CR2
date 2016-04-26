@@ -401,7 +401,7 @@ S_ADDRX front_to_place_trampoline32(S_ADDRX fixed_trampoline_addr, CC_LAYOUT &cc
     return trampoline32_addr;
 }
 
-S_ADDRX *random(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeVariantManager::RAND_BBL_MAPS movable_rbbls, \
+S_ADDRX *random_rbbl(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeVariantManager::RAND_BBL_MAPS movable_rbbls, \
     SIZE &array_num)
 {
     array_num = fixed_rbbls.size() + movable_rbbls.size();
@@ -425,15 +425,44 @@ S_ADDRX *random(const CodeVariantManager::RAND_BBL_MAPS fixed_rbbls, const CodeV
     return rbbl_array;
 }
 
-S_ADDRX *sequence_rbbu(CodeVariantManager::RAND_BBU_MAPS &rbbu_maps, SIZE array_num)
+void random_range(CodeVariantManager::RAND_BBL_MAPS **rbbu_array, SIZE array_num)
+{
+    srand((INT32)time(NULL));
+    for(SIZE idx=array_num-1; idx>0; idx--){
+        INT32 swap_idx = rand()%idx;
+        CodeVariantManager::RAND_BBL_MAPS *temp = rbbu_array[swap_idx];
+        rbbu_array[swap_idx] = rbbu_array[idx];
+        rbbu_array[idx] = temp;
+    }
+}
+
+S_ADDRX *random_rbbu(CodeVariantManager::RAND_BBU_MAPS &rbbu_maps, SIZE array_num, INT64 range)
 {   
     S_ADDRX *rbbl_array = new S_ADDRX[array_num];
+    SIZE rbbu_array_num = rbbu_maps.size();
+    CodeVariantManager::RAND_BBL_MAPS **rbbu_array = new CodeVariantManager::RAND_BBL_MAPS*[rbbu_array_num]; 
     SIZE idx = 0;
     for(CodeVariantManager::RAND_BBU_MAPS::iterator iter = rbbu_maps.begin(); iter!=rbbu_maps.end(); iter++){
-        for(CodeVariantManager::RAND_BBL_MAPS::iterator it = iter->second.begin(); it!=iter->second.end(); it++)
-            rbbl_array[idx++] = (S_ADDRX)it->second;
+        rbbu_array[idx++] = &(iter->second);
     }
-    ASSERT(idx==array_num);
+    ASSERT(idx==rbbu_array_num);
+    
+    idx = 0;
+    while(1){
+        if((idx+range)<rbbu_array_num)
+            random_range(rbbu_array+idx, range);
+        else{
+            random_range(rbbu_array+idx, rbbu_array_num-idx);
+            break;
+        }
+        idx += range;
+    };
+    SIZE rbbl_idx = 0;
+    for(idx = 0; idx<rbbu_array_num; idx++){
+        for(CodeVariantManager::RAND_BBL_MAPS::iterator it = rbbu_array[idx]->begin(); it!=rbbu_array[idx]->end(); it++)
+            rbbl_array[rbbl_idx++] = (S_ADDRX)it->second;
+    }
+    ASSERT(rbbl_idx==array_num);
     
     return rbbl_array;
 }
@@ -667,10 +696,11 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     SIZE rbbl_array_size;
     S_ADDRX *rbbl_array = NULL;
     if(Options::_need_randomize_rbbl)
-        rbbl_array = random(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
+        rbbl_array = random_rbbl(_postion_fixed_rbbl_maps, _movable_rbbl_maps, rbbl_array_size);
     else{
+        ASSERT(Options::_need_randomize_rbbu);
         rbbl_array_size = _postion_fixed_rbbl_maps.size()+_movable_rbbl_maps.size();
-        rbbl_array = sequence_rbbu(_rbbu_maps, rbbl_array_size);
+        rbbl_array = random_rbbu(_rbbu_maps, rbbl_array_size, Options::_rbbu_range);
     }
     // 5.2 place rbbls
     SIZE reduce_num = 0;
@@ -715,9 +745,35 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     return used_cc_base;
 }
 
+#include <fstream>
+#include <iomanip>
+
+void open_os(std::string name, std::ofstream &os)
+{
+    char output_name[250];    
+	sprintf(output_name, "/home/wangzhe/fixed_bbl/%s.log", name.c_str());
+    os.open(output_name);
+	os.setf(std::ios::hex, std::ios::basefield);
+
+}
+
+void record_fixed_bbl_pos(std::ofstream &os, SIZE offset)
+{
+    os<<"0x"<<std::setfill('0')<<std::setw(16)<<offset<<std::endl;    
+}
+
+void close_os(std::ofstream &os)
+{
+    os.close();
+}
+
 void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX cc_base, \
     RBBL_CC_MAPS &rbbl_maps, JMPIN_CC_OFFSET &jmpin_rbbl_offsets)
-{
+{/*
+    std::ofstream os;
+    if(cc_base==_cc1_base)
+        open_os(_elf_real_name, os);
+   */ 
     for(CC_LAYOUT::iterator iter = cc_layout.begin(); iter!=cc_layout.end(); iter++){
         S_ADDRX range_base_addr = iter->first.low();
         S_SIZE range_size = iter->first.high() - range_base_addr + 1;
@@ -735,6 +791,10 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
                     RBBL_CC_MAPS::iterator ret = rbbl_maps.find(target_rbbl_offset);
                     ASSERT(ret!=rbbl_maps.end());
                     S_ADDRX target_rbbl_addr = ret->second;
+                    
+                   // if(cc_base==_cc1_base)
+                   //     record_fixed_bbl_pos(os, target_rbbl_addr-cc_base);
+                    
                     INT64 offset64 = target_rbbl_addr - curr_pc;
                     ASSERT((offset64 > 0 ? offset64 : -offset64) < 0x7fffffff);
                     *(INT32*)relocate_addr = (INT32)offset64;
@@ -761,6 +821,9 @@ void CodeVariantManager::relocate_rbbls_and_tramps(CC_LAYOUT &cc_layout, S_ADDRX
                 }
         }
     }
+    
+   // if(cc_base==_cc1_base)
+   //     close_os(os);
 }
 
 void CodeVariantManager::create_ss(P_SIZE ss_size, std::string ss_shm_path)
