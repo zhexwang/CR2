@@ -301,7 +301,7 @@ void Disassembler::disassemble_all_modules()
             module->erase_instr(instr);
         }
         module->check_br_targets();
-    }
+    } 
 }
 
 Instruction *Disassembler::disassemble_instruction(const F_SIZE instr_off, const Module *module, \
