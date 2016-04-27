@@ -1053,7 +1053,7 @@ void close_rerandomization(struct task_struct *ts)
 
 void rerandomization(struct task_struct *ts)
 {
-	return ;
+	//return ;
 	int internal_index = 0;
 	int shm_fd = 0;
 	long cc_start = 0;
