@@ -1439,7 +1439,7 @@ void Module::dump_bbl_movable_info() const
         if((*iter)->is_indirect_call() || (*iter)->is_indirect_jump() || (*iter)->is_ret()){
             if(!is_in_plt_in_off(target)){
                 gadget_num++;
-                if(!is_maybe_func_entry(*iter) && !(*iter)->is_ret())//ret is protected by shadow stack
+                if(!(*iter)->is_ret())//ret is protected by shadow stack
                     little_gadget++;
             }
         }
@@ -1449,13 +1449,13 @@ void Module::dump_bbl_movable_info() const
     INT32 fixed_bbl_num = (INT32)_pos_fixed_bbls.size();
     INT32 sum = fixed_bbl_num + movable_bbl_num;
     INT32 fixed_bbl_wo_plt = fixed_bbl_num - plt_num;
-    PRINT("%20s: Fixed bbls [without plt] (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotFuncEntry && isNotRet])\n", 
+    PRINT("%20s: Fixed bbls [without plt] (No.P: %2d%%) Sum: %4d Gadget:%4d, UsableGadget:%4d[isNotRet])\n", 
             get_name().c_str(), 100*fixed_bbl_wo_plt/sum, fixed_bbl_wo_plt, gadget_num, little_gadget);
 }
 
 void Module::dump_all_bbl_movable_info()
 {   
-    BLUE("Dump bbl movable info:\n");
+    BLUE("Dump bbl movable info: (should use ROPgadget to obtain the real useful gadgets)\n");
     MODULE_MAP_ITERATOR it = _all_module_maps.begin();
     for(; it!=_all_module_maps.end(); it++){
          it->second->dump_bbl_movable_info();

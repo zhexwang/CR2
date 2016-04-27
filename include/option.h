@@ -14,6 +14,7 @@ public:
 	static BOOL _need_randomize_rbbl;
 	static BOOL _need_randomize_rbbu;
 	static INT64 _rbbu_range;
+	static INT64 _rbbu_padding;
 	static std::string _check_file;
 	static std::string _elf_path;
 	static std::string _input_db_file_path;

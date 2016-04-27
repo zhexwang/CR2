@@ -459,11 +459,11 @@ S_ADDRX *random_rbbu(CodeVariantManager::RAND_BBU_MAPS &rbbu_maps, SIZE array_nu
     };
     SIZE rbbl_idx = 0;
     for(idx = 0; idx<rbbu_array_num; idx++){
-        for(CodeVariantManager::RAND_BBL_MAPS::iterator it = rbbu_array[idx]->begin(); it!=rbbu_array[idx]->end(); it++)
+        for(CodeVariantManager::RAND_BBL_MAPS::iterator it = rbbu_array[idx]->begin(); it!=rbbu_array[idx]->end(); it++){
             rbbl_array[rbbl_idx++] = (S_ADDRX)it->second;
+        }
     }
     ASSERT(rbbl_idx==array_num);
-    
     return rbbl_array;
 }
 
@@ -703,7 +703,8 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         rbbl_array = random_rbbu(_rbbu_maps, rbbl_array_size, Options::_rbbu_range);
     }
     // 5.2 place rbbls
-    SIZE reduce_num = 0;
+    BOOL has_reduce_jmp = false;    
+    srand((INT32)time(NULL));
     for(SIZE idx = 0; idx<rbbl_array_size; idx++){
         RandomBBL *curr_rbbl = (RandomBBL*)rbbl_array[idx];
         RandomBBL *next_rbbl = idx<(rbbl_array_size-1) ? (RandomBBL*)rbbl_array[idx+1] : NULL;
@@ -712,9 +713,10 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         if(next_rbbl){
             F_SIZE next_rbbl_offset = next_rbbl->get_rbbl_offset();
             if(next_rbbl_offset==curr_rbbl->get_last_br_target()){
-                place_size -= 5;//JMP_REL32 instruction len
-                reduce_num++;
-            }
+                place_size -= JMP32_LEN;//JMP_REL32 instruction len
+                has_reduce_jmp = true;
+            }else
+                has_reduce_jmp = false;
         }
         F_SIZE curr_rbbl_offset = curr_rbbl->get_rbbl_offset();
         rbbl_maps.insert(std::make_pair(curr_rbbl_offset, used_cc_base));
@@ -734,12 +736,16 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
         if(place_size>0){
             cc_layout.insert(std::make_pair(Range<S_ADDRX>(used_cc_base, used_cc_base+place_size-1), (S_ADDRX)curr_rbbl));
             used_cc_base += place_size;
+            //place random padding '0xd6'
+            if(!has_reduce_jmp && Options::_rbbu_padding>0){
+                SIZE padding_num = rand()%Options::_rbbu_padding;
+                used_cc_base += padding_num;
+            }
         }else
             ASSERT(place_size==0);
     }
     // 5.3 free array
     delete []rbbl_array;
-    //BLUE("Sum: %d, Reduce: %d(%lf)\n", (INT32)rbbl_array_size, (INT32)reduce_num, ((double)reduce_num*100)/(double)rbbl_array_size);
     //judge used cc size
     ASSERT((used_cc_base - cc_base)<=_cc_load_size);
     return used_cc_base;
