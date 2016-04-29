@@ -197,7 +197,7 @@ static void *get_orig_sigaltstack_from_stub_sigaltstack(void *stub_sigaltstack)
 	internal_call_offset = *(int*)(ss_internal_call_proceeded_addr-4);
 	
 	ss_internal_call_addr = ss_internal_call_proceeded_addr+(long)internal_call_offset;
-	PRINTK("internal call addr: %lx\n", ss_call_proceeded_addr);
+	//PRINTK("internal call addr: %lx\n", ss_call_proceeded_addr);
 	return (void*)(ss_call_proceeded_addr+(long)call_offset);
 }
 

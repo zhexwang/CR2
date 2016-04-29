@@ -464,6 +464,8 @@ S_ADDRX *random_rbbu(CodeVariantManager::RAND_BBU_MAPS &rbbu_maps, SIZE array_nu
         }
     }
     ASSERT(rbbl_idx==array_num);
+    //free
+    delete []rbbu_array;
     return rbbl_array;
 }
 
@@ -747,7 +749,7 @@ S_ADDRX CodeVariantManager::arrange_cc_layout(S_ADDRX cc_base, CC_LAYOUT &cc_lay
     // 5.3 free array
     delete []rbbl_array;
     //judge used cc size
-    ASSERT((used_cc_base - cc_base)<=_cc_load_size);
+    FATAL((used_cc_base - cc_base)>_cc_load_size, "code cache overflow!\n");
     return used_cc_base;
 }
 

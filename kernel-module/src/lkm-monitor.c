@@ -256,6 +256,8 @@ typedef struct{
 	char app_name[256];
 	char start_instr_encode[7];
 	char has_rerandomization;
+	ulong rerand_times;
+	ulong accumulated_output_data_size; 
 	char has_send_stop;
 	int stopped_pid[MAX_STOP_NUM];//multi-threads and multi-processes need to stop all processes/threads, when rerandomization
 	IO_MONITOR im;//use to monitor  
@@ -387,6 +389,8 @@ char init_app_slot(struct task_struct *ts)
 			app_slot_list[index].program_entry = 0;
 			app_slot_list[index].has_rerandomization = 0;
 			app_slot_list[index].has_send_stop = 0;
+			app_slot_list[index].rerand_times = 0;
+		 	app_slot_list[index].accumulated_output_data_size = 0; 
 			strcpy(app_slot_list[index].app_name, ts->comm);
 			memset((void*)&(app_slot_list[index].start_flags[0]), 0, MAX_FLAG_NUM*sizeof(START_FLAG));
 			memset((void*)&(app_slot_list[index].stopped_pid[0]), 0, MAX_STOP_NUM*sizeof(int));
@@ -406,6 +410,7 @@ void free_app_slot(struct task_struct *ts)
 	//find the slot
 	for(index=0; index<MAX_APP_SLOT_LIST_NUM; index++){
 		if(is_pgid_matched(index, pid_vnr(task_pgrp(ts)))){
+			PRINTK("%s has rerand %ld times!\n", ts->comm, app_slot_list[index].rerand_times);
 			memset((void*)(&app_slot_list[index]), 0, sizeof(APP_SLOT));
 			spin_unlock(&app_slot_lock);
 			return ;
@@ -1050,6 +1055,12 @@ void close_rerandomization(struct task_struct *ts)
 	spin_unlock(&app_slot_lock);
 }
 
+void increase_rerand_times(char app_slot_idx)
+{
+	spin_lock(&app_slot_lock);
+	app_slot_list[(int)app_slot_idx].rerand_times++;
+	spin_unlock(&app_slot_lock);
+}
 
 void rerandomization(struct task_struct *ts)
 {
@@ -1065,6 +1076,8 @@ void rerandomization(struct task_struct *ts)
 	// 1.judge has a process/thread has rerandomization or not
 	if(has_rerandomization(index))
 		return ;
+	// increase rerand times
+	increase_rerand_times(index);
 	// 2.stop all related processes(multi-threads and multi-processes)
 	stop_all_processes(index, ts);
 	// 3.remap the code cache

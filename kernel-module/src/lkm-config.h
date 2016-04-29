@@ -4,7 +4,7 @@
 #include <linux/kernel.h>
 /***************CR2 args******************/
 #define CC_OFFSET (1ul<<30)
-#define CC_MULTIPULE (8)
+#define CC_MULTIPULE (16)
 #define SS_OFFSET (1ul<<30)
 #define SS_MULTIPULE (20)
 #define GS_BASE (0x400000) //only used for LKM_SEG_SS_TYPE, it is not suitable to LKM_SEG_SS_PP_TYPE
