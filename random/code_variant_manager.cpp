@@ -1073,6 +1073,21 @@ void CodeVariantManager::wait_for_code_variant_ready(BOOL is_first_cc)
         sched_yield();
 }
 
+void CodeVariantManager::check_double_cv()
+{
+    //debug check 
+    for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
+        ASSERT(iter->second->_cc1_used_base==iter->second->_cc1_used_base);
+        S_ADDRX *ptr1 = (S_ADDRX*)iter->second->_cc1_base;
+        S_ADDRX *ptr2 = (S_ADDRX*)iter->second->_cc2_base;
+        while((S_ADDRX)ptr1<=iter->second->_cc1_used_base){
+            ASSERT(*ptr1==*ptr2);
+            ptr1++;
+            ptr2++;
+        }
+    }
+}
+
 RandomBBL *CodeVariantManager::find_rbbl_from_all_paddrx(P_ADDRX p_addr, BOOL is_first_cc)
 {
     for(CVM_MAPS::iterator iter = _all_cvm_maps.begin(); iter!=_all_cvm_maps.end(); iter++){
@@ -1269,11 +1284,13 @@ void *patch_new_ra_in_ss(void *arg)
     
     while(start_ptr>=end){
         P_ADDRX old_return_addr = *(P_ADDRX *)start_ptr;
-        P_ADDRX new_return_addr = CodeVariantManager::get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
-        //modify old return address to the new return address
-        if(new_return_addr!=0)
-            *(P_ADDRX *)start_ptr = new_return_addr;
-        
+        if(old_return_addr!=0){
+            P_ADDRX new_return_addr = CodeVariantManager::get_new_pc_from_old_all(old_return_addr, first_cc_is_new);
+            if(new_return_addr!=0){
+                //modify old return address to the new return address
+                *(P_ADDRX *)start_ptr = new_return_addr;
+            }
+        }
         start_ptr -= sizeof(P_ADDRX);
     }
     return NULL;

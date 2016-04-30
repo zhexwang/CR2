@@ -18,12 +18,15 @@ char* get_filename_from_path(const char* path)
 int open_shm_file(const char *shm_path) 
 {
 	int shm_fd = 0;
+	int p_val = 0;
 	mm_segment_t oldfs;
 	//open file
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
-	shm_fd = orig_open(shm_path, O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0644);
+	p_val = orig_umask(0);
+	shm_fd = orig_open(shm_path, O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0666);
 	set_fs(oldfs);
+	orig_umask(p_val);
 	//printk(KERN_EMERG "[LKM]open_shm:fd=%d %s\n", shm_fd, shm_path);
 	return shm_fd;
 }

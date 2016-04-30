@@ -148,6 +148,7 @@ public:
 		return is_first_cc ? _is_cv1_ready : _is_cv2_ready;
 	}
 	static void wait_for_code_variant_ready(BOOL is_first_cc);
+	static void check_double_cv();
 	static void consume_cv(BOOL is_first_cc);
 	static void clear_all_cv(BOOL is_first_cc);
 	static void store_into_db(std::string db_path);	

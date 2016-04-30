@@ -28,6 +28,9 @@ extern CLOSE_FUNC_TYPE orig_close;
 extern EXIT_GROUP_FUNC_TYPE orig_exit_group;
 extern MPROTECT_FUNC_TYPE orig_mprotect;
 extern MUNMAP_FUNC_TYPE orig_munmap;
+//
+typedef asmlinkage long (*UMASK_FUNC_TYPE)(int mask);
+extern UMASK_FUNC_TYPE orig_umask;
 
 // ---------------IO pair syscall-----------------------//
 typedef asmlinkage long (*READ_FUNC_TYPE)(unsigned int fd, char __user *buf, size_t count);

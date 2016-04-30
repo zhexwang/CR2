@@ -20,8 +20,18 @@ extern int decrease_process_sum(struct task_struct *ts);
 
 extern char init_app_slot(struct task_struct *ts);
 extern void free_app_slot(struct task_struct *ts);
-extern void set_io_in(struct task_struct *ts, int sys_no, char value);
-extern char has_io_in(struct task_struct *ts, int sys_no);
+extern void set_io_out(struct task_struct *ts);
+extern char has_io_out(struct task_struct *ts);
+extern void clear_io_out(struct task_struct *ts);
+
+extern char has_enough_data_size(struct task_struct *ts);
+extern void increase_data_size(struct task_struct *ts, size_t len);
+extern void clear_data_size(struct task_struct *ts);
+
+extern char need_rerandomization(struct task_struct *ts);
+extern void set_output_syscall(struct task_struct *ts, size_t len);
+extern void clear_rerand_record(struct task_struct *ts);
+
 extern char *get_start_encode_and_set_entry(struct task_struct *ts, long program_entry);
 extern char *is_checkpoint(struct task_struct *ts, char *app_slot_idx);
 extern void set_shuffle_pid(char app_slot_idx, int shuffle_pid);
@@ -48,6 +58,7 @@ extern char get_ss_info(struct task_struct *ts, long *stack_start, long *stack_e
 extern void lock_app_slot(void);
 extern void unlock_app_slot(void);
 
+extern char make_sure_all_stopped(char app_slot_idx);
 extern void rerandomization(struct task_struct *ts);
 extern void close_rerandomization(struct task_struct *ts);
 extern void stop_all(void);

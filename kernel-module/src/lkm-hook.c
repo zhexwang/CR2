@@ -8,6 +8,7 @@
 
 MMAP_FUNC_TYPE orig_mmap = NULL;
 OPEN_FUNC_TYPE orig_open = NULL;
+UMASK_FUNC_TYPE orig_umask = NULL;
 EXECVE_FUNC_TYPE orig_execve = NULL;
 FTRUNCATE_FUNC_TYPE orig_ftruncate = NULL;
 ARCH_PRCTL_FUNC_TYPE orig_arch_prctl = NULL;
@@ -422,6 +423,7 @@ void init_orig_syscall(void)
 	orig_clone = get_orig_clone_from_stub_clone(orig_stub_clone);
 	//setsid
 	orig_setsid = get_orig_syscall_addr(__NR_setsid);
+	orig_umask = get_orig_syscall_addr(__NR_umask);
 	/*
     PRINTK("Origin SyS_mmap: %p\n", orig_mmap);	
 	PRINTK("Origin SyS_munmap: %p\n", orig_munmap);	
@@ -450,7 +452,8 @@ void init_orig_syscall(void)
 	PRINTK("Origin SyS_rt_sigaction: %p\n", orig_rt_sigaction);	
 	PRINTK("Origin SyS_setsid: %p\n", orig_setsid);
 	PRINTK("Origin SyS_sigaltstack: %p, stub_sigaltstack: %p\n", orig_sigaltstack, orig_stub_sigaltstack);	
-	PRINTK("Origin SyS_clone: %p, stub_clone: %p\n", orig_clone, orig_stub_clone);	*/
+	PRINTK("Origin SyS_clone: %p, stub_clone: %p\n", orig_clone, orig_stub_clone);	
+	PRINTK("Origin SyS_umask: %p\n", orig_umask);*/
 }
 
 void hook_systable(void)

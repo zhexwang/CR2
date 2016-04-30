@@ -4,10 +4,11 @@
 #include <linux/kernel.h>
 /***************CR2 args******************/
 #define CC_OFFSET (1ul<<30)
-#define CC_MULTIPULE (16)
+#define CC_MULTIPULE (8)
 #define SS_OFFSET (1ul<<30)
 #define SS_MULTIPULE (20)
 #define GS_BASE (0x400000) //only used for LKM_SEG_SS_TYPE, it is not suitable to LKM_SEG_SS_PP_TYPE
+#define TRANSFER_THRESHOLD 0*1024
 /*********When you change machine, you should modify the below info ***********/
 #ifdef _VM
 	const static ulong orig_sys_call_table = (0xffffffff81801400);		// the system call table
