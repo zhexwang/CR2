@@ -10,3 +10,7 @@ called the “shuffling process”. The shuffling process continuously flushed t
 randomized code variant. RERANZ repeated the process each time an adversary might obtain the information and upload a payload. 
 Our performance evaluation shows that RERANZ Virtual Machine incurs a very low performance overhead. The security evaluation 
 shows that RERANZ successfully protect the Nginx web server against the Blind-ROP attack.
+
+# Note
+Note that we only upload partial source code of RERANZ, it is not the final implementation of RERANZ. We had label the TODO 
+functions in the source code. If you want to use this source code, you need to implement it by yourself.
