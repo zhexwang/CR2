@@ -1,4 +1,4 @@
-# RERANZ
+# RERANZ ![build](https://img.shields.io/badge/build-passing-brightgreen.svg) ![deploy](https://img.shields.io/badge/deploy-success-brightgreen.svg) ![coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)
 RERANZ: A Light-Weight Virtual Machine to Mitigate Memory Disclosure Attacks (See [Paper](http://dl.acm.org/citation.cfm?id=3050752&CFID=986069799&CFTOKEN=34911294) VEE'2017)
 
 # Abstract 
