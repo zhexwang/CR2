@@ -1,6 +1,5 @@
 # RERANZ
-RERANZ: A Light-Weight Virtual Machine to Mitigate Memory Disclosure Attacks (See Paper VEE'2017)
-<br /> http://dl.acm.org/citation.cfm?id=3050752&CFID=986069799&CFTOKEN=34911294 <br/>
+RERANZ: A Light-Weight Virtual Machine to Mitigate Memory Disclosure Attacks (See [Paper](http://dl.acm.org/citation.cfm?id=3050752&CFID=986069799&CFTOKEN=34911294) VEE'2017)
 
 # Abstract 
 Recent code reuse attacks are able to circumvent various address space layout randomization (ASLR) techniques by exploiting 
